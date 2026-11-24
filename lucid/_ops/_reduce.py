@@ -644,6 +644,18 @@ def _extreme_adapter(
 _EXTREMUM_KEYWORDS = frozenset({"dim", "keepdim", "other"})
 
 
+def _axis_of(value: object) -> object:
+    """``value``, a 0-d integer tensor read as the ``int`` it holds, as ``__index__`` reads it.
+
+    The reference takes such a tensor for ``dim`` (never a float, a bool or a tensor with a
+    dimension); any other tensor comes back unchanged, for the caller to refuse.
+    """
+    impl = _promotion.try_unwrap(value)
+    if impl is not None and not impl.shape and _promotion.is_integer(impl.dtype):
+        return int(impl.item())
+    return value
+
+
 def _extremum_reduction(
     name: str, args: tuple[object, ...], kwargs: dict[str, object]
 ) -> tuple[object, object]:
@@ -654,7 +666,7 @@ def _extremum_reduction(
             raise TypeError(f"{name}() got multiple values for argument 'dim'")
         if count > 1 and "keepdim" in kwargs:
             raise TypeError(f"{name}() got multiple values for argument 'keepdim'")
-    dim = args[0] if count else kwargs.get("dim")
+    dim = _axis_of(args[0] if count else kwargs.get("dim"))
     keepdim = args[1] if count > 1 else kwargs.get("keepdim", False)
     if _promotion.try_unwrap(dim) is not None:
         raise TypeError(f"{name}(): argument 'dim' must be int, not Tensor")
@@ -671,10 +683,12 @@ def _extremum_operands(
     The one reading of the arguments after ``input``.  The reference's
     overloads are ``f(input)``, ``f(input, dim, keepdim=False)`` and
     ``f(input, other)``, told apart by what the second argument is: a tensor,
-    in its place or as ``other=``, is the other operand of the elementwise
-    form, which takes nothing more; anything else is ``dim``.  A tensor named
-    ``dim=`` is refused rather than read as ``other``, and ``other=`` takes a
-    tensor only.  ``other`` is ``None`` for a reduction.
+    alone in its place or as ``other=``, is the other operand of the
+    elementwise form, which takes nothing more; anything else is ``dim``.
+    A 0-d integer tensor is also a ``dim`` — as ``dim=`` or, with ``keepdim``
+    after it, in the second place — as ``__index__`` reads it; any other
+    tensor as ``dim`` is refused, as is a tensor ``keepdim``, and ``other=``
+    takes a tensor only.  ``other`` is ``None`` for a reduction.
     """
     count = len(args)
     if count > 2:
@@ -691,6 +705,10 @@ def _extremum_operands(
     if other is None:
         return (None, *_extremum_reduction(name, args, kwargs))
     if count + len(kwargs) > 1:
+        if "other" not in kwargs and isinstance(_axis_of(args[0]), int):
+            # ``max(x, tensor(1), True)``: with a second argument the reference reads the
+            # 0-d integer tensor as the ``dim`` it can only be.
+            return (None, *_extremum_reduction(name, args, kwargs))
         raise TypeError(
             f"{name}(input, other) is the elementwise {name} and takes no dim, "
             f"keepdim or further argument"

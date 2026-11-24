@@ -427,6 +427,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - max and min of two tensors are the elementwise op (LCD-1073)
 
+- max and min keep a 0-d integer tensor as dim (LCD-1073)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

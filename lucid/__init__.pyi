@@ -5685,8 +5685,10 @@ def max(input: Tensor, other: Tensor) -> Tensor:
     sequence of axes it is the reduced ``Tensor`` of values.
     ``max(input, other)``, with a *tensor* second argument, is
     :func:`lucid.maximum` of the two: the larger element of each pair,
-    broadcast and promoted to a common dtype.  A tensor is never read as
-    ``dim``, so ``dim`` as a tensor — ``max(input, dim=other)`` — is refused.
+    broadcast and promoted to a common dtype.  A lone tensor second argument
+    is always ``other``; ``dim`` takes a 0-d integer tensor as the index it
+    holds (as ``dim=``, or in the second place with ``keepdim`` after it),
+    and any other tensor as ``dim`` is refused.
     
     Parameters
     ----------
@@ -5712,8 +5714,9 @@ def max(input: Tensor, other: Tensor) -> Tensor:
     Raises
     ------
     TypeError
-        If ``other`` is combined with ``dim`` or ``keepdim``, or a tensor is
-        given as ``dim`` or ``keepdim``.
+        If ``other`` is combined with ``dim`` or ``keepdim``, or a tensor
+        other than a 0-d integer one is given as ``dim``, or any tensor as
+        ``keepdim``.
     
     Notes
     -----
@@ -5732,9 +5735,10 @@ def max(input: Tensor, other: Tensor) -> Tensor:
     tensor(4.)
     >>> lucid.max(x, dim=1).values
     tensor([4., 3.])
+    >>> lucid.max(x, dim=lucid.tensor(1)).values
+    tensor([4., 3.])
     >>> lucid.max(x, lucid.tensor([2.0, 3.0]))
-    tensor([[2., 4.],
-            [3., 3.]])
+    tensor([[2., 4.], [3., 3.]])
     """
     ...
 @overload
@@ -5754,8 +5758,10 @@ def min(input: Tensor, other: Tensor) -> Tensor:
     sequence of axes it is the reduced ``Tensor`` of values.
     ``min(input, other)``, with a *tensor* second argument, is
     :func:`lucid.minimum` of the two: the smaller element of each pair,
-    broadcast and promoted to a common dtype.  A tensor is never read as
-    ``dim``, so ``dim`` as a tensor — ``min(input, dim=other)`` — is refused.
+    broadcast and promoted to a common dtype.  A lone tensor second argument
+    is always ``other``; ``dim`` takes a 0-d integer tensor as the index it
+    holds (as ``dim=``, or in the second place with ``keepdim`` after it),
+    and any other tensor as ``dim`` is refused.
     
     Parameters
     ----------
@@ -5781,8 +5787,9 @@ def min(input: Tensor, other: Tensor) -> Tensor:
     Raises
     ------
     TypeError
-        If ``other`` is combined with ``dim`` or ``keepdim``, or a tensor is
-        given as ``dim`` or ``keepdim``.
+        If ``other`` is combined with ``dim`` or ``keepdim``, or a tensor
+        other than a 0-d integer one is given as ``dim``, or any tensor as
+        ``keepdim``.
     
     Notes
     -----
@@ -5801,9 +5808,10 @@ def min(input: Tensor, other: Tensor) -> Tensor:
     tensor(1.)
     >>> lucid.min(x, dim=1).values
     tensor([1., 2.])
+    >>> lucid.min(x, dim=lucid.tensor(1)).values
+    tensor([1., 2.])
     >>> lucid.min(x, lucid.tensor([2.0, 3.0]))
-    tensor([[1., 3.],
-            [2., 2.]])
+    tensor([[1., 3.], [2., 2.]])
     """
     ...
 def var(input: Tensor, dim: _int | Sequence[_int] | None = None, unbiased: _bool | None = None, keepdim: _bool = False, *, correction: _int | _float | None = None) -> Tensor:

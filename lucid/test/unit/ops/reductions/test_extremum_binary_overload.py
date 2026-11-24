@@ -329,6 +329,73 @@ def test_a_zero_dim_tensor_is_an_operand_not_an_axis(device: str, op: str) -> No
     assert getattr(lucid, op)(x, axis).tolist() == want.tolist()
 
 
+# A 0-d integer tensor is a ``dim`` as well, as ``__index__`` reads it -- by keyword, or in the
+# second place when ``keepdim`` follows (a lone tensor there is ``other``, above).  The call
+# taking ``d`` is spelled once and run with a tensor and with the int it holds.
+_AXIS_SPELLINGS: dict[str, Callable[[ModuleType, str, Tensor, object], _ValuesIndices[Tensor]]] = {
+    "fn-dim": lambda fw, op, x, d: getattr(fw, op)(x, dim=d),
+    "fn-dim-keepdim": lambda fw, op, x, d: getattr(fw, op)(x, dim=d, keepdim=True),
+    "fn-positional-keepdim": lambda fw, op, x, d: getattr(fw, op)(x, d, True),
+    "fn-positional-keepdim-keyword": lambda fw, op, x, d: getattr(fw, op)(x, d, keepdim=True),
+    "method-dim": lambda fw, op, x, d: getattr(x, op)(dim=d),
+    "method-dim-keepdim": lambda fw, op, x, d: getattr(x, op)(dim=d, keepdim=True),
+    "method-positional-keepdim": lambda fw, op, x, d: getattr(x, op)(d, True),
+    "method-positional-keepdim-keyword": lambda fw, op, x, d: getattr(x, op)(d, keepdim=True),
+}
+_AXIS_DTYPES = (lucid.int8, lucid.int32, lucid.int64)
+
+
+def _grid(fw: ModuleType, device: str | None) -> Tensor:
+    kwargs = {} if device is None else {"device": device}
+    made: Tensor = fw.tensor(_GRID, **kwargs)
+    return made
+
+
+def _axis(fw: ModuleType, dtype: lucid.dtype, value: int, device: str | None) -> Tensor:
+    kwargs = {} if device is None else {"device": device}
+    made: Tensor = fw.tensor(value, dtype=getattr(fw, _name(dtype)), **kwargs)
+    return made
+
+
+@pytest.mark.parametrize("axis", [1, -1])
+@pytest.mark.parametrize("dtype", _AXIS_DTYPES, ids=str)
+@pytest.mark.parametrize("spelling", _AXIS_SPELLINGS)
+@pytest.mark.parametrize("op", _OPS)
+def test_a_zero_dim_integer_tensor_is_an_axis(
+    device: str, op: str, spelling: str, dtype: lucid.dtype, axis: int
+) -> None:
+    call = _AXIS_SPELLINGS[spelling]
+    x = _grid(lucid, device)
+    got = call(lucid, op, x, _axis(lucid, dtype, axis, device))
+    want = call(lucid, op, x, axis)
+    assert got.values.shape == want.values.shape
+    assert got.values.tolist() == want.values.tolist()
+    assert got.indices.tolist() == want.indices.tolist()
+
+
+@pytest.mark.parity
+@pytest.mark.parametrize("axis", [1, -1])
+@pytest.mark.parametrize("dtype", _AXIS_DTYPES, ids=str)
+@pytest.mark.parametrize("spelling", _AXIS_SPELLINGS)
+@pytest.mark.parametrize("op", _OPS)
+def test_a_zero_dim_integer_axis_matches_the_reference(
+    ref: ModuleType, device: str, op: str, spelling: str, dtype: lucid.dtype, axis: int
+) -> None:
+    call = _AXIS_SPELLINGS[spelling]
+    got = call(lucid, op, _grid(lucid, device), _axis(lucid, dtype, axis, device))
+    want = call(ref, op, _grid(ref, None), _axis(ref, dtype, axis, None))
+    assert tuple(got.values.shape) == tuple(want.values.shape)
+    assert got.values.tolist() == want.values.tolist()
+    assert got.indices.tolist() == want.indices.tolist()
+
+
+@pytest.mark.parametrize("op", _OPS)
+def test_a_zero_dim_integer_axis_out_of_range_is_an_index_error(device: str, op: str) -> None:
+    x = _grid(lucid, device)
+    with pytest.raises(IndexError):
+        getattr(lucid, op)(x, dim=_axis(lucid, lucid.int64, 5, device))
+
+
 # ── invalid mixes ───────────────────────────────────────────────────────────────
 
 _Call = Callable[[ModuleType, str, Tensor, Tensor], object]
@@ -353,6 +420,31 @@ _INVALID: dict[str, _Call] = {
     "method-other-with-dim": lambda fw, op, a, b: getattr(a, op)(b, 0),
     "method-tensor-named-dim": lambda fw, op, a, b: getattr(a, op)(dim=b),
     "method-keyword-other-with-dim": lambda fw, op, a, b: getattr(a, op)(other=b, dim=0),
+    # Only a 0-d integer tensor is an axis: not a float, a bool or a vector -- by keyword or
+    # in the second place with ``keepdim`` after it -- and it is no axis beside ``dim=`` /
+    # ``other=``, nor a ``keepdim``.
+    "float-zero-dim-as-dim": lambda fw, op, a, b: getattr(fw, op)(a, dim=fw.tensor(0.0)),
+    "bool-zero-dim-as-dim": lambda fw, op, a, b: getattr(fw, op)(a, dim=fw.tensor(False)),
+    "integer-vector-as-dim": lambda fw, op, a, b: getattr(fw, op)(a, dim=fw.tensor([0])),
+    "float-zero-dim-with-keepdim": lambda fw, op, a, b: getattr(fw, op)(a, fw.tensor(0.0), True),
+    "bool-zero-dim-with-keepdim": lambda fw, op, a, b: getattr(fw, op)(a, fw.tensor(False), True),
+    "integer-vector-with-keepdim": lambda fw, op, a, b: getattr(fw, op)(
+        a, fw.tensor([0]), keepdim=True
+    ),
+    "integer-zero-dim-with-dim": lambda fw, op, a, b: getattr(fw, op)(a, fw.tensor(0), dim=0),
+    "integer-zero-dim-with-other": lambda fw, op, a, b: getattr(fw, op)(a, fw.tensor(0), other=b),
+    "integer-zero-dim-as-dim-and-other": lambda fw, op, a, b: getattr(fw, op)(
+        a, dim=fw.tensor(0), other=b
+    ),
+    "integer-zero-dim-as-keepdim": lambda fw, op, a, b: getattr(fw, op)(a, 0, fw.tensor(0)),
+    "integer-zero-dim-twice": lambda fw, op, a, b: getattr(fw, op)(a, fw.tensor(0), fw.tensor(0)),
+    "integer-zero-dim-keepdim-tensor": lambda fw, op, a, b: getattr(fw, op)(
+        a, dim=fw.tensor(0), keepdim=fw.tensor(True)
+    ),
+    "method-float-zero-dim-as-dim": lambda fw, op, a, b: getattr(a, op)(dim=fw.tensor(0.0)),
+    "method-bool-zero-dim-as-dim": lambda fw, op, a, b: getattr(a, op)(dim=fw.tensor(False)),
+    "method-float-zero-dim-with-keepdim": lambda fw, op, a, b: getattr(a, op)(fw.tensor(0.0), True),
+    "method-integer-zero-dim-with-dim": lambda fw, op, a, b: getattr(a, op)(fw.tensor(0), dim=0),
 }
 
 
