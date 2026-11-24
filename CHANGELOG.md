@@ -444,13 +444,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - On float16 / bfloat16 tensors, `addmm`, `addbmm`, `baddbmm`, `addcmul`, `addcdiv` and `lerp` (free functions, `Tensor` methods and in-place twins) compute in float32 and round once, as the reference does. Before, they rounded the scalar, each product and each sum to the half type: `addmm(bfloat16, alpha=300.7)` is now 604 (was 600), and `lerp(float16, weight=70000)` is now 1.0 (was NaN). Gradients still reach each operand in its own dtype. float32 and float64 are unchanged (LCD-1087).
 
-- a 0-d x of trapezoid is one coordinate along dim (LCD-1075)
+- `trapezoid` and `cumulative_trapezoid` accept a 0-d `x`, read as one coordinate along `dim`. Before, they raised "There must be one `x` value for each sample point". Now:
+  - a `y` of two samples or fewer integrates to 0 (empty for the cumulative form);
+  - a longer `y` is a shape mismatch;
+  - a float64 `x` beside a float32 `y` answers float64, as in the reference;
+  - `trapezoid` of a `y` with no sample answers in `y`'s own dtype, as the reference does (LCD-1075).
 
-- an empty gather index is answered; refusals test one code set
-
-- trapezoid ranks a 0-d x as the dimensioned operand it is
-
-- householder_product judges its pair after the autocast cast
 
 ### Added
 
@@ -564,12 +563,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `linalg.solve_triangular` accepts complex64 and complex128 on both devices, with the conjugate-transpose gradients (LCD-1070).
 
-- refuse operands of two dtypes through one owner (LCD-1075)
-
-- wire heaviside, complex, ldexp, take and gather (LCD-1075)
-
-- vecdot, solve and householder_product take the pair rule
-
 ### Performance
 
 - pool the MAE sets without rank-6 views
@@ -678,6 +671,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Half-precision `addmm`, `addbmm` and `baddbmm` multiply in float32, so a half GEMM becomes a float32 GEMM. That costs more memory and lower Metal throughput, and buys the reference's single rounding. `addbmm` rounds once, where the reference's CPU kernel rounds after each batch: 1-2 half ulp apart (LCD-1087).
 
+- `polar`, `cdist`, `grid_sample`, `linalg.cross`, `heaviside` and `complex` refuse two tensor operands of different dtypes, as the reference does. This holds for any shapes, including a 0-d operand beside a vector. They raise `DtypeMismatch` (a `RuntimeError` and a `TypeError`) reading `<op>: expected <a> and <b> to have the same dtype, but found float32 and float16`. Before, `polar(float32, float16)`, `heaviside` of two dtypes, `complex(float32, float16)` and `complex(int, float)` were answered, and `grid_sample` raised a plain `TypeError`. One owner now holds the rule: `lucid._ops._bool_refusal.PAIRS` with `refuse_unlike`. Dtype names in these messages drop the `lucid.` prefix (LCD-1075).
+- `linalg.vecdot` (a 0-d operand beside a vector included), `linalg.solve` and `linalg.householder_product` take the same pair rule from the same owner: two dtypes raise `DtypeMismatch`. Before, `vecdot(x_float16, 0-d float32)` answered in float16. `householder_product` checks its shapes before the dtypes, as the reference does, and judges the pair after the autocast cast. So a float32 input beside a float16 tau is accepted under CPU autocast and answers float32. `vecdot` moves to `lucid/linalg/_vecdot.py` and is re-exported from `lucid.linalg` (LCD-1075).
+- `take_along_dim(x, indices, dim)` and `take` read int64 positions only, as the reference does; a bool, int8, int16 or int32 index raises `DtypeMismatch`. `gather` reads int32 or int64. A bool, int8 or int16 index raises `DtypeMismatch`, and so does a flat `take_along_dim(x, indices)` with one. `gather` answers an index with no element whatever its dtype, as the reference does (LCD-1075).
+- `ldexp(input, other)` refuses a bool `other` beside a real floating `input` with `NotImplementedError`, as the reference does. An integer, bool or complex `input` still answers (LCD-1075).
 ---
 
 ## [3.16.4] — 2026-11-07
