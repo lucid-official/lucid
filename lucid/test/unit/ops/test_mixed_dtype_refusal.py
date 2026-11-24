@@ -37,10 +37,7 @@ pytestmark = pytest.mark.filterwarnings("ignore")
 Call = Callable[[ModuleType, object, object], object]
 
 #: Where a cell is still open: the entry lives in a file another card is landing.
-_OPEN = (
-    "LCD-1075: the call waits for LCD-1078 and LCD-1083 to land "
-    "(composite/elementwise.py, _ops/_adapters.py, linalg/__init__.py)"
-)
+_OPEN = "LCD-1075: vecdot waits for LCD-1083 to land (lucid/linalg/__init__.py)"
 
 
 def _tensor(fw: ModuleType, data: object, dtype: str, device: str) -> object:
@@ -67,15 +64,11 @@ class PairCase:
     call: Call
     layouts: tuple[Layout, ...]
     #: Whether ``key`` is a row of ``PAIRS``.  ``solve`` and ``householder_product`` refuse through
-    #: the linalg helper still, and ``heaviside``, ``complex`` and ``vecdot`` are not wired yet.
+    #: the linalg helper still, and ``vecdot`` is not wired yet.
     row: bool = True
     #: Which unlike cells Lucid still answers where the reference refuses: each is a strict xfail,
     #: so wiring the call flips it.
     open_cell: Callable[[Layout, str, str], bool] | None = None
-
-
-def _everything_is_open(layout: Layout, first: str, second: str) -> bool:
-    return True
 
 
 _HALF = frozenset({"float16", "bfloat16"})
@@ -145,21 +138,8 @@ PAIR_CASES: tuple[PairCase, ...] = (
             ),
         ),
     ),
-    # Not wired yet: the entries are in files other cards hold.
-    PairCase(
-        "heaviside",
-        lambda fw, a, b: fw.heaviside(a, b),
-        _BROADCAST,
-        row=False,
-        open_cell=_everything_is_open,
-    ),
-    PairCase(
-        "complex",
-        lambda fw, a, b: fw.complex(a, b),
-        _BROADCAST,
-        row=False,
-        open_cell=_everything_is_open,
-    ),
+    PairCase("heaviside", lambda fw, a, b: fw.heaviside(a, b), _BROADCAST),
+    PairCase("complex", lambda fw, a, b: fw.complex(a, b), _BROADCAST),
 )
 
 #: The dtypes tried against each other.  The reference answers a pair only where the two are the
@@ -329,34 +309,13 @@ _INDEX_CALLS: dict[str, tuple[Callable[[ModuleType, object, object], object], fr
     "gather": (lambda fw, x, i: fw.gather(x, 1, i), frozenset({"int32", "int64"})),
 }
 
-#: The cells Lucid still answers where the reference refuses: the entry is in ``_adapters.py``
-#: (``take``, ``gather``), which ``take_along_dim`` flattened reads through.
-_INDEX_OPEN = frozenset(
-    {
-        ("take_along_dim-flat", "int8"),
-        ("take_along_dim-flat", "int16"),
-        ("take", "int32"),
-        ("gather", "int8"),
-        ("gather", "int16"),
-    }
-)
-
 _X = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]
 _I = [[0, 2], [1, 0]]
 
 
 def _index_cells() -> list[ParameterSet]:
     return [
-        pytest.param(
-            name,
-            dtype,
-            id=f"{name}-{dtype}",
-            marks=(
-                [pytest.mark.xfail(strict=True, reason=_OPEN)]
-                if (name, dtype) in _INDEX_OPEN
-                else []
-            ),
-        )
+        pytest.param(name, dtype, id=f"{name}-{dtype}")
         for name in _INDEX_CALLS
         for dtype in _INDEX_DTYPES
     ]
@@ -406,6 +365,71 @@ def test_take_along_dim_beside_a_dim_refuses_as_a_dtype_guard(device: str, dtype
         lucid.take_along_dim(x, index, 1)
     with pytest.raises(_C_engine.DtypeMismatch, match="int64"):
         x.take_along_dim(index, 1)
+
+
+# ── the exponent of ldexp ───────────────────────────────────────────────────────────────────────
+
+_LDEXP_BASES = (
+    "bool",
+    "int8",
+    "int16",
+    "int32",
+    "int64",
+    "float16",
+    "bfloat16",
+    "float32",
+    "float64",
+    "complex64",
+    "complex128",
+)
+_LDEXP_EXPONENTS = ("bool", "int32")
+_REAL_FLOATS = frozenset({"float16", "bfloat16", "float32", "float64"})
+
+
+def _ldexp_verdict(fw: ModuleType, base: str, exponent: str, device: str) -> str:
+    x = _tensor(fw, [1, 2], base, device)
+    e = _tensor(fw, [True, False] if exponent == "bool" else [1, 2], exponent, device)
+    try:
+        fw.ldexp(x, e)
+    except NotImplementedError:
+        return "kernel"
+    except RuntimeError:
+        return "guard"
+    return "answers"
+
+
+def _ldexp_want(base: str, exponent: str) -> str:
+    """The reference has no kernel for a bool exponent beside a real float; every other cell answers."""
+    return "kernel" if exponent == "bool" and base in _REAL_FLOATS else "answers"
+
+
+@pytest.mark.parametrize("exponent", _LDEXP_EXPONENTS)
+@pytest.mark.parametrize("base", _LDEXP_BASES)
+def test_lucid_refuses_a_bool_exponent_beside_a_real_float(
+    device: str, base: str, exponent: str
+) -> None:
+    if not _supported(device, base):
+        pytest.skip(f"{device} cannot hold {base}")
+    assert _ldexp_verdict(lucid, base, exponent, device) == _ldexp_want(base, exponent)
+
+
+@pytest.mark.parity
+@pytest.mark.parametrize("exponent", _LDEXP_EXPONENTS)
+@pytest.mark.parametrize("base", _LDEXP_BASES)
+def test_the_reference_refuses_a_bool_exponent_beside_a_real_float(
+    ref: ModuleType, base: str, exponent: str
+) -> None:
+    assert _ldexp_verdict(ref, base, exponent, "cpu") == _ldexp_want(base, exponent)
+
+
+def test_a_zero_d_bool_exponent_is_refused_too() -> None:
+    x = lucid.tensor([1.0, 2.0])
+    with pytest.raises(
+        _C_engine.NotImplementedError, match=r"ldexp does not accept a bool exponent"
+    ):
+        lucid.ldexp(x, lucid.tensor(True))
+    with pytest.raises(_C_engine.NotImplementedError, match="ldexp"):
+        x.ldexp(lucid.tensor([True, False]))
 
 
 # ── a 0-d x of trapezoid ────────────────────────────────────────────────────────────────────────
