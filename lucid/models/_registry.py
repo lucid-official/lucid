@@ -148,12 +148,21 @@ def _normalize(name: str) -> str:
         Lowercase form with hyphens replaced by underscores
         (``"resnet_50"``).
 
+    Raises
+    ------
+    TypeError
+        If ``name`` is not a ``str``.
+
     Notes
     -----
     All registry keys are stored normalised; every lookup runs through
     this function so ``"resnet_50"``, ``"resnet-50"``, and ``"ResNet-50"``
-    all reach the same entry.
+    all reach the same entry.  It is also the one place a name is checked
+    for its type, so every entry point that takes one refuses a non-``str``
+    the same way instead of failing on ``.replace``.
     """
+    if not isinstance(name, str):
+        raise TypeError(f"a model name must be a str, got {type(name).__name__}")
     return name.replace("-", "_").lower()
 
 
@@ -320,6 +329,13 @@ def list_models(*, task: str | None = None, family: str | None = None) -> list[s
     list[str]
         Sorted list of normalised model names matching the filters.
 
+    Raises
+    ------
+    TypeError
+        If ``task`` or ``family`` is neither a ``str`` nor ``None``.  Such a
+        filter matches nothing, so the empty list it would return reads as
+        "no models" rather than "wrong argument".
+
     Notes
     -----
     Use this for discovery — pair with :func:`create_model` to build any
@@ -342,6 +358,11 @@ def list_models(*, task: str | None = None, family: str | None = None) -> list[s
     >>> "vit_base_16_cls" in list_models(task="image-classification")
     True
     """
+    for what, value in (("task", task), ("family", family)):
+        if value is not None and not isinstance(value, str):
+            raise TypeError(
+                f"list_models: {what} must be a str or None, got {type(value).__name__}"
+            )
     out: list[str] = []
     for name, entry in _REGISTRY.items():
         if task is not None and entry.task != task:
@@ -358,7 +379,9 @@ def is_model(name: str) -> bool:
     Parameters
     ----------
     name : str
-        Candidate model name.
+        Candidate model name.  Anything that is not a ``str`` (an ``int``, a
+        :class:`pathlib.Path`) names no registered model, so it answers
+        ``False`` rather than raising -- a predicate has no wrong-argument case.
 
     Returns
     -------
@@ -374,8 +397,10 @@ def is_model(name: str) -> bool:
     True
     >>> is_model("not_a_real_model")
     False
+    >>> is_model(5)
+    False
     """
-    return _normalize(name) in _REGISTRY
+    return isinstance(name, str) and _normalize(name) in _REGISTRY
 
 
 def model_entrypoint(name: str) -> ModelFactory:
@@ -396,6 +421,8 @@ def model_entrypoint(name: str) -> ModelFactory:
     ValueError
         If no entry is registered under the normalised name; the error
         message includes up to three Levenshtein-near suggestions.
+    TypeError
+        If ``name`` is not a ``str``.
 
     Notes
     -----
@@ -443,6 +470,9 @@ def create_model(name: str, *, pretrained: bool = False, **overrides: object) ->
     ------
     ValueError
         If ``name`` is not registered.
+    TypeError
+        If ``name`` is not a ``str``.  It is a wrong argument rather than an
+        unknown model, which is what ``ValueError`` says.
 
     Notes
     -----
@@ -481,6 +511,8 @@ def _registry_lookup(name: str, *, task: str) -> _RegistryEntry:
     ------
     ValueError
         If the name is unknown, or if the entry's task does not match.
+    TypeError
+        If ``name`` is not a ``str``.
 
     Notes
     -----

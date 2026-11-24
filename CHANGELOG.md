@@ -477,6 +477,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `linalg.pinv(..., hermitian=True)` and `linalg.matrix_rank(..., hermitian=True)` refused an integral input with the `eigh` kernel's `NotImplementedError`; the reference's `pinv` and `matrix_rank` are a dtype guard on every route, and Lucid now raises `DtypeMismatch` for them on every route, bool included (LCD-1105).
 - `linalg.lstsq` of a bool or integer operand raised `DtypeMismatch` whatever the call; the reference raises a dtype guard for a plain call and `NotImplementedError` ("linalg_lstsq_cpu") once `rcond` is given. Lucid now does the same, judged after the shapes (LCD-1105).
 
+- non-str names are refused; ModelOutput gets .get
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

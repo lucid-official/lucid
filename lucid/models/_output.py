@@ -47,10 +47,27 @@ class ModelOutput:
     True
     """
 
+    def _field_names(self) -> list[str]:
+        r"""Every dataclass field name, in declaration order, ``None`` valued or not."""
+        return [f.name for f in fields(self)]  # type: ignore[arg-type]
+
+    def _present(self, key: object) -> Tensor | None:
+        r"""The value of the field named ``key``, or ``None`` when ``key`` is not a key.
+
+        A key is a dataclass field that holds a value, which is all that
+        :meth:`keys` reports.  Looking ``key`` up as an attribute instead would
+        also answer for methods (``"keys"``) and anything else the class
+        defines.
+        """
+        if not isinstance(key, str) or key not in self._field_names():
+            return None
+        value: Tensor | None = getattr(self, key)
+        return value
+
     def __iter__(self) -> Iterator[Tensor]:
         r"""Yield each non-``None`` field value in declaration order."""
-        for f in fields(self):  # type: ignore[arg-type]
-            value: Tensor | None = getattr(self, f.name)
+        for name in self._field_names():
+            value: Tensor | None = getattr(self, name)
             if value is not None:
                 yield value
 
@@ -76,25 +93,49 @@ class ModelOutput:
             If ``idx`` is an integer outside the non-``None`` range.
         """
         if isinstance(idx, str):
-            value2: Tensor | None = getattr(self, idx, None)
-            if value2 is None:
+            value = self._present(idx)
+            if value is None:
                 raise KeyError(idx)
-            return value2
+            return value
         return tuple(self)[idx]
+
+    def get[D](self, key: str, default: D | None = None) -> Tensor | D | None:
+        r"""The value of field ``key``, or ``default`` when ``key`` is not a key.
+
+        Parameters
+        ----------
+        key : str
+            Field name.
+        default : object, optional
+            Returned when ``key`` names no field or a field that is ``None``
+            (such a field is not a key, as :meth:`keys` and ``in`` agree).
+            Default: ``None``.
+
+        Returns
+        -------
+        Tensor or object
+            The field's value, else ``default``.
+
+        Examples
+        --------
+        >>> import lucid
+        >>> from lucid.models import ImageClassificationOutput
+        >>> out = ImageClassificationOutput(logits=lucid.zeros(1, 10))
+        >>> out.get("logits").shape
+        (1, 10)
+        >>> out.get("loss") is None, out.get("loss", 0.0)
+        (True, 0.0)
+        """
+        value = self._present(key)
+        return default if value is None else value
 
     def __len__(self) -> int:
         r"""Return the number of non-``None`` fields."""
-        count = 0
-        for f in fields(self):  # type: ignore[arg-type]
-            if getattr(self, f.name) is not None:
-                count += 1
-        return count
+        return len(self.keys())
 
     def __contains__(self, key: object) -> bool:
         r"""Return whether ``key`` names a present (non-``None``) field."""
-        if not isinstance(key, str):
-            return False
-        return getattr(self, key, None) is not None
+        return self._present(key) is not None
 
     def to_tuple(self) -> tuple[Tensor, ...]:
         r"""Return a tuple of non-``None`` field values in declaration order.
@@ -109,11 +150,7 @@ class ModelOutput:
 
     def keys(self) -> list[str]:
         r"""Names of fields whose value is not ``None``, in declaration order."""
-        return [
-            f.name
-            for f in fields(self)  # type: ignore[arg-type]
-            if getattr(self, f.name) is not None
-        ]
+        return [name for name in self._field_names() if getattr(self, name) is not None]
 
     def values(self) -> list[Tensor]:
         r"""Values of non-``None`` fields, in declaration order."""
