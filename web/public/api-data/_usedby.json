@@ -2920,6 +2920,10 @@
     },
     {
       "kind": "module",
+      "module": "lucid.models._mixins"
+    },
+    {
+      "kind": "module",
       "module": "lucid.models._registry"
     },
     {
@@ -3147,6 +3151,10 @@
     {
       "kind": "module",
       "module": "lucid.models._auto"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.models._mixins"
     },
     {
       "kind": "module",
