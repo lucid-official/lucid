@@ -171,9 +171,8 @@ def _make_arith_adapter(
     comparison — but they still want both operands at a common one first.
 
     matmul/dot/inner/outer deliberately bypass it: a scalar operand is
-    meaningless there.  ``outer`` promotes its two tensors through
-    ``_outer_adapter`` instead; ``dot`` and ``inner`` (``_products``) and
-    ``matmul`` have dtype constraints of their own that the engine enforces.
+    meaningless there.  ``outer``, ``dot`` and ``inner`` (``_products``) and
+    ``matmul`` have dtype constraints of their own.
 
     mul and floor division — in place or not — hand a half tensor's scalar
     partner over unrounded, for the engine's op-math.  ``div`` and ``div_``,
@@ -959,27 +958,6 @@ def _tensordot_adapter(
         _promotion.as_number(dims), len(a_impl.shape), len(b_impl.shape)
     )
     return _C_engine.tensordot(a_impl, b_impl, axes_a, axes_b)
-
-
-def _outer_adapter(a_impl: _Impl, b_impl: _Impl) -> _Impl:
-    """outer(a, b) — the two vectors at their common dtype.
-
-    The engine multiplies operands of one dtype only, so an ``int64`` vector
-    beside a ``float32`` one raised ``DtypeMismatch``; the reference answers
-    in ``float32``, as ``a * b`` would.  Shared by ``Tensor.outer`` and
-    ``lucid.linalg.outer`` so the two cannot drift.
-
-    Both callers hand over impls already, and they are not unwrapped again:
-    shadow allocation's phantom impls pass one ``_unwrap`` but not a second.
-    A Python number is refused rather than coerced, as the bare engine op
-    refused it, since an outer product with one is not an outer product.
-    """
-    _require_tensor_operands("outer", a_impl, b_impl)
-    a_impl, b_impl = _promote_impls([a_impl, b_impl])
-    return _C_engine.outer(a_impl, b_impl)
-
-
-_keep_engine_signature(_outer_adapter, _C_engine.outer)
 
 
 def _kron_adapter(a_impl: _Impl, b_impl: _Impl) -> _Impl:

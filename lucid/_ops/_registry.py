@@ -19,7 +19,7 @@ from lucid._ops import _adapters as A  # accessor for every signature-normaliser
 from lucid._ops._aliases import ALIASES, OpAlias, narrowed
 from lucid._ops._reduce import _logical_not_adapter, _make_logical_adapter
 from lucid._ops._division import _make_div_adapter, _make_round_adapter
-from lucid._ops._products import _dot_adapter, _inner_adapter
+from lucid._ops._products import _dot_adapter, _inner_adapter, _outer_adapter
 from lucid._ops._search import _bucketize_adapter, _searchsorted_adapter
 from lucid._ops._reduce import (
     _all_adapter,
@@ -252,7 +252,7 @@ _REGISTRY: list[OpEntry] = [
     # enforces.  dot and inner (lucid._ops._products) keep one too, with a rank
     # rule on top — and inner of a 0-d operand is a product, so it takes the
     # multiplication's promotion.  outer has no contract — an elementwise
-    # product, nothing contracted — so it promotes its two tensors (and only
+    # product, nothing contracted — so it promotes its two vectors (and only
     # tensors) through the adapter it shares with linalg.outer.
     OpEntry("add",      A._make_arith_adapter(_R.add),      2, method_name="add",      free_fn_name="add",
             extra_kwargs=["alpha"]),
@@ -271,7 +271,7 @@ _REGISTRY: list[OpEntry] = [
     OpEntry("matmul",   _R.matmul,   2, method_name="matmul",   free_fn_name="matmul"),
     OpEntry("dot",      _dot_adapter,   2, method_name="dot",      free_fn_name="dot"),
     OpEntry("inner",    _inner_adapter, 2, method_name="inner",    free_fn_name="inner"),
-    OpEntry("outer",    A._outer_adapter, 2, method_name="outer", free_fn_name="outer"),
+    OpEntry("outer",    _outer_adapter, 2, method_name="outer", free_fn_name="outer"),
 
     # ── in-place binary ────────────────────────────────────────────────────
     OpEntry("add_",     A._make_arith_adapter(_R.add_, inplace=True),     2, inplace=True, method_name="add_",

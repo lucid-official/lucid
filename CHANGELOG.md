@@ -419,6 +419,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - column_stack lifts a 0-d input to a column
 
+- outer and ger name a vector that is not 1-D as the reference
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

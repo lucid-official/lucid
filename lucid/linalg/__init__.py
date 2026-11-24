@@ -9,10 +9,9 @@ import lucid
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _unwrap, _wrap
 from lucid._dtype import _ENGINE_TO_DTYPE, to_engine_dtype
-from lucid._ops._adapters import _outer_adapter
 from lucid._ops._autocast import _autocast_entry
 from lucid._ops._bool_refusal import refuse as _refuse, refuse_bool as _refuse_bool
-from lucid._ops._products import _dot_adapter, _inner_adapter
+from lucid._ops._products import _dot_adapter, _inner_adapter, _outer_adapter
 from lucid._ops._reduce import _reduction_axes, _require_normable, _truth_mask
 from lucid._promotion import try_unwrap as _try_unwrap
 from lucid._tensor._indexing import broadcast_shapes as _broadcast_batch
