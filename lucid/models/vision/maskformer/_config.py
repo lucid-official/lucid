@@ -5,7 +5,7 @@ from typing import ClassVar
 
 from lucid.models._base import ModelConfig
 from lucid.models._meta import model_family_meta
-from lucid.models._utils._common import check_positive, check_residual_layers
+from lucid.models._utils._common import check_non_negative, check_positive, check_residual_layers
 
 
 @model_family_meta(
@@ -134,4 +134,10 @@ class MaskFormerConfig(ModelConfig):
         owner = type(self).__name__
         check_positive(owner, num_classes=self.num_classes, in_channels=self.in_channels)
         check_positive(owner, num_queries=self.num_queries, fpn_out_channels=self.fpn_out_channels)
+        # ``num_encoder_layers=0`` is the reference's semantic setting.
+        check_non_negative(
+            owner,
+            num_encoder_layers=self.num_encoder_layers,
+            num_decoder_layers=self.num_decoder_layers,
+        )
         check_residual_layers(owner, backbone_layers=self.backbone_layers)

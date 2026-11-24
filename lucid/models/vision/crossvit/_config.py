@@ -5,7 +5,12 @@ from typing import ClassVar
 
 from lucid.models._base import ModelConfig
 from lucid.models._meta import model_family_meta
-from lucid.models._utils._common import check_positive, check_stage_divisible, check_stage_lengths
+from lucid.models._utils._common import (
+    check_non_negative,
+    check_positive,
+    check_stage_divisible,
+    check_stage_lengths,
+)
 
 
 @model_family_meta(
@@ -171,4 +176,6 @@ class CrossViTConfig(ModelConfig):
             num_heads=self.num_heads,
             mlp_ratio=self.mlp_ratio,
         )
+        # Each stage is (small-branch blocks, large-branch blocks, cross-attention depth).
+        check_non_negative(owner, depths=self.depths)
         check_stage_divisible(owner, "embed_dims", self.embed_dims, "num_heads", self.num_heads)

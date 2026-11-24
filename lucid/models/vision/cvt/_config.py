@@ -5,7 +5,12 @@ from typing import ClassVar
 
 from lucid.models._base import ModelConfig
 from lucid.models._meta import model_family_meta
-from lucid.models._utils._common import check_positive, check_stage_divisible, check_stage_lengths
+from lucid.models._utils._common import (
+    check_non_negative,
+    check_positive,
+    check_stage_divisible,
+    check_stage_lengths,
+)
 
 
 @model_family_meta(
@@ -166,4 +171,5 @@ class CvTConfig(ModelConfig):
             embed_strides=self.embed_strides,
             mlp_ratio=self.mlp_ratio,
         )
+        check_non_negative(owner, depths=self.depths)
         check_stage_divisible(owner, "dims", self.dims, "num_heads", self.num_heads)

@@ -1,11 +1,19 @@
 """CSPNet configuration dataclass (Wang et al., CVPRW 2020)."""
 
 from dataclasses import dataclass
-from typing import ClassVar
+from typing import ClassVar, Literal, get_args
 
 from lucid.models._base import ModelConfig
 from lucid.models._meta import model_family_meta
-from lucid.models._utils._common import check_positive
+from lucid.models._utils._common import (
+    check_choice,
+    check_each_choice,
+    check_non_negative,
+    check_positive,
+)
+
+_BlockType = Literal["bottle", "dark"]
+_StemPool = Literal["max", ""]
 
 
 @model_family_meta(
@@ -123,7 +131,7 @@ class CSPNetConfig(ModelConfig):
     stem_out_chs: int = 64
     stem_kernel: int = 7
     stem_stride: int = 2
-    stem_pool: str = "max"
+    stem_pool: _StemPool = "max"
 
     # Per-stage hyperparameters.  Every per-stage field is a tuple whose
     # length must equal ``len(depths)`` — CSPResNet / CSPResNeXt are
@@ -147,7 +155,7 @@ class CSPNetConfig(ModelConfig):
     # sets that itself.
     cross_linear: tuple[bool, ...] = (True, True, True, True)
     down_growth: tuple[bool, ...] = (False, False, False, False)
-    block_type: tuple[str, ...] = ("bottle", "bottle", "bottle", "bottle")
+    block_type: tuple[_BlockType, ...] = ("bottle", "bottle", "bottle", "bottle")
 
     dropout: float = 0.0
     # The reference ends its constructor with a zero-init of the last BN in
@@ -197,3 +205,10 @@ class CSPNetConfig(ModelConfig):
             strides=self.strides,
             groups=self.groups,
         )
+        # ``range(-1)`` is as empty as ``range(0)``: a negative depth would
+        # build an empty stage and say nothing.
+        check_non_negative(owner, depths=self.depths)
+        # The builder reads both with ``if x == "a" ... else``, so a typo
+        # picks the other layout instead of failing.
+        check_choice(owner, "stem_pool", self.stem_pool, get_args(_StemPool))
+        check_each_choice(owner, "block_type", self.block_type, get_args(_BlockType))

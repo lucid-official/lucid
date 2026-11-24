@@ -462,6 +462,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `generate()` (decoder-only, `T5ForSeq2SeqLM`, `TransformerForSeq2SeqLM`) checks its sampling arguments and raises `ValueError` with the reference's messages. Before, a bad value produced NaN-driven tokens or crashed in `topk`. `repetition_penalty` must be strictly positive, greedy or not. Under `do_sample=True`: `temperature` must be strictly positive, `top_k` is `None` or `0` (off) or a positive integer, and `top_p` lies in `[0, 1]`. Greedy decoding still ignores the sampling-only knobs. The arguments are checked before any work: `max_new_tokens=0` no longer skips the check, and the seq2seq models check before the encoder runs (LCD-1108).
 - `generate(..., top_k=0)` turns the top-k filter off; it crashed with `ShapeMismatch`. `top_p=0.0` keeps the most likely token; it kept none and sampled uniformly over the vocabulary. `top_p=1.0` is a true no-op. An unknown `cache_implementation` raises `ValueError` on all three loops, whether or not the cache is used; before, it was read as `"dynamic"` (LCD-1108).
 
+- CSPNet enums and negative block counts are refused
 
 ### Added
 

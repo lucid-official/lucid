@@ -5,7 +5,7 @@ from typing import ClassVar
 
 from lucid.models._base import ModelConfig
 from lucid.models._meta import model_family_meta
-from lucid.models._utils._common import check_positive, check_stage_lengths
+from lucid.models._utils._common import check_non_negative, check_positive, check_stage_lengths
 
 
 @model_family_meta(
@@ -146,4 +146,5 @@ class ConvNeXtConfig(ModelConfig):
         owner = type(self).__name__
         check_positive(owner, num_classes=self.num_classes, in_channels=self.in_channels)
         check_positive(owner, dims=self.dims)
+        check_non_negative(owner, depths=self.depths)
         check_stage_lengths(owner, depths=self.depths, dims=self.dims)

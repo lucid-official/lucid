@@ -15,10 +15,18 @@ of input:
 * the same refusal reached through the public factory's ``**overrides``;
 * every registered default still constructs and round-trips, and so does
   the shrunken config the zoo's compiled / device tests build from it;
+* the same count rule swept over every depth-like field (``depth``,
+  ``depths``, ``*_layers``, ``*_repeats`` ...), so a negative count, which
+  ``range`` would turn into an empty stack, is refused by name everywhere;
 * the values the models do handle, which stay accepted.
+
+The accept side is held to the whole zoo, not only vision: the compile / device
+tests shrink every family's config by field name, and a rule that hands any
+domain a value its config refuses must fail here, next to the refusal.
 """
 
 import dataclasses
+import re
 from typing import Any
 
 import pytest
@@ -34,9 +42,13 @@ from lucid.models.vision.cspnet import CSPNetConfig
 from lucid.models.vision.cvt import CvTConfig
 from lucid.models.vision.densenet import DenseNetConfig
 from lucid.models.vision.detr import DETRConfig
+from lucid.models.vision.efficientdet import EfficientDetConfig
+from lucid.models.vision.efficientformer import EfficientFormerConfig
 from lucid.models.vision.efficientnet import EfficientNetConfig
 from lucid.models.vision.faster_rcnn import FasterRCNNConfig
 from lucid.models.vision.fcn import FCNConfig
+from lucid.models.vision.inception_next import InceptionNeXtConfig
+from lucid.models.vision.mask2former import Mask2FormerConfig
 from lucid.models.vision.mask_rcnn import MaskRCNNConfig
 from lucid.models.vision.maskformer import MaskFormerConfig
 from lucid.models.vision.maxvit import MaxViTConfig
@@ -186,6 +198,46 @@ _STRUCTURAL: list[tuple[type[ModelConfig], dict[str, Any], str]] = [
     (VGGConfig, {"arch": (2, 2, 0, 3, 3)}, r"arch\[2\] must be positive, got 0"),
     (DenseNetConfig, {"growth_rate": 0}, r"growth_rate must be positive, got 0"),
     (CSPNetConfig, {"stem_out_chs": 0}, r"stem_out_chs must be positive, got 0"),
+    (CSPNetConfig, {"stem_pool": "avg"}, r"stem_pool must be one of \('max', ''\), got 'avg'"),
+    (
+        CSPNetConfig,
+        {"block_type": ("bottle", "darkk", "bottle", "bottle")},
+        r"block_type\[1\] must be one of \('bottle', 'dark'\), got 'darkk'",
+    ),
+    # A bare string is a tuple of characters: refused entry by entry, not accepted as "dark".
+    (CSPNetConfig, {"block_type": "dark"}, r"block_type\[0\] must be one of .*got 'd'"),
+    (CSPNetConfig, {"depths": (3, -1, 5, 2)}, r"depths\[1\] must be non-negative, got -1"),
+    # -- a negative block count builds an empty stack (``range(-1)``) -------
+    (ViTConfig, {"depth": -1}, r"depth must be non-negative, got -1"),
+    (SwinConfig, {"depths": (-1, 2, 6, 2)}, r"depths\[0\] must be non-negative, got -1"),
+    (ConvNeXtConfig, {"depths": (3, 3, -9, 3)}, r"depths\[2\] must be non-negative, got -9"),
+    (CvTConfig, {"depths": (1, -2, 10)}, r"depths\[1\] must be non-negative, got -2"),
+    (PVTConfig, {"depths": (2, 2, 2, -2)}, r"depths\[3\] must be non-negative, got -2"),
+    (MaxViTConfig, {"depths": (2, -2, 5, 2)}, r"depths\[1\] must be non-negative, got -2"),
+    (EfficientFormerConfig, {"depths": (3, 2, -6, 4)}, r"depths\[2\] must be non-negative"),
+    (EfficientFormerConfig, {"num_vit": -1}, r"num_vit must be non-negative, got -1"),
+    (InceptionNeXtConfig, {"depths": (3, 3, 9, -3)}, r"depths\[3\] must be non-negative"),
+    (
+        CrossViTConfig,
+        {"depths": ((1, 4, 0), (1, -4, 0), (1, 4, 0))},
+        r"depths\[1\]\[1\] must be non-negative, got -4",
+    ),
+    (
+        CrossViTConfig,
+        {"depths": ((1, 4, 0), (1, 4, -1), (1, 4, 0))},
+        r"depths\[1\]\[2\] must be non-negative, got -1",
+    ),
+    (DETRConfig, {"num_encoder_layers": -1}, r"num_encoder_layers must be non-negative, got -1"),
+    (DETRConfig, {"num_decoder_layers": -1}, r"num_decoder_layers must be non-negative, got -1"),
+    (DETRConfig, {"num_bbox_layers": 0}, r"num_bbox_layers must be positive, got 0"),
+    (MaskFormerConfig, {"num_encoder_layers": -1}, r"num_encoder_layers must be non-negative"),
+    (MaskFormerConfig, {"num_decoder_layers": -1}, r"num_decoder_layers must be non-negative"),
+    (Mask2FormerConfig, {"swin_depths": (2, 2, -6, 2)}, r"swin_depths\[2\] must be non-negative"),
+    (Mask2FormerConfig, {"num_encoder_layers": -1}, r"num_encoder_layers must be non-negative"),
+    (Mask2FormerConfig, {"num_decoder_layers": 0}, r"num_decoder_layers must be positive, got 0"),
+    (EfficientDetConfig, {"fpn_repeats": -1}, r"fpn_repeats must be non-negative, got -1"),
+    (EfficientDetConfig, {"head_repeats": -1}, r"head_repeats must be non-negative, got -1"),
+    (MaskRCNNConfig, {"mask_num_convs": -1}, r"mask_num_convs must be non-negative, got -1"),
     (YOLOConfig, {"split_size": 0}, r"split_size must be positive, got 0"),
     (YOLOV2Config, {"num_anchors": 0, "anchors": ()}, r"num_anchors must be positive, got 0"),
     # -- scale factors and enumerations the builder branches on ------------
@@ -234,6 +286,12 @@ _STILL_ACCEPTED: list[tuple[type[ModelConfig], dict[str, Any]]] = [
     (SwinConfig, {"depths": (1, 0, 1, 1)}),
     (ConvNeXtConfig, {"depths": (1, 0, 1, 1)}),
     (ViTConfig, {"depth": 0}),
+    (CSPNetConfig, {"depths": (3, 0, 5, 2)}),
+    (CrossViTConfig, {"depths": ((1, 4, 0), (0, 0, 1), (1, 4, 0))}),
+    (MaskFormerConfig, {"num_encoder_layers": 0}),
+    # Both stem layouts and both block flavours are the paper's.
+    (CSPNetConfig, {"stem_pool": ""}),
+    (CSPNetConfig, {"block_type": ("dark", "bottle", "dark", "bottle")}),
     # A stage count other than four is the point of these configs.
     (ConvNeXtConfig, {"depths": (1, 1, 1), "dims": (8, 16, 32)}),
     (CoAtNetConfig, {"mixed_s3": (8, 42, 1536)}),
@@ -251,6 +309,72 @@ def test_a_value_the_model_handles_is_still_accepted(
     config_class(**overrides)
 
 
+_DEPTH_FIELD = re.compile(
+    r"^(depth|depths|layers|blocks_per_stage|num_vit|\w+_(depth|depths|layers|blocks|repeats|convs))$"
+)
+
+
+def _with_a_negative_entry(value: object) -> object | None:
+    """``value`` with its first count made ``-1``; ``None`` for a field that is no count."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return -1
+    if isinstance(value, tuple) and value:
+        head = _with_a_negative_entry(value[0])
+        return None if head is None else (head, *value[1:])
+    return None
+
+
+def _depth_fields() -> list[tuple[type[ModelConfig], str, object]]:
+    """Every vision config field named like a block / layer count, with a negative value."""
+    rows: list[tuple[type[ModelConfig], str, object]] = []
+    for config_class in _VISION_CONFIGS:
+        default = config_class()
+        for field in dataclasses.fields(config_class):
+            bad = _with_a_negative_entry(getattr(default, field.name))
+            if _DEPTH_FIELD.match(field.name) and bad is not None:
+                rows.append((config_class, field.name, bad))
+    return rows
+
+
+_DEPTH_FIELDS = _depth_fields()
+
+
+def test_the_depth_sweep_sees_the_vision_zoo() -> None:
+    """A guard on the guard: the name pattern must not quietly come up short."""
+    named = {(c.__name__, field) for c, field, _ in _DEPTH_FIELDS}
+    assert {
+        ("ViTConfig", "depth"),
+        ("SwinConfig", "depths"),
+        ("ConvNeXtConfig", "depths"),
+        ("CSPNetConfig", "depths"),
+        ("CrossViTConfig", "depths"),
+        ("ResNetConfig", "layers"),
+        ("DETRConfig", "num_decoder_layers"),
+        ("IJEPAConfig", "predictor_depth"),
+    } <= named
+    assert len(_DEPTH_FIELDS) >= 40
+
+
+@pytest.mark.parametrize(
+    ("config_class", "field", "bad"),
+    _DEPTH_FIELDS,
+    ids=[f"{c.__name__}-{field}" for c, field, _ in _DEPTH_FIELDS],
+)
+def test_every_vision_block_count_refuses_a_negative_entry(
+    config_class: type[ModelConfig], field: str, bad: object
+) -> None:
+    """``range(-1)`` is empty, so a negative depth built a model with no stack and no error.
+
+    Zero stays the model's call (a zero-depth transformer stage is handled);
+    only a negative count, which nothing can mean, is refused here, by name.
+    """
+    with pytest.raises(ValueError) as refused:
+        config_class(**{field: bad})
+    assert re.search(rf"\b{field}\b.*\b(positive|negative)\b", str(refused.value))
+
+
 #: (factory, bad override): the refusal must reach the public entry point,
 #: before a model is built (the override is merged into the config first).
 _FACTORIES: list[tuple[str, dict[str, Any]]] = [
@@ -264,6 +388,9 @@ _FACTORIES: list[tuple[str, dict[str, Any]]] = [
     ("unet", {"depth": 0}),
     ("mobilenet_v3_small_cls", {"variant": "smal"}),
     ("efficientnet_b0_cls", {"width_mult": 0.0}),
+    ("vit_base_16_cls", {"depth": -1}),
+    ("cspresnet_50", {"stem_pool": "avg"}),
+    ("cspdarknet_53", {"block_type": ("dark", "dark", "dark", "dark", "darkk")}),
 ]
 
 
@@ -305,7 +432,19 @@ def test_every_registered_default_config_still_constructs(name: str) -> None:
     assert type(config).from_dict(config.to_dict()) == config
 
 
-@pytest.mark.parametrize("name", _VISION_DEFAULTS)
+_ALL_DEFAULTS = sorted(
+    name for name, entry in _REGISTRY.items() if entry.default_config is not None
+)
+
+
+def test_the_accept_side_guard_sees_every_domain() -> None:
+    """A guard on the guard: no registered default may fall outside the replay below."""
+    domains = {_REGISTRY[name].model_class.__module__.split(".")[2] for name in _ALL_DEFAULTS}
+    assert {"vision", "text", "generative", "multimodal"} <= domains
+    assert len(_ALL_DEFAULTS) == len(_REGISTRY)
+
+
+@pytest.mark.parametrize("name", _ALL_DEFAULTS)
 def test_the_zoo_matrix_shrunken_config_is_not_refused(name: str) -> None:
     """The accept side: the compiled / device / dtype zoo tests all build each
     factory from ``shrink(default) + SPECS[family].overrides``.
@@ -314,7 +453,9 @@ def test_the_zoo_matrix_shrunken_config_is_not_refused(name: str) -> None:
     every int field called ``dim`` to 32 hands UNet (where ``dim`` is the
     spatial rank, 2 or 3) a rank its config refuses, and five unrelated zoo
     tests failed.  Replaying the same shrink here fails in this file, next to
-    the refusal that caused it.
+    the refusal that caused it.  It runs over every registered default, in
+    every domain: a name that means a size in one family and something else in
+    another (text, generative, multimodal ...) is caught the same way.
     """
     entry = _REGISTRY[name]
     overrides = {

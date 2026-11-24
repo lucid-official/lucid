@@ -5,7 +5,7 @@ from typing import ClassVar
 
 from lucid.models._base import ModelConfig
 from lucid.models._meta import model_family_meta
-from lucid.models._utils._common import check_positive
+from lucid.models._utils._common import check_non_negative, check_positive
 
 
 @model_family_meta(
@@ -195,6 +195,7 @@ class EfficientDetConfig(ModelConfig):
         object.__setattr__(self, "anchor_base_sizes", tuple(self.anchor_base_sizes))
         owner = type(self).__name__
         check_positive(owner, num_classes=self.num_classes, in_channels=self.in_channels)
+        check_non_negative(owner, fpn_repeats=self.fpn_repeats, head_repeats=self.head_repeats)
 
 
 # ---------------------------------------------------------------------------

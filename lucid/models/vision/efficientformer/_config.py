@@ -5,7 +5,7 @@ from typing import ClassVar
 
 from lucid.models._base import ModelConfig
 from lucid.models._meta import model_family_meta
-from lucid.models._utils._common import check_positive, check_stage_lengths
+from lucid.models._utils._common import check_non_negative, check_positive, check_stage_lengths
 
 
 @model_family_meta(
@@ -182,3 +182,4 @@ class EfficientFormerConfig(ModelConfig):
         )
         check_positive(owner, num_classes=self.num_classes, in_channels=self.in_channels)
         check_positive(owner, embed_dims=self.embed_dims)
+        check_non_negative(owner, depths=self.depths, num_vit=self.num_vit)

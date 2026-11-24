@@ -5,7 +5,7 @@ regardless of its output task (classification, detection, segmentation …).
 """
 
 import random
-from collections.abc import Mapping, Sequence, Sized
+from collections.abc import Iterator, Mapping, Sequence, Sized
 from dataclasses import replace
 from typing import TYPE_CHECKING, cast
 
@@ -115,20 +115,28 @@ def check_stage_lengths(owner: str, *, count: int | None = None, **per_stage: Si
     )
 
 
-def _check_bound(
-    owner: str, fields: Mapping[str, float | Sequence[float]], *, strict: bool
-) -> None:
-    """Refuse, by field name, any scalar or sequence entry below the bound."""
+type _Numbers = float | Sequence[_Numbers]
+
+
+def _leaves(path: str, value: _Numbers) -> Iterator[tuple[str, float]]:
+    """Each number inside ``value`` with the index path that reaches it."""
+    if isinstance(value, Sequence):
+        for i, item in enumerate(value):
+            yield from _leaves(f"{path}[{i}]", item)
+    else:
+        yield path, value
+
+
+def _check_bound(owner: str, fields: Mapping[str, _Numbers], *, strict: bool) -> None:
+    """Refuse, by field name, any scalar or (nested) sequence entry below the bound."""
     word = "positive" if strict else "non-negative"
     for name, value in fields.items():
-        entries = list(value) if isinstance(value, Sequence) else [value]
-        for i, entry in enumerate(entries):
+        for where, entry in _leaves(name, value):
             if not (entry > 0 if strict else entry >= 0):
-                where = f"{name}[{i}]" if isinstance(value, Sequence) else name
                 raise ValueError(f"{owner}: {where} must be {word}, got {entry}")
 
 
-def check_positive(owner: str, **fields: float | Sequence[float]) -> None:
+def check_positive(owner: str, **fields: _Numbers) -> None:
     """Refuse a size, count, or channel width that is zero or negative.
 
     A zero-width layer builds without complaint (``Linear(8, 0)``,
@@ -136,7 +144,8 @@ def check_positive(owner: str, **fields: float | Sequence[float]) -> None:
     far from the value that caused it; a negative one reaches the engine as
     an opaque ``InvalidArgument``.  Checking the config field here names it
     where it was written.  A sequence field (``hidden_sizes``) is checked
-    entry by entry.
+    entry by entry, a nested one (per-branch ``depths``) at every level and
+    named by its path (``depths[0][1]``).
 
     A scale factor (``width_mult``, ``depth_mult``) is refused on policy, not
     because the build fails: at ``0`` it builds, since the builders floor the
@@ -146,7 +155,7 @@ def check_positive(owner: str, **fields: float | Sequence[float]) -> None:
     ----------
     owner : str
         The config class, named in the message.
-    **fields : float or Sequence[float]
+    **fields : float or nested Sequence[float]
         Each value that must be positive, by its config name.
 
     Raises
@@ -166,7 +175,7 @@ def check_positive(owner: str, **fields: float | Sequence[float]) -> None:
     _check_bound(owner, fields, strict=True)
 
 
-def check_non_negative(owner: str, **fields: float | Sequence[float]) -> None:
+def check_non_negative(owner: str, **fields: _Numbers) -> None:
     """Refuse a size, count, or floor that is negative; zero is allowed.
 
     For a field where ``0`` means "none" (a floor of ``0`` channels is no
@@ -176,7 +185,7 @@ def check_non_negative(owner: str, **fields: float | Sequence[float]) -> None:
     ----------
     owner : str
         The config class, named in the message.
-    **fields : float or Sequence[float]
+    **fields : float or nested Sequence[float]
         Each value that must be at least zero, by its config name.
 
     Raises
@@ -350,6 +359,47 @@ def check_choice(owner: str, name: str, value: object, choices: Sequence[object]
     """
     if value not in choices:
         raise ValueError(f"{owner}: {name} must be one of {tuple(choices)}, got {value!r}")
+
+
+def check_each_choice(
+    owner: str, name: str, values: Sequence[object], choices: Sequence[object]
+) -> None:
+    """Refuse a per-stage mode tuple with an entry that is not an accepted value.
+
+    The element-wise form of :func:`check_choice`, for a tuple holding one
+    mode per stage (CSPNet's ``block_type``): the builder reads
+    ``cfg.block_type[i]`` with the same ``if x == "a" ... else``, so a typo in
+    one entry quietly builds that stage as the other layout.  The entry is
+    named by its index.
+
+    Parameters
+    ----------
+    owner : str
+        The config class, named in the message.
+    name : str
+        The tuple field being checked.
+    values : Sequence[object]
+        Its entries, one per stage.
+    choices : Sequence[object]
+        The accepted values for every entry; derive them as for
+        :func:`check_choice`.
+
+    Raises
+    ------
+    ValueError
+        On the first entry of ``values`` that is not in ``choices``.
+
+    Examples
+    --------
+    >>> from lucid.models._utils._common import check_each_choice
+    >>> check_each_choice("Cfg", "block_type", ("bottle", "dark"), ("bottle", "dark"))
+    >>> check_each_choice("Cfg", "block_type", ("bottle", "darkk"), ("bottle", "dark"))
+    Traceback (most recent call last):
+        ...
+    ValueError: Cfg: block_type[1] must be one of ('bottle', 'dark'), got 'darkk'
+    """
+    for i, value in enumerate(values):
+        check_choice(owner, f"{name}[{i}]", value, choices)
 
 
 def make_divisible(v: float, divisor: int = 8, min_value: int | None = None) -> int:

@@ -5,7 +5,7 @@ from typing import ClassVar, Literal
 
 from lucid.models._base import ModelConfig
 from lucid.models._meta import model_family_meta
-from lucid.models._utils._common import check_divisible, check_positive
+from lucid.models._utils._common import check_divisible, check_non_negative, check_positive
 
 
 @model_family_meta(
@@ -207,6 +207,9 @@ class ViTConfig(ModelConfig):
         )
         check_divisible(owner, "image_size", self.image_size, "patch_size", self.patch_size)
         check_divisible(owner, "dim", self.dim, "num_heads", self.num_heads)
+        # ``depth=0`` builds a trunk of no blocks; ``range(-1)`` is as empty,
+        # so a negative depth would build it and say nothing.
+        check_non_negative(owner, depth=self.depth)
         if self.classifier not in ("token", "gap"):
             raise ValueError(f"classifier must be 'token' or 'gap', got {self.classifier!r}")
         if self.representation_size is not None and self.representation_size <= 0:

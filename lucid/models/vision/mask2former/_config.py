@@ -5,7 +5,7 @@ from typing import ClassVar
 
 from lucid.models._base import ModelConfig
 from lucid.models._meta import model_family_meta
-from lucid.models._utils._common import check_positive
+from lucid.models._utils._common import check_non_negative, check_positive
 
 
 @model_family_meta(
@@ -181,3 +181,9 @@ class Mask2FormerConfig(ModelConfig):
         object.__setattr__(self, "feature_strides", tuple(self.feature_strides))
         owner = type(self).__name__
         check_positive(owner, num_classes=self.num_classes, in_channels=self.in_channels)
+        # The decoder keeps ``num_decoder_layers - 1`` masked layers, so zero
+        # or fewer is the same empty stack as one layer.
+        check_positive(owner, num_decoder_layers=self.num_decoder_layers)
+        check_non_negative(
+            owner, swin_depths=self.swin_depths, num_encoder_layers=self.num_encoder_layers
+        )

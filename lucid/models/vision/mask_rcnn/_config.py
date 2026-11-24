@@ -5,7 +5,7 @@ from typing import ClassVar
 
 from lucid.models._base import ModelConfig
 from lucid.models._meta import model_family_meta
-from lucid.models._utils._common import check_positive, check_residual_layers
+from lucid.models._utils._common import check_non_negative, check_positive, check_residual_layers
 
 # P2-P5 from the FPN plus its max-pooled P6.
 _FPN_LEVELS = 5
@@ -212,3 +212,4 @@ class MaskRCNNConfig(ModelConfig):
         check_positive(owner, num_classes=self.num_classes, in_channels=self.in_channels)
         check_positive(owner, fpn_out_channels=self.fpn_out_channels)
         check_residual_layers(owner, backbone_layers=self.backbone_layers)
+        check_non_negative(owner, mask_num_convs=self.mask_num_convs)

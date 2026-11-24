@@ -5,7 +5,12 @@ from typing import ClassVar
 
 from lucid.models._base import ModelConfig
 from lucid.models._meta import model_family_meta
-from lucid.models._utils._common import check_positive, check_stage_divisible, check_stage_lengths
+from lucid.models._utils._common import (
+    check_non_negative,
+    check_positive,
+    check_stage_divisible,
+    check_stage_lengths,
+)
 
 
 @model_family_meta(
@@ -193,6 +198,7 @@ class SwinConfig(ModelConfig):
             window_size=self.window_size,
             mlp_ratio=self.mlp_ratio,
         )
+        check_non_negative(owner, depths=self.depths)
         # Each stage doubles ``embed_dim``, and its attention splits that
         # width across its own head count.
         widths = tuple(self.embed_dim * 2**stage for stage in range(len(self.num_heads)))

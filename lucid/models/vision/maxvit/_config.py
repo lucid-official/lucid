@@ -5,7 +5,12 @@ from typing import ClassVar
 
 from lucid.models._base import ModelConfig
 from lucid.models._meta import model_family_meta
-from lucid.models._utils._common import check_divisible, check_positive, check_stage_lengths
+from lucid.models._utils._common import (
+    check_divisible,
+    check_non_negative,
+    check_positive,
+    check_stage_lengths,
+)
 
 
 @model_family_meta(
@@ -158,6 +163,7 @@ class MaxViTConfig(ModelConfig):
             window_size=self.window_size,
             mlp_ratio=self.mlp_ratio,
         )
+        check_non_negative(owner, depths=self.depths)
         check_stage_lengths(owner, depths=self.depths, dims=self.dims)
         # Heads are ``dim // head_dim`` per stage, so each stage width must be a
         # whole number of heads.
