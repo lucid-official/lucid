@@ -819,8 +819,7 @@ class T5ForSeq2SeqLM(LanguageModelingModel):
         Parameters
         ----------
         input_ids : Tensor
-            ``(B, S)`` source ids, task prefix included (``"translate
-            English to German: …"``).
+            ``(B, S)`` source ids, task prefix included (``"translate English to German: …"``).
         max_length : int, default=20, keyword-only
             Cap on the returned length, start token included.
         max_new_tokens : int or None, optional, keyword-only
@@ -830,25 +829,22 @@ class T5ForSeq2SeqLM(LanguageModelingModel):
         use_cache : bool, default=True, keyword-only
             Decode one token per step against an encoder-decoder cache.
         cache_implementation : str, default="dynamic", keyword-only
-            ``"dynamic"`` → growing :class:`DynamicCache`; ``"static"`` →
-            pre-allocated self-attention :class:`StaticCache`; ``"compiled"``
-            → :class:`StaticCache` + :func:`compiled_decode_step` for
-            single-executable autoregressive decoding.
+            ``"dynamic"`` → :class:`DynamicCache`; ``"static"`` → fixed-size :class:`StaticCache`;
+            ``"compiled"`` → :class:`StaticCache` + :func:`compiled_decode_step` (one executable).
         max_cache_len : int or None, optional, keyword-only
             Self-attention buffer size for ``"static"``/``"compiled"``; default: the length cap.
         do_sample : bool, default=False, keyword-only
             Sample instead of taking the ``argmax``.
         temperature : float, default=1.0, keyword-only
-            Logit temperature for sampling.
+            Logit temperature, strictly positive; only read under ``do_sample``.
         top_k : int or None, optional, keyword-only
-            Sample among the ``top_k`` most likely tokens only.
+            Sample among the ``top_k`` most likely tokens only; ``None`` or ``0`` disables.
         top_p : float or None, optional, keyword-only
-            Sample from the smallest set reaching probability ``top_p``.
+            Sample from the smallest set reaching ``top_p``, in ``[0, 1]``; ``None``/``1.0`` is off.
         repetition_penalty : float, default=1.0, keyword-only
-            Down-weights tokens the row has already produced.
+            Down-weights tokens already produced; strictly positive, ``1.0`` is off.
         decoder_start_token_id : int or None, optional, keyword-only
-            First target token; ``config.decoder_start_token_id`` (the
-            pad id) by default.
+            First target token; ``config.decoder_start_token_id`` (the pad id) by default.
         eos_token_id : int or None, optional, keyword-only
             Token that finishes a row; ``config.eos_token_id`` by default.
         pad_token_id : int or None, optional, keyword-only
@@ -858,6 +854,11 @@ class T5ForSeq2SeqLM(LanguageModelingModel):
         -------
         Tensor
             ``(B, T_out)`` int64 target ids beginning with the start token.
+
+        Raises
+        ------
+        ValueError
+            A sampling argument or ``cache_implementation`` is out of range, before encoding.
         """
         config = self.config
         start = (
@@ -869,6 +870,10 @@ class T5ForSeq2SeqLM(LanguageModelingModel):
         pad = pad_token_id if pad_token_id is not None else config.pad_token_id
         length_cap = resolve_generation_length(max_length, max_new_tokens, 1)
         dev = input_ids.device.type
+        sampling = _SamplingParams(
+            do_sample=do_sample, temperature=temperature, top_k=top_k, top_p=top_p, dev=dev,
+            repetition_penalty=repetition_penalty, pad_token_id=pad if pad is not None else start,
+            eos_token_id=eos, cache_implementation=cache_implementation)  # fmt: skip
         memory = self.t5.encode(input_ids, attention_mask)
 
         def next_logits(
@@ -885,13 +890,8 @@ class T5ForSeq2SeqLM(LanguageModelingModel):
                 )[:, -1, :]
             )
 
-        sampling = _SamplingParams(
-            do_sample=do_sample, temperature=temperature, top_k=top_k, top_p=top_p,
-            repetition_penalty=repetition_penalty, eos_token_id=eos,
-            pad_token_id=pad if pad is not None else start, dev=dev,
-        )  # fmt: skip
         return seq2seq_generate(
             next_logits, batch=int(input_ids.shape[0]), device=dev, start_token_id=start,
             max_length=length_cap, use_cache=use_cache, sampling=sampling,
-            cache_implementation=cache_implementation, max_cache_len=max_cache_len,
+            max_cache_len=max_cache_len,
         )  # fmt: skip

@@ -461,6 +461,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - check generate() sampling args like the reference
 
+- refuse bad generate() args before any work (LCD-1108)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

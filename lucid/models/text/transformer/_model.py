@@ -611,8 +611,7 @@ class TransformerForSeq2SeqLM(LanguageModelingModel):
         Args:
             input_ids:     ``(B, S)`` source token ids.
             max_length:    Cap on generated target length (incl. BOS).
-            max_new_tokens: Cap on the tokens after BOS (``>= 0``); wins over
-                           ``max_length``.
+            max_new_tokens: Cap on the tokens after BOS (``>= 0``); wins over ``max_length``.
             bos_token_id:  Start-of-sequence id; defaults to
                            ``config.bos_token_id`` then 0.
             eos_token_id:  End-of-sequence id; defaults to
@@ -630,14 +629,17 @@ class TransformerForSeq2SeqLM(LanguageModelingModel):
                            ``"compiled"`` (defaults to the length cap).
             do_sample:     Sample from the (filtered) distribution instead of
                            greedy ``argmax`` (default False).
-            temperature:   Logit temperature applied before sampling.
-            top_k:         Keep only the ``top_k`` highest-probability tokens.
-            top_p:         Nucleus threshold — keep the smallest set whose
-                           cumulative probability reaches ``top_p``.
-            repetition_penalty: Down-weight logits of already-generated tokens.
+            temperature:   Logit temperature applied before sampling; strictly positive.
+            top_k:         Keep only the ``top_k`` likeliest tokens; ``None`` or ``0`` disables.
+            top_p:         Nucleus threshold — keep the smallest set whose cumulative probability
+                           reaches ``top_p``, in ``[0, 1]``; ``None`` or ``1.0`` disables.
+            repetition_penalty: Down-weight logits of already-generated tokens; strictly positive.
 
         Returns:
             ``(B, T_out)`` int Tensor of generated target tokens.
+
+        Raises:
+            ValueError: A sampling argument or ``cache_implementation`` is out of range.
         """
         assert isinstance(self.config, TransformerConfig)
         cfg = self.config
@@ -651,6 +653,11 @@ class TransformerForSeq2SeqLM(LanguageModelingModel):
 
         length_cap = resolve_generation_length(max_length, max_new_tokens, 1)
         dev = input_ids.device.type
+        sampling = _SamplingParams(
+            do_sample=do_sample, temperature=temperature, top_k=top_k, top_p=top_p, dev=dev,
+            repetition_penalty=repetition_penalty, eos_token_id=eos, pad_token_id=pad,
+            cache_implementation=cache_implementation,
+        )  # fmt: skip
         memory = self.transformer.encode(input_ids, attention_mask)
 
         # Decoder self-attention grows each step; the cross-attention
@@ -669,15 +676,10 @@ class TransformerForSeq2SeqLM(LanguageModelingModel):
             )
             return self.lm_head(decoded[:, -1, :])  # (B, V)
 
-        sampling = _SamplingParams(
-            do_sample=do_sample, temperature=temperature, top_k=top_k, top_p=top_p,
-            repetition_penalty=repetition_penalty, eos_token_id=eos, pad_token_id=pad,
-            dev=dev,
-        )  # fmt: skip
         return seq2seq_generate(
             next_logits, batch=int(input_ids.shape[0]), device=dev, start_token_id=bos,
             max_length=length_cap, use_cache=use_cache, sampling=sampling,
-            cache_implementation=cache_implementation, max_cache_len=max_cache_len,
+            max_cache_len=max_cache_len,
         )  # fmt: skip
 
 

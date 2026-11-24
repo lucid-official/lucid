@@ -20,8 +20,9 @@ The module also owns the argument checks of those loops.  They follow the
 reference text-generation library's: what it rejects with a ``ValueError`` is
 rejected here with its message, and what it reads as "off" (``top_k=0``,
 ``top_p=1.0``, ``temperature=1.0``, ``repetition_penalty=1.0``) is off here.
-:class:`_SamplingParams` runs the sampling checks once, where the params are
-built; :func:`_check_cache_implementation` does the same for the cache name.
+:class:`_SamplingParams` runs every check once, where the params are built --
+first thing in each ``generate``, so a bad argument is refused before any work
+and even when nothing is generated.
 """
 
 from dataclasses import dataclass
@@ -95,12 +96,15 @@ def _check_cache_implementation(cache_implementation: object) -> None:
 
 @dataclass(frozen=True, slots=True)
 class _SamplingParams:
-    r"""Bundle of next-token selection knobs shared by the eager and compiled
-    decode loops (so both paths sample identically).
+    r"""Bundle of the decode knobs shared by the eager and compiled loops (so
+    both paths sample identically): next-token selection, and the name of the
+    cache the loop decodes with.
 
     Built once per ``generate`` call, and the one place the knobs are checked
     (``ValueError``, with the reference's messages):
 
+    * ``cache_implementation`` must be one of ``"dynamic"``, ``"static"`` and
+      ``"compiled"``, whether or not a cache is used.
     * ``repetition_penalty`` must be a strictly positive number, greedy or not;
       ``1.0`` is off.
     * Under ``do_sample`` only: ``temperature`` strictly positive (``1.0`` is
@@ -117,8 +121,10 @@ class _SamplingParams:
     eos_token_id: int | None
     pad_token_id: int
     dev: str
+    cache_implementation: str
 
     def __post_init__(self) -> None:
+        _check_cache_implementation(self.cache_implementation)
         _check_repetition_penalty(self.repetition_penalty)
         if not self.do_sample:
             return

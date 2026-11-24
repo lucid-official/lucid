@@ -65,6 +65,7 @@ def _params(**overrides: object) -> _SamplingParams:
         eos_token_id=None,
         pad_token_id=0,
         dev="cpu",
+        cache_implementation="dynamic",
     )
     return _SamplingParams(**{**knobs, **overrides})
 
@@ -143,15 +144,20 @@ class TestTheKnobsAreChecked:
 
     @pytest.mark.parametrize("name", ["dynamic", "static", "compiled"])
     def test_every_cache_name_the_loops_know_is_accepted(self, name: str) -> None:
-        _check_cache_implementation(name)
+        assert _params(cache_implementation=name).cache_implementation == name
 
     @pytest.mark.parametrize("name", ["foo", "", "Static", "paged", 3, None])
     def test_an_unknown_cache_name_is_a_value_error_with_the_reference_message(
         self, name: object
     ) -> None:
         with pytest.raises(ValueError) as caught:
-            _check_cache_implementation(name)
+            _params(cache_implementation=name)
         assert str(caught.value) == _CACHE.format(name)
+
+    @pytest.mark.parametrize("do_sample", [True, False])
+    def test_the_cache_name_is_checked_greedy_or_sampled(self, do_sample: bool) -> None:
+        with pytest.raises(ValueError, match="Invalid `cache_implementation`"):
+            _params(do_sample=do_sample, cache_implementation="foo")
 
 
 def _next(logits: list[list[float]], **overrides: object) -> list[int]:
@@ -351,39 +357,55 @@ class TestThroughGenerate:
         out = model.generate(ids, **base, do_sample=False, temperature=0.0, top_k=-1, top_p=-0.5)
         assert out.numpy().tolist() == expected
 
-    @pytest.mark.parametrize("build", [_tiny_t5, _tiny_transformer], ids=["t5", "transformer"])
+    @pytest.mark.parametrize(("build", "base", "rows"), _FAMILIES)
     @pytest.mark.parametrize("use_cache", [True, False])
-    def test_a_seq2seq_loop_refuses_an_unknown_cache_name(
-        self, build: object, use_cache: bool
+    def test_an_unknown_cache_name_is_refused(
+        self, build: object, base: dict[str, int], rows: list[list[int]], use_cache: bool
     ) -> None:
         model = build()
         with pytest.raises(ValueError, match=r"Invalid `cache_implementation` \(foo\)"):
             model.generate(
-                lucid.tensor(_SOURCE).long(),
-                max_length=5,
-                use_cache=use_cache,
-                cache_implementation="foo",
+                lucid.tensor(rows).long(), **base, use_cache=use_cache, cache_implementation="foo"
             )
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "LCD-1108: the causal loop reads cache_implementation in _setup_causal_cache "
-            "(_mixins.py), claimed by LCD-1110; once it lands, add "
-            "`_check_cache_implementation(cache_implementation)` as that function's first line "
-            "and drop this marker"
-        ),
-    )
-    @pytest.mark.parametrize("use_cache", [True, False])
-    def test_the_causal_loop_refuses_an_unknown_cache_name(self, use_cache: bool) -> None:
+    @pytest.mark.parametrize(("bad", "pattern"), _BAD_CALLS)
+    def test_a_bad_argument_is_refused_even_when_nothing_is_generated(
+        self, bad: dict[str, object], pattern: str
+    ) -> None:
+        # ``generate`` returns the prompt untouched when there is nothing to add; the
+        # arguments are checked before that, as the reference checks them before its loop.
         model = _tiny_gpt2()
+        with pytest.raises(ValueError, match=pattern):
+            model.generate(lucid.tensor(_PROMPT).long(), max_new_tokens=0, **bad)
+
+    def test_an_unknown_cache_name_is_refused_even_when_nothing_is_generated(self) -> None:
         with pytest.raises(ValueError, match=r"Invalid `cache_implementation` \(foo\)"):
-            model.generate(
-                lucid.tensor(_PROMPT).long(),
-                max_new_tokens=3,
-                use_cache=use_cache,
-                cache_implementation="foo",
+            _tiny_gpt2().generate(
+                lucid.tensor(_PROMPT).long(), max_new_tokens=0, cache_implementation="foo"
             )
+
+    def test_good_arguments_with_nothing_to_generate_return_the_prompt(self) -> None:
+        ids = lucid.tensor(_PROMPT).long()
+        out = _tiny_gpt2().generate(ids, max_new_tokens=0, do_sample=True, top_k=0, top_p=0.0)
+        assert out.numpy().tolist() == _PROMPT
+
+    @pytest.mark.parametrize(
+        ("build", "trunk"),
+        [(_tiny_t5, "t5"), (_tiny_transformer, "transformer")],
+        ids=["t5", "transformer"],
+    )
+    @pytest.mark.parametrize(
+        "bad", [{"do_sample": True, "temperature": 0.0}, {"cache_implementation": "foo"}]
+    )
+    def test_a_bad_argument_costs_the_seq2seq_loop_no_encoder_pass(
+        self, build: object, trunk: str, bad: dict[str, object], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        model = build()
+        encoded: list[int] = []
+        monkeypatch.setattr(getattr(model, trunk), "encode", lambda *a, **k: encoded.append(1))
+        with pytest.raises(ValueError):
+            model.generate(lucid.tensor(_SOURCE).long(), max_length=5, **bad)
+        assert encoded == []
 
 
 @pytest.mark.parity

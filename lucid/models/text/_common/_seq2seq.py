@@ -12,11 +12,7 @@ from collections.abc import Callable
 
 import lucid
 from lucid._tensor.tensor import Tensor
-from lucid.models._sampling import (
-    _SamplingParams,
-    _check_cache_implementation,
-    _select_next_ondevice,
-)
+from lucid.models._sampling import _SamplingParams, _select_next_ondevice
 from lucid.utils.cache import DynamicCache, EncoderDecoderCache, StaticCache
 
 __all__ = ["NextTokenLogits", "seq2seq_generate"]
@@ -36,7 +32,6 @@ def seq2seq_generate(
     max_length: int,
     use_cache: bool,
     sampling: _SamplingParams,
-    cache_implementation: str = "dynamic",
     max_cache_len: int | None = None,
 ) -> Tensor:
     """Unroll a decoder from ``start_token_id`` until ``max_length`` tokens.
@@ -58,10 +53,10 @@ def seq2seq_generate(
         :class:`~lucid.utils.cache.EncoderDecoderCache` instead of
         re-reading the whole prefix.
     sampling : _SamplingParams
-        Greedy or stochastic selection, end-of-sequence and padding ids.
-    cache_implementation : str, optional, keyword-only, default="dynamic"
-        ``"dynamic"`` uses :class:`~lucid.utils.cache.DynamicCache` for
-        decoder self-attention; ``"static"`` uses a pre-allocated
+        Greedy or stochastic selection, end-of-sequence and padding ids, and the
+        cache to decode with (``sampling.cache_implementation``): ``"dynamic"``
+        uses :class:`~lucid.utils.cache.DynamicCache` for decoder
+        self-attention; ``"static"`` uses a pre-allocated
         :class:`~lucid.utils.cache.StaticCache`; ``"compiled"`` pairs a
         self-attention :class:`~lucid.utils.cache.StaticCache` with
         :func:`~lucid.compile._entry.decode_step.compiled_decode_step` so
@@ -76,14 +71,8 @@ def seq2seq_generate(
         ``(batch, T_out)`` int64 target tokens, ``T_out <= max_length``.
         A row that emitted end-of-sequence is padded with
         ``sampling.pad_token_id`` while the others finish.
-
-    Raises
-    ------
-    ValueError
-        ``cache_implementation`` is not ``"dynamic"``, ``"static"`` or
-        ``"compiled"`` -- whether or not ``use_cache`` is set.
     """
-    _check_cache_implementation(cache_implementation)
+    cache_implementation = sampling.cache_implementation
     finished = lucid.zeros((batch,), device=device).bool()
     out_tokens = [lucid.tensor([start_token_id] * batch, device=device).long()]
     cache: EncoderDecoderCache | None = None

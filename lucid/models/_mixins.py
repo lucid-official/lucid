@@ -823,19 +823,19 @@ class CausalLMMixin:
             ``False`` → greedy argmax decoding; ``True`` → stochastic
             sampling honouring ``temperature`` / ``top_k`` / ``top_p``.
         temperature : float, optional, keyword-only, default=1.0
-            Logit divisor before softmax.  ``< 1`` sharpens, ``> 1``
-            flattens.  Ignored under greedy decoding.
+            Logit divisor before softmax, strictly positive.  ``< 1`` sharpens, ``> 1``
+            flattens.  Ignored (and not checked) under greedy decoding.
         top_k : int or None, optional, keyword-only
             Keep only the K highest-probability tokens before sampling.
-            ``None`` disables.
+            ``None`` or ``0`` disables, otherwise a positive integer.
         top_p : float or None, optional, keyword-only
-            Nucleus sampling — keep the smallest token set whose
-            cumulative probability ≥ ``top_p``.  ``None`` disables.
+            Nucleus sampling — keep the smallest token set whose cumulative
+            probability ≥ ``top_p``, in ``[0, 1]``.  ``None`` or ``1.0`` disables.
         repetition_penalty : float, optional, keyword-only, default=1.0
-            Multiply the logit of every previously generated token by
-            ``1 / penalty`` (and by ``penalty`` if the logit is
-            negative).  ``1.0`` → no effect; ``> 1`` discourages
-            repetition.
+            Multiply the logit of every previously generated token by ``1 / penalty`` (and by
+            ``penalty`` if the logit is negative); strictly positive.  ``1.0`` → no effect;
+            ``> 1`` discourages repetition.  Pad ids of a left-padded prompt count as generated
+            tokens (``attention_mask`` is not consulted), as in the reference.
         pad_token_id : int or None, optional, keyword-only
             Token id used to pad finished sequences after they emit
             ``eos_token_id``.  Defaults to ``config.pad_token_id``, then
@@ -874,7 +874,10 @@ class CausalLMMixin:
         ------
         ValueError
             If ``input_ids`` is not 2-D, ``attention_mask`` is not its shape or sits
-            on another device, or ``max_new_tokens`` is negative.
+            on another device, ``max_new_tokens`` is negative, a sampling argument is
+            out of range (``temperature``, ``top_k``, ``top_p`` under ``do_sample``;
+            ``repetition_penalty`` always), or ``cache_implementation`` is not one of
+            the three names -- all before any work, even when nothing is generated.
         TypeError
             If the host's ``forward`` takes no ``attention_mask``.
         NotImplementedError
@@ -912,6 +915,14 @@ class CausalLMMixin:
 
         B, T_prompt = (int(d) for d in input_ids.shape)
 
+        # Built first: a bad argument is refused even when nothing is generated.
+        dev = input_ids.device.type
+        sampling = _SamplingParams(
+            do_sample=do_sample, temperature=temperature, top_k=top_k, top_p=top_p, dev=dev,
+            repetition_penalty=repetition_penalty, eos_token_id=eos_token_id,
+            pad_token_id=pad_token_id, cache_implementation=cache_implementation,
+        )  # fmt: skip
+
         model = cast(nn.Module, self)
         padding = _GenerationMask(
             model,
@@ -927,19 +938,8 @@ class CausalLMMixin:
         if use_cache and cache_implementation in ("static", "compiled"):
             _validate_static_cache_bounds(cfg, max_cache_len, stop_len)
 
-        dev = input_ids.device.type
         finished: Tensor = lucid.zeros((B,), device=dev).bool()
         out_tokens: list[Tensor] = [input_ids[:, t] for t in range(T_prompt)]
-        sampling = _SamplingParams(
-            do_sample=do_sample,
-            temperature=temperature,
-            top_k=top_k,
-            top_p=top_p,
-            repetition_penalty=repetition_penalty,
-            eos_token_id=eos_token_id,
-            pad_token_id=pad_token_id,
-            dev=dev,
-        )
 
         past, compiled_step = _setup_causal_cache(
             model, use_cache, cache_implementation, max_cache_len, stop_len
