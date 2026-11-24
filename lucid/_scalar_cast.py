@@ -36,7 +36,7 @@ import abc
 import enum
 import functools
 import math
-from collections.abc import Callable, Iterable
+from collections.abc import Callable
 from typing import NoReturn, override
 
 from lucid import _promotion
@@ -275,42 +275,19 @@ def scale_factor(factor: object, op: str, name: str) -> Scalar | complex:
     raise TypeError(f"{op}(): argument '{name}' must be Number, not {type(factor).__name__}")
 
 
-def read_scale_factors(op: str, kwargs: dict[str, object], names: Iterable[str]) -> None:
-    """Replace each scale factor of ``names`` in ``kwargs`` by the number it stands for.
-
-    The call arguments, by keyword: every op that takes a scale factor takes it keyword-only
-    (``alpha``, ``beta``, ``value``), so this reads all of them at the op's entry, before
-    anything else of the op is checked, as the reference's argument parser does.  A factor
-    that is already a Python number is left alone, which is the one type test the common
-    call pays.  See :func:`scale_factor`.
-
-    Parameters
-    ----------
-    op : str
-        The op's name, as a refusal spells it.
-    kwargs : dict
-        The call's keyword arguments; changed in place.
-    names : iterable of str
-        The scale factors of the op.
-
-    Raises
-    ------
-    TypeError
-        A scale factor is neither a number nor a 0-d tensor that does not require grad.
-    """
-    for name in names:
-        factor = kwargs.get(name, 1)
-        if type(factor) not in _PLAIN:
-            kwargs[name] = scale_factor(factor, op, name)
-
-
 def scale_factors[**P, R](*names: str) -> Callable[[Callable[P, R]], Callable[P, R]]:
     """Decorate an op so its keyword-only scale factors ``names`` are read at entry.
 
-    The declaration of which arguments of an op are scale factors.  ``_amp_op(scalars=...)``
-    applies it outside the autocast entry, so the products with a scaled accumulator read
-    theirs before the row can cast a tensor one.  The wrapped function sees numbers only, and
-    keeps its signature, name and docstring.
+    The declaration of which arguments of an op are scale factors, and the one place a call's
+    keywords are read (:func:`scale_factor`): every op that takes one takes it keyword-only
+    (``alpha``, ``beta``, ``value``), and it is read before anything else of the op is checked,
+    as the reference's argument parser does.  Put it outermost, above the autocast entry
+    (``_amp_op``), so a tensor scale factor is a number before the row can cast it.  The wrapped
+    function sees numbers only, and keeps its signature, name and docstring.
+
+    The refusal names the op as the caller spelled it: the decorated function's own name, a
+    leading underscore dropped (the in-place twin ``_addcmul_`` is ``addcmul_``).  A call
+    without keywords, or with factors that are already Python numbers, pays one type test each.
 
     Parameters
     ----------
@@ -321,14 +298,24 @@ def scale_factors[**P, R](*names: str) -> Callable[[Callable[P, R]], Callable[P,
     -------
     Callable
         The decorator.
+
+    Raises
+    ------
+    TypeError
+        (From the decorated op.)  A scale factor is neither a number nor a 0-d tensor that does
+        not require grad.
     """
 
     def decorate(fn: Callable[P, R]) -> Callable[P, R]:
-        op = fn.__name__
+        op = fn.__name__.removeprefix("_")
 
         @functools.wraps(fn)
         def at_entry(*args: P.args, **kwargs: P.kwargs) -> R:
-            read_scale_factors(op, kwargs, names)
+            if kwargs:
+                for name in names:
+                    factor = kwargs.get(name, 1)
+                    if type(factor) not in _PLAIN:
+                        kwargs[name] = scale_factor(factor, op, name)
             return fn(*args, **kwargs)
 
         return at_entry

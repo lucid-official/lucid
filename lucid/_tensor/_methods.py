@@ -33,6 +33,7 @@ from lucid._tensor._indexing import _adopt_inplace
 from lucid._tensor_args import guard_methods, require_tensor, slot_name
 from lucid._ops._adapters import _clip_adapter, _clip_dtype, _clip_scalar_bounds
 from lucid._ops._registry import _REGISTRY, OpEntry, _bind_leading
+from lucid._scalar_cast import scale_factors
 
 if TYPE_CHECKING:
     from lucid._tensor.tensor import Tensor
@@ -678,6 +679,7 @@ def _lerp_(self: Tensor, end: Tensor, weight: float | Tensor) -> Tensor:
     return _write(self, "lerp_", lambda base: base.lerp(end, weight), end, weight)
 
 
+@scale_factors("value")
 def _addcmul_(self: Tensor, tensor1: Tensor, tensor2: Tensor, *, value: float = 1) -> Tensor:
     """In-place :func:`lucid.addcmul`: ``self`` gains ``value * tensor1 * tensor2``.
 
@@ -697,6 +699,7 @@ def _addcmul_(self: Tensor, tensor1: Tensor, tensor2: Tensor, *, value: float = 
     return _write(self, "addcmul_", result_of, tensor1, tensor2)
 
 
+@scale_factors("value")
 def _addcdiv_(self: Tensor, tensor1: Tensor, tensor2: Tensor, *, value: float = 1) -> Tensor:
     """In-place :func:`lucid.addcdiv`: ``self`` gains ``value * tensor1 / tensor2``.
 
@@ -922,7 +925,7 @@ def _make_bmm_inplace(name: str) -> Callable[..., Tensor]:
         )
 
     method.__name__ = name
-    return method
+    return scale_factors("beta", "alpha")(method)
 
 
 def _float_power_(self: Tensor, exponent: TensorOrScalar | complex) -> Tensor:
@@ -967,6 +970,7 @@ def _divide_(self: Tensor, other: TensorOrScalar, *, rounding_mode: str | None =
     )
 
 
+@scale_factors("alpha")
 def _subtract_(self: Tensor, other: TensorOrScalar, *, alpha: Scalar = 1) -> Tensor:
     """Write ``lucid.subtract(self, other, alpha=alpha)`` into ``self`` in place."""
     import lucid
@@ -1001,6 +1005,7 @@ def _renorm_(self: Tensor, p: float, dim: int, maxnorm: float) -> Tensor:
     return _write(self, "renorm_", lambda base: lucid.renorm(base, p=p, dim=dim, maxnorm=maxnorm))
 
 
+@scale_factors("beta", "alpha")
 def _addmm_(
     self: Tensor, mat1: Tensor, mat2: Tensor, *, beta: float = 1, alpha: float = 1
 ) -> Tensor:
@@ -1016,6 +1021,7 @@ def _addmm_(
     )
 
 
+@scale_factors("beta", "alpha")
 def _addmv_(self: Tensor, mat: Tensor, vec: Tensor, *, beta: float = 1, alpha: float = 1) -> Tensor:
     """Write ``lucid.addmv(self, mat, vec, beta=beta, alpha=alpha)`` in place."""
     import lucid
@@ -1025,6 +1031,7 @@ def _addmv_(self: Tensor, mat: Tensor, vec: Tensor, *, beta: float = 1, alpha: f
     )
 
 
+@scale_factors("beta", "alpha")
 def _addr_(
     self: Tensor, vec1: Tensor, vec2: Tensor, *, beta: float = 1, alpha: float = 1
 ) -> Tensor:
@@ -1409,6 +1416,10 @@ def _read_version(self: Tensor) -> int:
     return self._impl.version
 
 
+#: In-place twins defined in the ``Tensor`` body, with the scale factors they take.
+_CLASS_BODY_SCALE_FACTORS: dict[str, tuple[str, ...]] = {"index_add_": ("alpha",)}
+
+
 def _inject_methods(tensor_cls: type) -> None:
     """Attach all registry ops as Tensor methods."""
     globals().setdefault("Tensor", tensor_cls)
@@ -1426,5 +1437,9 @@ def _inject_methods(tensor_cls: type) -> None:
     for _name, _fn in (("eval", eval), *_EXTRA_METHODS):
         _fn.__name__ = _name
         setattr(tensor_cls, _name, _fn)
+    # a twin written in the class body (``tensor.py`` is at its size cap) reads its scale
+    # factors here, so it names itself in a refusal like the twins above
+    for _name, _factors in _CLASS_BODY_SCALE_FACTORS.items():
+        setattr(tensor_cls, _name, scale_factors(*_factors)(getattr(tensor_cls, _name)))
     type.__setattr__(tensor_cls, "_version", property(_read_version))
     guard_methods(tensor_cls)

@@ -104,6 +104,13 @@ def _index_add(side: Side, scalar: Any) -> Any:
     return side.lib.index_add(side.zeros(3), 0, side.positions(0, 1), side.ones(2), alpha=scalar)
 
 
+def _index_add_in_place(side: Side, scalar: Any) -> Any:
+    """``index_add_`` on zeros, answering the tensor it wrote."""
+    base = side.zeros(3)
+    base.index_add_(0, side.positions(0, 1), side.ones(2), alpha=scalar)
+    return base
+
+
 _PRODUCTS: dict[str, tuple[Shape, ...]] = {
     "addmm": ((2, 2), (2, 2), (2, 2)),
     "addmv": ((2,), (2, 2), (2,)),
@@ -141,15 +148,25 @@ def _ops() -> dict[str, Op]:
         _spelling("inplace", "addmm_", _PRODUCTS["addmm"], "alpha"), PRODUCT_DTYPES, op_math=True
     )
     ops["addr_"] = Op(_spelling("inplace", "addr_", _PRODUCTS["addr"], "beta"), PRODUCT_DTYPES)
+    ops["addmv_"] = Op(_spelling("inplace", "addmv_", _PRODUCTS["addmv"], "beta"), PRODUCT_DTYPES)
+    ops["addbmm_"] = Op(
+        _spelling("inplace", "addbmm_", _PRODUCTS["addbmm"], "alpha"), PRODUCT_DTYPES, op_math=True
+    )
+    ops["baddbmm_"] = Op(
+        _spelling("inplace", "baddbmm_", _PRODUCTS["baddbmm"], "beta"), PRODUCT_DTYPES, op_math=True
+    )
+    ops["subtract_"] = Op(_spelling("inplace", "subtract_", [(2,), (2,)]), ADD_DTYPES)
     for fn in ("addcmul", "addcdiv"):
         dtypes = _VALUED if fn == "addcmul" else (*FLOATS, *COMPLEX)
         ops[fn] = Op(_spelling("free", fn, [(2,)] * 3, "value"), dtypes, op_math=True)
+        ops[f"{fn}-method"] = Op(_spelling("method", fn, [(2,)] * 3, "value"), dtypes, op_math=True)
         ops[f"{fn}_"] = Op(
             _spelling("inplace", f"{fn}_", [(2,)] * 3, "value"), dtypes, op_math=True
         )
     ops["lerp"] = Op(_spelling("free", "lerp", [(2,), (2,)], None), FLOATS, op_math=True)
     ops["lerp_"] = Op(_spelling("inplace", "lerp_", [(2,), (2,)], None), FLOATS, op_math=True)
     ops["index_add"] = Op(_index_add, ("bool", *INTS, *FLOATS, *COMPLEX))
+    ops["index_add_"] = Op(_index_add_in_place, ("bool", *INTS, *FLOATS, *COMPLEX))
     return ops
 
 

@@ -15,11 +15,11 @@ device to the reference, class, message, dtype and value, on the op table of
 the 0-d tensors:
 
 * a tensor with a dimension, or one that requires grad, is not a number: ``TypeError`` before the
-  op checks anything else (``add(): argument 'alpha' must be Number, not Tensor``).  The reference
-  names an in-place twin it writes (``addmm_()``); Lucid names the op it runs (``addmm()``), so
-  the sweep compares the name without its trailing underscore.  Where the reference lists every
-  signature (``addmm``, ``baddbmm``, ``subtract``, ``rsub``) the sweep holds the class and the
-  short sentence;
+  op checks anything else (``add(): argument 'alpha' must be Number, not Tensor``), and the message
+  names the spelling the caller used, an in-place twin (``addmm_()``) included.  Where the
+  reference lists every signature (``addmm``, ``baddbmm``, ``subtract``, ``rsub``) the sweep holds
+  the class and the short sentence with the op's name.  ``subtract`` is the one spelling that does
+  not name itself: it is an alias the registry derives from ``sub``, so it says ``sub()``;
 * ``lerp``'s ``weight`` is an operand in the reference too, so a 0-d tensor there is promoted and
   never read as a number: the sweep holds it to the reference as well, to show the line.
 """
@@ -153,9 +153,8 @@ _NOT_A_NUMBER: dict[str, Callable[[Side], Any]] = {
 }
 
 
-def _op_name_without_underscore(message: str) -> str:
-    """``addmm_(): argument ...`` is ``addmm(): argument ...``: the op, whichever spelling wrote it."""
-    return re.sub(r"^(\w+?)_?\(\): ", r"\1(): ", message)
+#: What the reference calls a spelling that Lucid's registry derives from another op's entry.
+_NAMED_AFTER_ITS_TARGET = {"subtract": "sub"}
 
 
 @pytest.mark.parametrize("kind", _NOT_A_NUMBER)
@@ -174,10 +173,15 @@ def test_a_tensor_that_is_not_a_number_is_a_type_error(
     assert got[0] == want[0] == "raised", f"{got} vs {want}"
     assert got[1] is want[1] is TypeError
     if "invalid combination" in want[2]:
-        # several signatures: the reference lists them all, and ``subtract`` is its own name there
-        assert re.search(r"^\w+\(\): argument '\w+' must be Number, not Tensor$", got[2])
+        # several signatures: the reference lists them all after the name of the call
+        spelled = want[2].split("(")[0]
+        short = re.fullmatch(r"(\w+)\(\): argument '\w+' must be Number, not Tensor", got[2])
+        assert short is not None, got[2]
+        assert short[1] == _NAMED_AFTER_ITS_TARGET.get(
+            spelled, spelled
+        ), f"{got[2]!r} vs {want[2]!r}"
     else:
-        assert _op_name_without_underscore(got[2]) == _op_name_without_underscore(want[2])
+        assert got[2] == want[2]
 
 
 @pytest.mark.parametrize("device", devices_supporting(lucid.float32))
@@ -199,13 +203,19 @@ def test_a_refused_scale_factor_leaves_an_in_place_target_alone(device: str) -> 
 @pytest.mark.parametrize("weight", ["bool", "int32", "float16", "float64", "complex64"])
 @pytest.mark.parametrize(
     ("device", "dtype"),
-    [(d, t) for t in ("float32", "float16", "float64") for d in devices_supporting(getattr(lucid, t))],
+    [
+        (d, t)
+        for t in ("float32", "float16", "float64")
+        for d in devices_supporting(getattr(lucid, t))
+    ],
 )
 def test_a_0d_lerp_weight_is_promoted_not_read_as_a_number(
     device: str, dtype: str, weight: str, ref: ModuleType
 ) -> None:
     if dtype == "float16" and weight == "complex64":
-        pytest.skip("the reference has no complex32 kernel for the promoted pair; Lucid has no complex32")
+        pytest.skip(
+            "the reference has no complex32 kernel for the promoted pair; Lucid has no complex32"
+        )
     ours, theirs = Side(lucid, dtype, device), Side(ref, dtype, device)
     value = 1 if weight in ("bool", "int32") else 0.5
     got = outcome(lambda: lucid.lerp(ours.ones(2), ours.ones(2), ours.scalar(weight, value)))
@@ -243,7 +253,9 @@ def test_addcmul_with_a_float_tensor_value_keeps_the_integer_dtype(device: str) 
 def test_index_add_with_a_float_tensor_alpha_answers_in_the_integer_dtype(device: str) -> None:
     base = lucid.zeros(3, dtype=lucid.int32, device=device)
     source = lucid.ones(2, dtype=lucid.int32, device=device)
-    out = lucid.index_add(base, 0, lucid.tensor([0, 1], device=device), source, alpha=lucid.tensor(2.0))
+    out = lucid.index_add(
+        base, 0, lucid.tensor([0, 1], device=device), source, alpha=lucid.tensor(2.0)
+    )
     assert out.dtype is lucid.int32
     assert out.tolist() == [2, 2, 0]
 
@@ -253,7 +265,9 @@ def test_a_tensor_scale_factor_does_not_promote_the_result(device: str) -> None:
     """A float64 tensor is a number that scales a float32 result; it is not an operand."""
     x = lucid.ones(2, device=device)
     assert lucid.add(x, x, alpha=lucid.tensor(2.0, dtype=lucid.float64)).dtype is lucid.float32
-    assert lucid.addcmul(x, x, x, value=lucid.tensor(2.0, dtype=lucid.float64)).dtype is lucid.float32
+    assert (
+        lucid.addcmul(x, x, x, value=lucid.tensor(2.0, dtype=lucid.float64)).dtype is lucid.float32
+    )
 
 
 @pytest.mark.parametrize("device", devices_supporting(lucid.float16))

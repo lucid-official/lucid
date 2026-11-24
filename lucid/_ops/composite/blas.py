@@ -83,7 +83,8 @@ def _contract(op: str, operand: Tensor) -> None:
     _contraction.require_summable(_unwrap(operand).dtype, op)
 
 
-@_amp_op("addmm", scalars=("beta", "alpha"))
+@scale_factors("beta", "alpha")
+@_amp_op("addmm")
 def addmm(
     input: Tensor, mat1: Tensor, mat2: Tensor, *, beta: float = 1, alpha: float = 1
 ) -> Tensor:
@@ -158,7 +159,8 @@ def addmm(
     )
 
 
-@_amp_op("addbmm", scalars=("beta", "alpha"))
+@scale_factors("beta", "alpha")
+@_amp_op("addbmm")
 def addbmm(
     input: Tensor, batch1: Tensor, batch2: Tensor, *, beta: float = 1, alpha: float = 1
 ) -> Tensor:
@@ -220,7 +222,8 @@ def addbmm(
     return _scaled_add(input, beta, summed, alpha, op="addbmm", read=ScalarRead.OP_MATH)
 
 
-@_amp_op("baddbmm", scalars=("beta", "alpha"))
+@scale_factors("beta", "alpha")
+@_amp_op("baddbmm")
 def baddbmm(
     input: Tensor, batch1: Tensor, batch2: Tensor, *, beta: float = 1, alpha: float = 1
 ) -> Tensor:
@@ -279,7 +282,8 @@ def baddbmm(
     )
 
 
-@_amp_op("addmv", scalars=("beta", "alpha"))
+@scale_factors("beta", "alpha")
+@_amp_op("addmv")
 def addmv(input: Tensor, mat: Tensor, vec: Tensor, *, beta: float = 1, alpha: float = 1) -> Tensor:
     r"""Matrix-vector multiply with a scaled accumulator (BLAS-2 gemv).
 
@@ -331,7 +335,8 @@ def addmv(input: Tensor, mat: Tensor, vec: Tensor, *, beta: float = 1, alpha: fl
     return _scaled_add(input, beta, mv_out, alpha, op="addmv")
 
 
-@_amp_op("addr", scalars=("beta", "alpha"))
+@scale_factors("beta", "alpha")
+@_amp_op("addr")
 def addr(input: Tensor, vec1: Tensor, vec2: Tensor, *, beta: float = 1, alpha: float = 1) -> Tensor:
     r"""Rank-1 update of a matrix by an outer product (BLAS-2 ger).
 

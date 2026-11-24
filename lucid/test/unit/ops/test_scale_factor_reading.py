@@ -105,8 +105,6 @@ def _cells() -> list[Any]:
     ]
 
 
-
-
 @pytest.mark.parametrize(("name", "dtype", "device", "scalar"), _cells())
 def test_scalar_is_read_as_the_reference_reads_it(
     name: str, dtype: str, device: str, scalar: str, ref: ModuleType
