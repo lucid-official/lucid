@@ -435,6 +435,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - read scale factors as the reference does
 
+- name the moved pow-scalar check in IntPow.h (LCD-1078)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

@@ -11,7 +11,7 @@
 // value, the same on both streams (``gpu_pow`` in ``gpu/Pow.h``): $1^{-n}$ is
 // 1, $(-1)^{-n}$ is $\pm 1$ by the parity of $n$, and any other base is 0.
 // Only a Python-scalar negative exponent is an error, and that is refused
-// where the scalar is still a scalar (``lucid._promotion.check_pow_scalar``).
+// where the scalar is still a scalar (``lucid._scalar_cast.check_pow_scalar``).
 #pragma once
 
 #include <cstddef>

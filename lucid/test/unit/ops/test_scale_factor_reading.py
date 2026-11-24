@@ -553,7 +553,7 @@ def test_a_real_alpha_on_a_real_tensor_is_unchanged(device: str) -> None:
 @pytest.mark.xfail(
     strict=True,
     reason=(
-        "FOUND (LCD-1078): a Python int outside [-2**63, 2**64) is refused by the reference's "
+        "LCD-1086: a Python int outside [-2**63, 2**64) is refused by the reference's "
         "argument parser for every scalar op (OverflowError); Lucid takes it as a float"
     ),
 )
@@ -566,7 +566,7 @@ def test_a_python_int_past_64_bits_is_refused(scalar: int) -> None:
 @pytest.mark.xfail(
     strict=True,
     reason=(
-        "FOUND (LCD-1078): Lucid rounds a half tensor's scalar to the half type before the "
+        "LCD-1087: Lucid rounds a half tensor's scalar to the half type before the "
         "accumulating ops use it; the reference reads it as float and rounds once"
     ),
 )
