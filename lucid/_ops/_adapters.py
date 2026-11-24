@@ -156,7 +156,7 @@ def _power_operands(
     a, b = _binary_operands(base, exponent, inplace=inplace)
     if (
         not isinstance(exponent, _promotion.NUMBER)
-        and a.dtype.value == BOOL_CODE
+        and a.dtype_code == BOOL_CODE
         and is_bool(exponent)
     ):
         raise bool_refusal("pow_" if inplace else "pow")

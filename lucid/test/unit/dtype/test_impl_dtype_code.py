@@ -12,8 +12,10 @@ phantom).  A dtype added to the engine without a code that matches its enum valu
 sweep here.
 """
 
+import ast
 import contextlib
 from collections.abc import Iterator
+from pathlib import Path
 
 import pytest
 
@@ -76,6 +78,28 @@ def test_code_follows_a_cast() -> None:
     y = x.to(lucid.int64)
     assert x._impl.dtype_code == _C_engine.Dtype.F32.value
     assert y._impl.dtype_code == _C_engine.Dtype.I64.value
+
+
+def test_no_library_code_reads_dtype_dot_value() -> None:
+    """``x.dtype.value`` is the slow spelling of ``x.dtype_code``; nothing reads it.
+
+    A ``lucid.dtype`` has no ``.value``, so every ``<expr>.dtype.value`` in the library is a
+    read of an engine ``Dtype`` off an impl.  The per-call refusals did exactly that, 0.29 us
+    an operand where ``dtype_code`` costs 0.07, and a new fast path that copies the old
+    spelling brings the cost of ``gather`` / ``take`` / ``complex`` back.
+    """
+    package = Path(lucid.__file__).parent
+    offenders = [
+        f"{path.relative_to(package)}:{node.lineno}"
+        for path in sorted(package.rglob("*.py"))
+        if "test" not in path.relative_to(package).parts
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
+        if isinstance(node, ast.Attribute)
+        and node.attr == "value"
+        and isinstance(node.value, ast.Attribute)
+        and node.value.attr == "dtype"
+    ]
+    assert not offenders, f"read dtype_code, not dtype.value: {offenders}"
 
 
 def test_phantom_tensor_has_a_code() -> None:

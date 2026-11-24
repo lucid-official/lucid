@@ -584,7 +584,7 @@ def _check_kind(
         check = _MISMATCH_BESIDE_TARGET.get(op)
         raise refusal(
             op,
-            _unwrap(t).dtype.value,
+            _unwrap(t).dtype_code,
             "" if what == "input" else what,
             index=kind == "index",
             mismatch=(
@@ -649,7 +649,7 @@ def _check_dtypes(op: str, target: Tensor | None = None, **inputs: Tensor) -> No
         t.is_floating_point() for t in (*inputs.values(), target)
     ):
         # Two operands of bool or integer dtypes: the reference has no kernel for the pair.
-        raise refusal(op, _unwrap(next(iter(inputs.values()))).dtype.value)
+        raise refusal(op, _unwrap(next(iter(inputs.values()))).dtype_code)
 
 
 def _check_pair_dtype(op: str, x: object, target: object) -> None:
@@ -788,7 +788,7 @@ def _check_cross_entropy_target(
     if not soft:
         _check_class_target(x, target, op)
     elif _kind_of(target) in ("bool", "integer"):
-        raise refusal(op, _unwrap(target).dtype.value, "target", mismatch=True)
+        raise refusal(op, _unwrap(target).dtype_code, "target", mismatch=True)
     elif not target.is_floating_point():
         raise TypeError(
             f"{op}: a target of the input's shape holds class probabilities "

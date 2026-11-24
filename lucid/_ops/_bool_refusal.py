@@ -90,8 +90,8 @@ _GUARD = _C_engine.DtypeMismatch
 #: class is a ``ValueError`` and a ``RuntimeError``.
 _INVALID = _C_engine.InvalidArgument
 
-#: ``Dtype.Bool``'s integer code: ``impl.dtype.value == BOOL_CODE`` is 150 ns
-#: cheaper than comparing the enum.
+#: ``Dtype.Bool``'s integer code: ``impl.dtype_code == BOOL_CODE`` reads a plain int
+#: off the impl (0.07 us), where comparing ``impl.dtype`` with the enum costs 0.75 us.
 BOOL_CODE: int = _C_engine.Bool.value
 
 # The integral dtypes in code order (bool, then the signed integers by width).
@@ -572,7 +572,7 @@ def _error(
 def _dtype_code(operand: object) -> int:
     """``operand``'s engine dtype code, or ``-1`` for anything that is not a tensor."""
     impl = _promotion.try_unwrap(operand)
-    return -1 if impl is None else impl.dtype.value
+    return -1 if impl is None else impl.dtype_code
 
 
 def _check(op: str, code: int, role: str = "") -> None:
@@ -593,7 +593,7 @@ def refusal(
         The name the caller used.  A trailing ``_`` (the in-place twin) reads the row
         of the out-of-place op, and is kept in the message.
     code : int
-        The operand's engine dtype code (``impl.dtype.value``): bool or a signed
+        The operand's engine dtype code (``impl.dtype_code``): bool or a signed
         integer.
     role : str, optional
         Names the operand when it is not the first one (``"bins"``, ``"weight"``).
@@ -663,7 +663,7 @@ def is_bool(x: object) -> bool:
         ``True`` only for a tensor whose dtype is bool.
     """
     impl = _promotion.try_unwrap(x)
-    return impl is not None and impl.dtype.value == BOOL_CODE
+    return impl is not None and impl.dtype_code == BOOL_CODE
 
 
 def refuse(op: str, operand: object, role: str = "") -> None:
@@ -691,7 +691,7 @@ def refuse(op: str, operand: object, role: str = "") -> None:
     impl = operand if isinstance(operand, _IMPL) else _promotion.try_unwrap(operand)
     if impl is None:
         return
-    code = impl.dtype.value
+    code = impl.dtype_code
     if code <= LAST_INTEGRAL_CODE and code in _refused_codes(op, role):
         if impl.numel() == 0 and _answers_empty(op, role):
             return
@@ -722,7 +722,7 @@ def refuse_mixed(op: str, first: object, second: object) -> None:
     impl_first, impl_second = _promotion.try_unwrap(first), _promotion.try_unwrap(second)
     if impl_first is None or impl_second is None:
         return
-    codes = (impl_first.dtype.value, impl_second.dtype.value)
+    codes = (impl_first.dtype_code, impl_second.dtype_code)
     if codes[0] > LAST_INTEGRAL_CODE and codes[1] > LAST_INTEGRAL_CODE:
         return
     role = "" if codes[0] == codes[1] else "mixed"
@@ -755,7 +755,7 @@ def refuse_declared(op: str, operand: object) -> None:
     impl = _promotion.try_unwrap(operand)
     if impl is None:
         return
-    code = impl.dtype.value
+    code = impl.dtype_code
     if code > LAST_INTEGRAL_CODE:
         return
     rules = engine_refusals().get(op)
@@ -840,7 +840,7 @@ def refuse_bool(op: str, *operands: object, role: str = "") -> None:
     """
     for operand in operands:
         impl = _promotion.try_unwrap(operand)
-        if impl is not None and impl.dtype.value == BOOL_CODE:
+        if impl is not None and impl.dtype_code == BOOL_CODE:
             raise bool_refusal(op, role)
 
 
@@ -870,7 +870,7 @@ def refuse_common(op: str, *operands: object) -> None:
         impl = _promotion.try_unwrap(operand)
         if impl is None:
             return
-        code = impl.dtype.value
+        code = impl.dtype_code
         if code > LAST_INTEGRAL_CODE:
             return
         common = max(common, code)
@@ -908,7 +908,7 @@ def refuse_unlike(op: str, first: object, second: object) -> None:
     impl_second = second if isinstance(second, _IMPL) else _promotion.try_unwrap(second)
     if impl_first is None or impl_second is None:
         return
-    code_first, code_second = impl_first.dtype.value, impl_second.dtype.value
+    code_first, code_second = impl_first.dtype_code, impl_second.dtype_code
     if code_first == code_second:
         return
     pair = PAIRS.get(op.removesuffix("_"))

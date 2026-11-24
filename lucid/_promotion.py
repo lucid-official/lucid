@@ -427,7 +427,7 @@ def result_type(*operands: Operand, tiers: Tiers = Tiers.BY_RANK) -> _C_engine.D
         if isinstance(x := as_number(x), NUMBER):
             kind = max(kind, _number_kind(x))
             continue
-        c = x.dtype.value
+        c = x.dtype_code
         if first is None:
             first = x
         if x.shape or not by_rank:

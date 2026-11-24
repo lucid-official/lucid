@@ -602,6 +602,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - TensorImpl.dtype_code, a cheap dtype read (LCD-1099)
 
+- refusals read dtype_code, not dtype.value (LCD-1099)
+
 ### Tooling
 
 - record that 1055fa3b9 moves no binary interface
