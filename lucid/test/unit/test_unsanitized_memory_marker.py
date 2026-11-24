@@ -8,8 +8,8 @@ nightly job runs and fails on any that reaches a process-memory reader without t
 
 What is scanned.  The target is read out of ``scripts/ci_sanitizer.sh`` (its default
 ``PYTEST_TARGET``), so widening the nightly job widens this guard with it.  A test *reaches* a
-reader when the reader's name (``ru_maxrss``, ``getrusage``, ``footprint_gb``, ``resident_mb``,
-``phys_footprint``, ``task_info``) appears in the test, in a module-level helper, constant or
+reader when the reader's name (``ru_maxrss``, ``getrusage``, ``footprint_gb``, ``footprint_mb``,
+``settled_footprint_mb``, ``resident_mb``, ``phys_footprint``, ``task_info``) appears in the test, in a module-level helper, constant or
 fixture it names, transitively -- as an identifier, or inside a string, because the repository
 measures a child's peak from code held in a string (``python -c``).  Docstrings are prose and
 are skipped.
@@ -41,7 +41,8 @@ _DEFAULT_TARGET = re.compile(
 
 # Functions and fields that read how much memory the *process* holds or peaked at.
 _READERS = re.compile(
-    r"\b(?:ru_maxrss|getrusage|RUSAGE_\w+|footprint_gb|resident_mb|phys_footprint|task_info)\b"
+    r"\b(?:ru_maxrss|getrusage|RUSAGE_\w+|footprint_gb|footprint_mb|settled_footprint_mb|"
+    r"resident_mb|phys_footprint|task_info)\b"
 )
 
 

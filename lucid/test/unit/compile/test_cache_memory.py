@@ -154,7 +154,9 @@ def _skip_if_nothing_is_pinned(grew_mb: float, graphs: int, pinned_per_graph_mb:
     The hosted macOS runner's virtual GPU does not pin MPSGraph intermediates.  On
     2026-11-14 the control of the footprint tests below saw 6-8 MB of growth for eight
     graphs there, where Apple Silicon hardware pins about 150 MB.  On hardware that pins,
-    the control still has to hold, and the cap is asserted against it.
+    the control still has to hold, and the cap is asserted against it.  The child gave the
+    control 15 s to grow before it reported (``_footprint``: a baseline still draining
+    reads the control small, which is not a GPU that pins nothing; LCD-1112).
     """
     if grew_mb <= graphs * pinned_per_graph_mb / 2:
         pytest.skip(
@@ -228,33 +230,22 @@ _CHILD_ENV = {
 }
 
 # What MPSGraph pins, measured in a process of its own: the floor is then the Metal
-# set-up of one graph, not whatever the tests before this one left to release.
+# set-up of one graph, not whatever the tests before this one left to release.  A released
+# executable's memory comes back to the footprint late, by 2-13 s under load, so a reading
+# waits for the condition the assertion needs (``_footprint.Footprints``, LCD-1112) rather
+# than for a clock: the control for what grew, the capped run for being under half of it.
 _FOOTPRINT_CHILD = textwrap.dedent("""
-    import gc
     import json
-    import os
-    import time
 
     import lucid
     from lucid._C import engine as E
-    from lucid.test.audit._zoo_budget import footprint_gb
-
-    N, LEAD = 8, 1024
-    # What a release needs to reach the footprint: MPS keeps a retired heap about a
-    # second and Metal returns released buffers in a step 1-2 s after the release.
-    RELEASE_S = 3.0
+    from lucid.test.unit.compile._footprint import GRAPHS as N
+    from lucid.test.unit.compile._footprint import LEAD, PINNED_MB, Footprints
 
 
     def widen(x):
         # A graph that must write its 2x broadcast out: MPSGraph pins that buffer.
         return x.repeat(1, 1, 1, 2).reshape(-1).sum()
-
-
-    def settled_mb():
-        gc.collect()
-        lucid.metal.empty_cache()  # the freed inputs sit in MLX's cache, not in an executable
-        time.sleep(RELEASE_S)
-        return footprint_gb(os.getpid()) * 1024
 
 
     def run_graphs(count):
@@ -266,26 +257,31 @@ _FOOTPRINT_CHILD = textwrap.dedent("""
             del x
 
 
+    def grew(reading, floor):
+        return reading - floor > N * PINNED_MB / 2
+
+
+    fp = Footprints()
     with lucid.no_grad():
         E.compile.session_cache_set_max_bytes(0)
         # The first graph of a process also sets up Metal, which stays: out of the baseline.
         run_graphs(1)
         E.compile.session_cache_clear()
-        base = settled_mb()
+        fp.settle()
 
         run_graphs(N)
-        uncapped = settled_mb() - base
+        held = fp.settle(until=grew, timeout_s=15.0)
         entry = E.compile.session_cache_bytes() // N
 
         E.compile.session_cache_clear()
         E.compile.session_cache_set_max_bytes(entry * 5 // 2)
         run_graphs(N)
-        capped = settled_mb() - base
+        capped = fp.settle(until=lambda reading, floor: reading - floor < (held - floor) / 2)
     print(json.dumps({
-        "uncapped": uncapped,
-        "capped": capped,
+        "uncapped": held - fp.floor,
+        "capped": capped - fp.floor,
         "entries": E.compile.session_cache_size(),
-        "pinned_per_graph_mb": 2 * LEAD * 8 * 16 * 16 * 4 / 2**20,
+        "pinned_per_graph_mb": PINNED_MB,
         "graphs": N,
     }))
     """)
@@ -309,9 +305,11 @@ def test_a_control_that_grew_is_asserted_against(grew_mb: float) -> None:
 def test_footprint_stays_inside_the_byte_cap() -> None:
     """Distinct graphs pin memory until their executables go; the byte cap lets it go.
 
-    Eight graphs each holding a 17 MB broadcast: with no byte cap the process keeps all
+    Eight graphs each holding a 128 MB broadcast: with no byte cap the process keeps all
     eight, with a cap of two entries it keeps two.  The uncapped run is the control: where
     it does not grow (a GPU that pins nothing) the test skips rather than pass vacuously.
+    Readings are taken the way ``_footprint`` settles them (LCD-1112): on a loaded Studio a
+    released executable's memory came back 2-13 s late, or at the next GPU work.
     """
     done = subprocess.run(
         [sys.executable, "-c", _FOOTPRINT_CHILD],
@@ -368,31 +366,24 @@ def test_an_unusable_byte_cap_falls_back_to_the_default_and_says_so(text: str) -
 
 
 # One live module over many shapes (LCD-1008).  The module's own cap is read when the
-# module is made, so each arm sets it first.
+# module is made, so each arm sets it first.  Readings wait as the byte-cap child's do: the
+# arm that ends a module's life leaves its memory to come back, which the next arm's baseline
+# may still carry (the control read 0 when it did), so every reading is judged against the
+# lowest footprint seen.
 _LIVE_MODULE_CHILD = textwrap.dedent("""
-    import gc
     import json
     import os
-    import time
 
     import lucid
     from lucid._C import engine as E
-    from lucid.test.audit._zoo_budget import footprint_gb
+    from lucid.test.unit.compile._footprint import GRAPHS as N
+    from lucid.test.unit.compile._footprint import LEAD, PINNED_MB, Footprints
 
-    N, LEAD = 8, 1024
-    RELEASE_S = 3.0
     MODULE_BYTES = "LUCID_COMPILE_MAX_SIGNATURE_BYTES"
 
 
     def widen(x):
         return x.repeat(1, 1, 1, 2).reshape(-1).sum()
-
-
-    def settled_mb():
-        gc.collect()
-        lucid.metal.empty_cache()
-        time.sleep(RELEASE_S)
-        return footprint_gb(os.getpid()) * 1024
 
 
     def drive(cm):
@@ -403,18 +394,25 @@ _LIVE_MODULE_CHILD = textwrap.dedent("""
             del x
 
 
-    def arm(session_cap, module_cap):
+    def grew(reading, floor):
+        return reading - floor > N * PINNED_MB / 2
+
+
+    fp = Footprints()
+
+
+    def arm(session_cap, module_cap, until, timeout_s):
         E.compile.session_cache_clear()
         E.compile.session_cache_set_max_bytes(session_cap)
         os.environ[MODULE_BYTES] = str(module_cap)
-        base = settled_mb()
+        fp.settle()
         cm = lucid.compile(widen)
         drive(cm)
-        grown = settled_mb() - base
+        reading = fp.settle(until=until, timeout_s=timeout_s)
         entries = cm.cache_info()["entries"]
         del cm
         E.compile.session_cache_clear()
-        return grown, entries
+        return reading, entries
 
 
     with lucid.no_grad():
@@ -426,20 +424,23 @@ _LIVE_MODULE_CHILD = textwrap.dedent("""
         drive(warm)
         entry = warm._cache.retained_bytes // N
         del warm
-        E.compile.session_cache_clear()
-        settled_mb()
 
         cap = entry * 5 // 2
         # The session cache capped to two entries, the module not: the report of LCD-1008.
-        session_only, session_only_entries = arm(cap, 0)
+        session_only, session_only_entries = arm(cap, 0, grew, 15.0)
         # Both capped to two entries.
-        both, both_entries = arm(cap, cap)
+        both, both_entries = arm(
+            cap,
+            cap,
+            lambda reading, floor: reading - floor < (session_only - floor) / 2,
+            40.0,
+        )
     print(json.dumps({
-        "session_only": session_only,
+        "session_only": session_only - fp.floor,
         "session_only_entries": session_only_entries,
-        "both": both,
+        "both": both - fp.floor,
         "both_entries": both_entries,
-        "pinned_per_graph_mb": 2 * LEAD * 8 * 16 * 16 * 4 / 2**20,
+        "pinned_per_graph_mb": PINNED_MB,
         "graphs": N,
     }))
     """)
