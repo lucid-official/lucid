@@ -26,11 +26,7 @@ import pytest
 
 import lucid
 import lucid.nn as nn
-from lucid.models import (
-    AutoModelForLanguageModeling,
-    PretrainedModel,
-    create_model,
-)
+from lucid.models import AutoModelForLanguageModeling, PretrainedModel, create_model
 from lucid.models._registry import _REGISTRY
 from lucid.models.text.bert import BERTForMaskedLM
 from lucid.models.text.t5 import T5ForSeq2SeqLM
@@ -200,7 +196,7 @@ def test_new_rows_come_from_the_familys_own_initialiser(family: str) -> None:
     model = _build(factory, **{knob: wide})
     old = model.get_input_embeddings()
     assert isinstance(old, nn.Embedding)
-    table = model.resize_token_embeddings(_V + 400)
+    table = model.resize_token_embeddings(_V + 400, mean_resizing=False)
     new_rows = table.weight[_V:]
     assert abs(float(new_rows.std().item()) / wide - 1.0) < 0.1
     assert abs(float(new_rows.mean().item())) < 0.1 * wide
@@ -210,18 +206,19 @@ def test_new_rows_come_from_the_familys_own_initialiser(family: str) -> None:
 
 def test_the_new_rows_of_an_untied_head_are_drawn_like_the_tables() -> None:
     model = _build("gpt_lm", tie_word_embeddings=False, initializer_range=0.5)
-    model.resize_token_embeddings(_V + 400)
+    model.resize_token_embeddings(_V + 400, mean_resizing=False)
     head = model.get_output_embeddings()
     assert head is not None
     assert abs(float(head.weight[_V:].std().item()) / 0.5 - 1.0) < 0.1
 
 
 def test_a_bert_head_keeps_the_biases_it_has_and_zeroes_the_new_ones() -> None:
+    """Zeros for a tied head's bias; for an untied head's, when it is not drawn (below)."""
     for tie in (True, False):
         model = _build("bert_base_mlm", tie_word_embeddings=tie)
         assert isinstance(model, BERTForMaskedLM)
         model.cls.predictions.bias = nn.Parameter(lucid.arange(_V).float())
-        model.resize_token_embeddings(_V + 6)
+        model.resize_token_embeddings(_V + 6, mean_resizing=False)
         assert model.cls.predictions.bias.tolist() == [float(i) for i in range(_V)] + [0.0] * 6
         model.resize_token_embeddings(_V - 3)
         assert model.cls.predictions.bias.tolist() == [float(i) for i in range(_V - 3)]
@@ -326,17 +323,66 @@ def _translation(**overrides: object) -> TransformerForSeq2SeqLM:
     return TransformerForSeq2SeqLM(config).eval()
 
 
+_TARGET = pytest.mark.parametrize(
+    "decoder_vocab_size", [_V + 4, None], ids=["explicit-target", "implicit-target"]
+)
+
+
+@_TARGET
 @pytest.mark.parametrize("tie", [True, False], ids=["tied", "untied"])
-def test_separate_source_and_target_vocabularies_resize_the_source_only(tie: bool) -> None:
-    model = _translation(share_embeddings=False, tie_word_embeddings=tie)
+def test_separate_source_and_target_vocabularies_resize_the_source_only(
+    tie: bool, decoder_vocab_size: int | None
+) -> None:
+    """With no ``decoder_vocab_size`` the target is "as big as the source", until the source moves."""
+    target_rows = _V if decoder_vocab_size is None else decoder_vocab_size
+    model = _translation(
+        share_embeddings=False, tie_word_embeddings=tie, decoder_vocab_size=decoder_vocab_size
+    )
     target = model.transformer.tgt_tok_emb
     head_before = model.lm_head
     model.resize_token_embeddings(_V + 9)
     assert tuple(model.transformer.src_tok_emb.weight.shape) == (_V + 9, _H)
     assert model.transformer.tgt_tok_emb is target
-    assert model.lm_head is head_before and tuple(model.lm_head.weight.shape) == (_V + 4, _H)
-    assert (model.config.vocab_size, model.config.decoder_vocab_size) == (_V + 9, _V + 4)
+    assert model.lm_head is head_before and tuple(model.lm_head.weight.shape) == (target_rows, _H)
+    assert (model.config.vocab_size, model.config.decoder_vocab_size) == (_V + 9, target_rows)
     assert _shapes(model) == _shapes(TransformerForSeq2SeqLM(model.config))
+
+
+@_TARGET
+@pytest.mark.parametrize("tie", [True, False], ids=["tied", "untied"])
+def test_swapping_in_a_source_table_leaves_the_target_vocabulary_where_it_was(
+    tie: bool, decoder_vocab_size: int | None
+) -> None:
+    target_rows = _V if decoder_vocab_size is None else decoder_vocab_size
+    model = _translation(
+        share_embeddings=False, tie_word_embeddings=tie, decoder_vocab_size=decoder_vocab_size
+    )
+    model.set_input_embeddings(nn.Embedding(_V + 20, _H))
+    assert (model.config.vocab_size, model.config.decoder_vocab_size) == (_V + 20, target_rows)
+    assert _shapes(model) == _shapes(TransformerForSeq2SeqLM(model.config))
+
+
+@_TARGET
+@pytest.mark.parametrize("tie", [True, False], ids=["tied", "untied"])
+@pytest.mark.parametrize("how", ["resize", "swap"])
+def test_a_translation_model_with_two_vocabularies_saves_and_loads_back(
+    tie: bool, decoder_vocab_size: int | None, how: str, tmp_path: Path
+) -> None:
+    lucid.manual_seed(0)
+    model = _translation(
+        share_embeddings=False, tie_word_embeddings=tie, decoder_vocab_size=decoder_vocab_size
+    )
+    if how == "resize":
+        model.resize_token_embeddings(_V + 9)
+    else:
+        model.set_input_embeddings(nn.Embedding(_V + 9, _H))
+    model.save_pretrained(str(tmp_path))
+    loaded = TransformerForSeq2SeqLM.from_pretrained(str(tmp_path)).eval()
+    assert loaded.config == model.config
+    source = lucid.tensor([[1, 2, _V + 8, 3]], dtype=lucid.int64)  # an id only the new table has
+    target = lucid.tensor([[1, 2, 3, 4]], dtype=lucid.int64)
+    expected = model(source, decoder_input_ids=target).logits
+    assert loaded(source, decoder_input_ids=target).logits.tolist() == expected.tolist()
 
 
 def test_a_shared_vocabulary_resizes_both_sides_and_the_config_that_names_both() -> None:
@@ -372,7 +418,7 @@ def test_a_config_that_refuses_the_size_leaves_the_model_as_it_was() -> None:
     assert model.lm_head.weight is table.weight
 
 
-@pytest.mark.parametrize("bad", [0, -1, 2.5, True, "40", None], ids=repr)
+@pytest.mark.parametrize("bad", [0, -1, 2.5, True, "40"], ids=repr)
 def test_a_size_that_is_not_a_positive_int_is_refused_and_nothing_changes(bad: object) -> None:
     model = _build("gpt_lm")
     table, config = model.get_input_embeddings(), model.config
@@ -394,10 +440,10 @@ def test_a_model_with_no_vocabulary_refuses_to_resize(name: str) -> None:
 
 @pytest.mark.xfail(
     strict=True,
-    reason="LCD-1111: CLIPModel declares no `_input_embeddings = 'textual.token_embedding'` "
-    "yet -- clip/_model.py is claimed by LCD-1107 (off-grid image check), so the declaration "
-    "lands after it.  Remove this mark with it; `[EOS]` is found as the argmax of the ids, so "
-    "ids added past it break the pooling, which the docstring has to say.",
+    reason="CLIP token table follows after LCD-1107 lands: clip/_model.py is claimed by that "
+    "branch, and CLIPModel needs `_input_embeddings = 'textual.token_embedding'` there.  Remove "
+    "this mark with it; `[EOS]` is found as the argmax of the ids, so ids added past it break "
+    "the pooling, which the docstring has to say.",
 )
 def test_clip_resizes_its_token_table() -> None:
     model = create_model(

@@ -233,10 +233,7 @@ def _load_from_directory(
         # rebuild with the saved config so dimensions match the checkpoint.
         model_cls = type(entry.factory(pretrained=False))
     return checkpoint.load_into(
-        model_cls,
-        config_overrides,
-        strict=strict,
-        ignore_mismatched_sizes=ignore_mismatched_sizes,
+        model_cls, config_overrides, strict=strict, ignore_mismatched_sizes=ignore_mismatched_sizes
     )
 
 

@@ -642,9 +642,9 @@ class _RoFormerLMPredictionHead(nn.Module):
         self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
         self.bias = nn.Parameter(lucid.zeros(config.vocab_size))
 
-    def fit_vocab(self, vocab: int) -> None:
-        """Fit the bias to ``vocab`` output tokens: surviving entries carry over, new ones are zero."""
-        self.bias = fit_vocab_bias(self.bias, vocab)
+    def fit_vocab(self, vocab: int, *, mean_resizing: bool = False) -> None:
+        """Fit the bias to ``vocab`` output tokens: entries carry over, new ones are zero or drawn."""
+        self.bias = fit_vocab_bias(self.bias, vocab, mean_resizing=mean_resizing)
 
     def tie_to(self, weight: nn.Parameter) -> None:
         """Decode with ``weight`` (shared, not copied) and fit the bias to it.

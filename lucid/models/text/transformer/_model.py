@@ -293,9 +293,13 @@ class TransformerModel(PretrainedModel):
     @override
     def _input_vocab_fields(self, num_tokens: int) -> dict[str, int]:
         fields = super()._input_vocab_fields(num_tokens)
-        # A shared table is the target vocabulary too, and the config insists the two agree.
-        if self.tgt_tok_emb is self.src_tok_emb and self.config.decoder_vocab_size is not None:
-            fields["decoder_vocab_size"] = num_tokens
+        if self.tgt_tok_emb is self.src_tok_emb:
+            # A shared table is the target vocabulary too, and the config insists the two agree.
+            if self.config.decoder_vocab_size is not None:
+                fields["decoder_vocab_size"] = num_tokens
+        else:
+            # ``None`` means "the source's size", which the source is about to stop being.
+            fields["decoder_vocab_size"] = self.config.effective_decoder_vocab_size
         return fields
 
     def _embed(

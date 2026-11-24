@@ -11,7 +11,12 @@ from typing import ClassVar, Final, Self, override
 import lucid as _lucid
 import lucid.nn as nn
 from lucid.models._checkpoint import Checkpoint, load_registered, replaced_config
-from lucid.models._embeddings import VocabSized, resized_embedding, resized_projection
+from lucid.models._embeddings import (
+    VocabSized,
+    resized_embedding,
+    resized_projection,
+    resized_vocab_size,
+)
 from lucid.models._utils._text import init_text_module_weights
 
 #: Keys ``config.json`` holds beside the config's own fields: ``model_type`` names the family,
@@ -464,10 +469,7 @@ class PretrainedModel(nn.Module):
                 f"{name_or_path!r} is neither a registered model name nor an existing directory"
             )
         return Checkpoint.open(path).load_into(
-            cls,
-            config_overrides,
-            strict=strict,
-            ignore_mismatched_sizes=ignore_mismatched_sizes,
+            cls, config_overrides, strict=strict, ignore_mismatched_sizes=ignore_mismatched_sizes
         )
 
     def save_pretrained(self, path: str, *, safe_serialization: bool = False) -> None:
@@ -797,52 +799,58 @@ class PretrainedModel(nn.Module):
             self._tie_word_embeddings()
         self._install_configs(plan)
 
-    def resize_token_embeddings(self, new_num_tokens: int) -> nn.Embedding:
-        r"""Grow or shrink the token table to ``new_num_tokens`` rows, keeping the rows it has.
+    def resize_token_embeddings(
+        self,
+        new_num_tokens: int | None = None,
+        pad_to_multiple_of: int | None = None,
+        mean_resizing: bool = True,
+    ) -> nn.Embedding:
+        r"""Grow or shrink the token table, keeping the rows it has.
 
         Parameters
         ----------
-        new_num_tokens : int
-            The new vocabulary size.
+        new_num_tokens : int or None, optional
+            The new vocabulary size; ``None`` keeps the current one.
+        pad_to_multiple_of : int or None, optional
+            Round the size up to a multiple of this positive integer.  With
+            ``new_num_tokens=None`` it rounds the current size up.
+        mean_resizing : bool, optional, default=True
+            Draw each new row, and each new entry of a head's own bias, from a normal
+            fitted to the old ones: their mean, with the covariance scaled by ``1e-9``
+            (just the mean when it is not positive definite), as the reference does.
+            ``False`` uses the family's own initialiser.  Draws follow
+            ``lucid.manual_seed``.
 
         Returns
         -------
         nn.Embedding
-            The new input table (the old one, unchanged, when the size is already
-            ``new_num_tokens``).
+            The new input table; the old one, unchanged, when the size does not change.
 
         Raises
         ------
         NotImplementedError
             When the model has no token table.
         TypeError
-            When ``new_num_tokens`` is not an ``int``.
+            When ``new_num_tokens`` is not an ``int`` or ``None``.
         ValueError
-            When ``new_num_tokens`` is below 1, or the config refuses it.  Nothing
-            is changed.
+            When ``new_num_tokens`` is below 1, ``pad_to_multiple_of`` is not a
+            positive integer, or the config refuses the size.  Nothing is changed.
 
         Notes
         -----
-        The leading ``min(old, new)`` rows are copied, so the tokens a checkpoint
-        was trained on keep their vectors.  Rows past the old size start from the
-        family's own initialisation (the distribution it draws the rest of its
-        embeddings from), and the new table has the device, dtype, ``padding_idx``
-        and ``requires_grad`` of the old one.
-
-        What follows the table:
+        The leading ``min(old, new)`` rows are copied, so trained tokens keep their
+        vectors; the new table has the device, dtype, ``padding_idx`` and
+        ``requires_grad`` of the old one.  What follows the table:
 
         * A head tied to it (``config.tie_word_embeddings``) is re-bound to the new
-          weight, with any vocabulary-sized bias fitted to it, entries kept and new
-          ones zero.
+          weight, with any vocabulary-sized bias fitted to it, new entries zero.
         * An untied head that scores the same vocabulary is resized the same way, its
-          rows kept and new ones drawn like the table's.
-        * ``config.vocab_size`` is replaced by ``new_num_tokens``, on this model and on
-          the trunk inside it, so ``save_pretrained`` then ``from_pretrained``
-          round-trips (see :meth:`set_input_embeddings`).
+          new rows and bias entries drawn as the table's are.
+        * ``config.vocab_size`` is replaced, on this model and on the trunk inside it,
+          so ``save_pretrained`` then ``from_pretrained`` round-trips.
 
         A model whose source and target vocabularies are separate tables (a translation
-        model built with ``share_embeddings=False``) resizes the source table only; the
-        target table and its head are a vocabulary of their own.
+        model built with ``share_embeddings=False``) resizes the source table only.
 
         Examples
         --------
@@ -857,22 +865,13 @@ class PretrainedModel(nn.Module):
         ((80, 8), True, 80)
         >>> table.weight[:60].tolist() == before
         True
-        >>> lm(lucid.tensor([[70, 3]], dtype=lucid.int64)).logits.shape
-        (1, 2, 80)
+        >>> lm.resize_token_embeddings(pad_to_multiple_of=64).weight.shape
+        (128, 8)
         """
         owner = self._embedding_owner()
         if owner is None:
             raise NotImplementedError(
                 f"{type(self).__name__} does not support resize_token_embeddings"
-            )
-        if isinstance(new_num_tokens, bool) or not isinstance(new_num_tokens, int):
-            raise TypeError(
-                f"resize_token_embeddings: new_num_tokens must be an int, "
-                f"got {type(new_num_tokens).__name__}"
-            )
-        if new_num_tokens < 1:
-            raise ValueError(
-                f"resize_token_embeddings: new_num_tokens must be positive, got {new_num_tokens}"
             )
         old = self.get_input_embeddings()
         if not isinstance(old, nn.Embedding):
@@ -880,19 +879,21 @@ class PretrainedModel(nn.Module):
                 f"{type(owner).__name__}'s input embeddings are "
                 f"{type(old).__name__}, not nn.Embedding, and cannot be resized"
             )
-        if old.num_embeddings == new_num_tokens:
+        size = resized_vocab_size(old.num_embeddings, new_num_tokens, pad_to_multiple_of)
+        if size == old.num_embeddings:
             return old
         head = self._untied_output_head()
         # Both replacements are built before either is installed.
-        table = resized_embedding(old, new_num_tokens, owner._init_token_table)
+        init = owner._init_token_table
+        table = resized_embedding(old, size, init, mean_resizing=mean_resizing)
         new_head = (
             None
             if head is None
-            else resized_projection(head, new_num_tokens, owner._init_token_table)
+            else resized_projection(head, size, init, mean_resizing=mean_resizing)
         )
         self.set_input_embeddings(table)
         if new_head is not None:
-            self._install_output_head(new_head)
+            self._install_output_head(new_head, mean_resizing=mean_resizing)
         return table
 
     def _untied_output_head(self) -> nn.Linear | None:
@@ -906,13 +907,13 @@ class PretrainedModel(nn.Module):
         head = self.get_output_embeddings()
         return head if isinstance(head, nn.Linear) else None
 
-    def _install_output_head(self, head: nn.Linear) -> None:
+    def _install_output_head(self, head: nn.Linear, *, mean_resizing: bool) -> None:
         r"""Put ``head`` where the output projection is, and fit any bias its holder keeps beside it."""
         *parents, name = self._output_embeddings.split(".")
         holder = self.get_submodule(".".join(parents))
         setattr(holder, name, head)
         if isinstance(holder, VocabSized):
-            holder.fit_vocab(head.out_features)
+            holder.fit_vocab(head.out_features, mean_resizing=mean_resizing)
 
     def _tie_word_embeddings(self) -> None:
         r"""Bind an output head's weight to the input embedding table.

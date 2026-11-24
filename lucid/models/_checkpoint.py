@@ -110,7 +110,9 @@ class Checkpoint:
         architectures = self.document.get("architectures")
         if architectures is None:
             return None
-        if not isinstance(architectures, list) or not all(isinstance(a, str) for a in architectures):
+        if not isinstance(architectures, list) or not all(
+            isinstance(a, str) for a in architectures
+        ):
             raise TypeError(f"{self.config_file}: 'architectures' must be a list of class names")
         return architectures
 
@@ -146,7 +148,9 @@ class Checkpoint:
         model = model_cls(config)
         state = lucid.load(str(self.weights_file), weights_only=True)
         if not isinstance(state, dict):
-            raise TypeError(f"Weights file did not contain a state_dict, got {type(state).__name__}")
+            raise TypeError(
+                f"Weights file did not contain a state_dict, got {type(state).__name__}"
+            )
         load_state_dict_checked(
             model,
             state,
