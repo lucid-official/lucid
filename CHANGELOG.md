@@ -421,6 +421,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - outer and ger name a vector that is not 1-D as the reference
 
+- addr keeps a complex alpha and refuses a bad vector or input
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

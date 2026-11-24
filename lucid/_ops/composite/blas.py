@@ -8,6 +8,7 @@ from lucid._C import engine as _C_engine
 from lucid._dispatch import _promote_impls, _unwrap, _wrap
 from lucid._ops._adapters import _scale_by_alpha
 from lucid._ops._autocast import _amp_op, _autocast_entry, _autocast_suspended
+from lucid._ops._products import _require_vector
 import lucid.linalg as _la
 
 if TYPE_CHECKING:
@@ -343,6 +344,13 @@ def addr(input: Tensor, vec1: Tensor, vec2: Tensor, *, beta: float = 1, alpha: f
     >>> lucid.addr(M, u, v)
     tensor([[3., 4., 5.], [6., 8., 10.]])
     """
+    _require_vector("addr", "vec1", _unwrap(vec1))
+    _require_vector("addr", "vec2", _unwrap(vec2))
+    if input.ndim > 2:
+        raise _C_engine.ShapeMismatch(
+            f"addr: input of shape {list(input.shape)} cannot be expanded to the "
+            f"({vec1.shape[0]}, {vec2.shape[0]}) outer product"
+        )
     # The reference expands ``input`` to the product's shape and computes in the
     # dtype all three promote to, so ``input`` never ranks below the vectors
     # (``Tiers.DIMENSIONED``) and the product is formed at that dtype: an ``int16``
@@ -350,12 +358,18 @@ def addr(input: Tensor, vec1: Tensor, vec2: Tensor, *, beta: float = 1, alpha: f
     impls = [_unwrap(input), _unwrap(vec1), _unwrap(vec2)]
     real_vectors = impls[1].dtype not in _COMPLEX and impls[2].dtype not in _COMPLEX
     input_impl, vec1_impl, vec2_impl = _promote_impls(impls, tiers=_promotion.Tiers.DIMENSIONED)
-    if real_vectors and input_impl.dtype in _COMPLEX:
-        # Their product is real, and the engine's ``outer`` has no complex kernel: form
-        # it at the real dtype of the accumulator's parts and let the sum lift it.
-        part = _C_engine.F64 if input_impl.dtype == _C_engine.C128 else _C_engine.F32
-        vec1_impl, vec2_impl = _C_engine.astype(vec1_impl, part), _C_engine.astype(vec2_impl, part)
-    prod = lucid.linalg.outer(_wrap(vec1_impl), _wrap(vec2_impl))
+    if not (real_vectors and input_impl.dtype in _COMPLEX):
+        prod = lucid.linalg.outer(_wrap(vec1_impl), _wrap(vec2_impl))
+        return _scaled_add(_wrap(input_impl), beta, prod, alpha, cast_scalars=False)
+    # Real vectors beside a complex accumulator: their product is real, and the engine's
+    # ``outer`` has no complex kernel.  Form it at the real dtype of the accumulator's
+    # parts, then lift it to the accumulator's dtype before ``alpha`` scales it, so a
+    # complex ``alpha`` keeps its imaginary part.
+    part = _C_engine.F64 if input_impl.dtype == _C_engine.C128 else _C_engine.F32
+    real_prod = lucid.linalg.outer(
+        _wrap(_C_engine.astype(vec1_impl, part)), _wrap(_C_engine.astype(vec2_impl, part))
+    )
+    prod = _wrap(_C_engine.astype(_unwrap(real_prod), input_impl.dtype))
     return _scaled_add(_wrap(input_impl), beta, prod, alpha, cast_scalars=False)
 
 
@@ -409,18 +423,18 @@ def _lerp(input: Tensor, end: Tensor, weight: float | Tensor) -> Tensor:
                 f"expected {input.dtype._name}, got {weight.dtype._name}"
             )
         input_impl, end_impl, weight_impl = _promote_impls([input_impl, end_impl, weight_impl])
-        diff = _C_engine.sub(end_impl, input_impl)
-        shown = _wrap(diff)
-        if not _can_mix_devices(shown, weight):
+        diff = _wrap(_C_engine.sub(end_impl, input_impl))
+        if not _can_mix_devices(diff, weight):
             raise _C_engine.DeviceMismatch(
                 f"DeviceMismatch (lerp: input/weight): "
-                f"expected {shown.device.type}, got {weight.device.type}"
+                f"expected {diff.device.type}, got {weight.device.type}"
             )
-        scaled = _C_engine.mul(weight_impl, diff)
+        scaled = _C_engine.mul(weight_impl, _unwrap(diff))
     else:
-        diff = _C_engine.sub(end_impl, input_impl)
+        diff_impl = _C_engine.sub(end_impl, input_impl)
         scaled = _C_engine.mul(
-            _C_engine.full(list(diff.shape), float(weight), diff.dtype, diff.device), diff
+            _C_engine.full(list(diff_impl.shape), float(weight), diff_impl.dtype, diff_impl.device),
+            diff_impl,
         )
     return _wrap(_C_engine.add(input_impl, scaled))
 
