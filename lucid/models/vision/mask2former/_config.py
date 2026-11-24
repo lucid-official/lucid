@@ -5,6 +5,7 @@ from typing import ClassVar
 
 from lucid.models._base import ModelConfig
 from lucid.models._meta import model_family_meta
+from lucid.models._utils._common import check_positive
 
 
 @model_family_meta(
@@ -178,3 +179,4 @@ class Mask2FormerConfig(ModelConfig):
         object.__setattr__(self, "swin_depths", tuple(self.swin_depths))
         object.__setattr__(self, "swin_num_heads", tuple(self.swin_num_heads))
         object.__setattr__(self, "feature_strides", tuple(self.feature_strides))
+        check_positive(self, "num_classes", "in_channels")

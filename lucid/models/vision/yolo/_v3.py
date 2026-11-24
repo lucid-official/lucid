@@ -63,7 +63,7 @@ from lucid.models._utils._detection_results import (
     empty_detection_result,
 )
 from lucid.models.vision.yolo._weights import YOLOV3TinyWeights, YOLOV3Weights
-from lucid.models._utils._common import apply_overrides
+from lucid.models._utils._common import apply_overrides, check_positive
 import lucid.weights as weights_mod
 
 # ---------------------------------------------------------------------------
@@ -185,6 +185,7 @@ class YOLOV3Config(ModelConfig):
         object.__setattr__(self, "strides", tuple(self.strides))
         object.__setattr__(self, "anchor_masks", tuple(tuple(m) for m in self.anchor_masks))
         _check_scale_table(type(self).__name__, self.anchors, self.strides, self.anchor_masks)
+        check_positive(self, "num_classes", "in_channels")
 
 
 def _check_scale_table(

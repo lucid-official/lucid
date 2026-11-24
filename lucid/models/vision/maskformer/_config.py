@@ -5,6 +5,7 @@ from typing import ClassVar
 
 from lucid.models._base import ModelConfig
 from lucid.models._meta import model_family_meta
+from lucid.models._utils._common import check_positive, check_stage_count
 
 
 @model_family_meta(
@@ -130,3 +131,5 @@ class MaskFormerConfig(ModelConfig):
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "backbone_layers", tuple(self.backbone_layers))
+        check_positive(self, "num_classes", "in_channels", "num_queries", "fpn_out_channels")
+        check_stage_count(type(self).__name__, 4, backbone_layers=self.backbone_layers)

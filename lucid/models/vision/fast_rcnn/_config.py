@@ -5,6 +5,7 @@ from typing import ClassVar
 
 from lucid.models._base import ModelConfig
 from lucid.models._meta import model_family_meta
+from lucid.models._utils._common import check_positive
 
 
 @model_family_meta(
@@ -126,3 +127,4 @@ class FastRCNNConfig(ModelConfig):
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "bbox_reg_weights", tuple(self.bbox_reg_weights))
+        check_positive(self, "num_classes", "in_channels")

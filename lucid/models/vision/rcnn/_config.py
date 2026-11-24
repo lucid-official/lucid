@@ -5,6 +5,7 @@ from typing import ClassVar
 
 from lucid.models._base import ModelConfig
 from lucid.models._meta import model_family_meta
+from lucid.models._utils._common import check_positive
 
 
 @model_family_meta(
@@ -130,3 +131,6 @@ class RCNNConfig(ModelConfig):
     # least one ground-truth box" — with the released code using 0.6.
     # A looser threshold trains the regressor on boxes it cannot fix.
     bbox_reg_iou_thresh: float = 0.6
+
+    def __post_init__(self) -> None:
+        check_positive(self, "num_classes", "in_channels", "roi_size")

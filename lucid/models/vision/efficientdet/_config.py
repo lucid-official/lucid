@@ -5,6 +5,7 @@ from typing import ClassVar
 
 from lucid.models._base import ModelConfig
 from lucid.models._meta import model_family_meta
+from lucid.models._utils._common import check_positive
 
 
 @model_family_meta(
@@ -192,6 +193,7 @@ class EfficientDetConfig(ModelConfig):
         object.__setattr__(self, "anchor_scales", tuple(self.anchor_scales))
         object.__setattr__(self, "anchor_ratios", tuple(self.anchor_ratios))
         object.__setattr__(self, "anchor_base_sizes", tuple(self.anchor_base_sizes))
+        check_positive(self, "num_classes", "in_channels")
 
 
 # ---------------------------------------------------------------------------

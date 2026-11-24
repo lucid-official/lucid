@@ -5,6 +5,7 @@ from typing import ClassVar
 
 from lucid.models._base import ModelConfig
 from lucid.models._meta import model_family_meta
+from lucid.models._utils._common import check_positive
 
 
 @model_family_meta(
@@ -121,3 +122,6 @@ class InceptionV4Config(ModelConfig):
     num_classes: int = 1000
     in_channels: int = 3
     dropout: float = 0.2
+
+    def __post_init__(self) -> None:
+        check_positive(self, "num_classes", "in_channels")

@@ -5,6 +5,7 @@ from typing import ClassVar
 
 from lucid.models._base import ModelConfig
 from lucid.models._meta import model_family_meta
+from lucid.models._utils._common import check_positive
 
 
 @model_family_meta(
@@ -88,3 +89,4 @@ class VGGConfig(ModelConfig):
                 f"arch must have exactly 5 entries, one per conv block, got "
                 f"{len(self.arch)}: {self.arch!r}"
             )
+        check_positive(self, "num_classes", "in_channels", "arch")

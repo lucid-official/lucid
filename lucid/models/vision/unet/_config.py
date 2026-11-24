@@ -5,6 +5,7 @@ from typing import ClassVar, Literal
 
 from lucid.models._base import ModelConfig
 from lucid.models._meta import model_family_meta
+from lucid.models._utils._common import check_choice, check_positive
 
 
 @model_family_meta(
@@ -118,3 +119,8 @@ class UNetConfig(ModelConfig):
     # half the level's width and the second emits all of it.  The 2D U-Net
     # keeps both convs at the full width, so this defaults off.
     double_before_pool: bool = False
+
+    def __post_init__(self) -> None:
+        check_positive(self, "num_classes", "in_channels", "base_channels", "depth")
+        check_choice(self, "dim", (2, 3))
+        check_choice(self, "block", ("basic", "res"))

@@ -5,6 +5,7 @@ from typing import ClassVar
 
 from lucid.models._base import ModelConfig
 from lucid.models._meta import model_family_meta
+from lucid.models._utils._common import check_positive
 
 
 @model_family_meta(
@@ -82,6 +83,7 @@ class InceptionConfig(ModelConfig):
             raise ValueError(
                 f"only version='v3' is implemented by this module, got " f"{self.version!r}"
             )
+        check_positive(self, "num_classes", "in_channels")
 
     aux_logits: bool = False
     dropout: float = 0.5

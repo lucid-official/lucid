@@ -5,6 +5,7 @@ from typing import ClassVar
 
 from lucid.models._base import ModelConfig
 from lucid.models._meta import model_family_meta
+from lucid.models._utils._common import check_positive, check_stage_count, check_stage_divisible
 
 
 @model_family_meta(
@@ -150,3 +151,25 @@ class CrossViTConfig(ModelConfig):
         object.__setattr__(self, "depths", tuple(tuple(d) for d in self.depths))
         object.__setattr__(self, "num_heads", tuple(self.num_heads))
         object.__setattr__(self, "mlp_ratio", tuple(self.mlp_ratio))
+        owner = type(self).__name__
+        # Two branches, each read as ``[d]`` for d in (0, 1).
+        check_stage_count(
+            owner,
+            2,
+            img_scale=self.img_scale,
+            patch_sizes=self.patch_sizes,
+            embed_dims=self.embed_dims,
+            num_heads=self.num_heads,
+        )
+        check_positive(
+            self,
+            "num_classes",
+            "in_channels",
+            "image_size",
+            "img_scale",
+            "patch_sizes",
+            "embed_dims",
+            "num_heads",
+            "mlp_ratio",
+        )
+        check_stage_divisible(owner, "embed_dims", self.embed_dims, "num_heads", self.num_heads)

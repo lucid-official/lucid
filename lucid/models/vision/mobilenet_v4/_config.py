@@ -5,6 +5,7 @@ from typing import ClassVar
 
 from lucid.models._base import ModelConfig
 from lucid.models._meta import model_family_meta
+from lucid.models._utils._common import check_positive
 
 #: The five architectures specified in the paper's Appendix D
 #: (Tables 11-15), in the order the paper lists them.
@@ -170,3 +171,4 @@ class MobileNetV4Config(ModelConfig):
                 f"MobileNetV4Config.drop_path_rate must lie in [0, 1), got "
                 f"{self.drop_path_rate}"
             )
+        check_positive(self, "num_classes", "in_channels")

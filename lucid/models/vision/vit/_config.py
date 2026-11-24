@@ -5,6 +5,7 @@ from typing import ClassVar, Literal
 
 from lucid.models._base import ModelConfig
 from lucid.models._meta import model_family_meta
+from lucid.models._utils._common import check_divisible, check_positive
 
 
 @model_family_meta(
@@ -114,6 +115,15 @@ class ViTConfig(ModelConfig):
         Constant string ``"vit"`` used by the model registry to associate
         config instances with the ViT model class.
 
+    Raises
+    ------
+    ValueError
+        At construction, when ``image_size`` / ``patch_size`` / ``dim`` /
+        ``num_heads`` / ``num_classes`` / ``in_channels`` / ``mlp_ratio`` is
+        not positive, when ``image_size`` is not a multiple of
+        ``patch_size``, when ``dim`` is not a multiple of ``num_heads``,
+        or when ``classifier`` / ``representation_size`` is invalid.
+
     Notes
     -----
     The canonical variants registered as factory functions in
@@ -181,6 +191,22 @@ class ViTConfig(ModelConfig):
     classifier: Literal["token", "gap"] = "token"
 
     def __post_init__(self) -> None:
+        # A zero ``num_heads`` / ``patch_size`` is a ZeroDivisionError at
+        # build, and an indivisible ``dim`` only fails in the first forward
+        # (the qkv reshape), so both are refused here, by field name.
+        check_positive(
+            self,
+            "image_size",
+            "patch_size",
+            "num_classes",
+            "in_channels",
+            "dim",
+            "num_heads",
+            "mlp_ratio",
+        )
+        owner = type(self).__name__
+        check_divisible(owner, "image_size", self.image_size, "patch_size", self.patch_size)
+        check_divisible(owner, "dim", self.dim, "num_heads", self.num_heads)
         if self.classifier not in ("token", "gap"):
             raise ValueError(f"classifier must be 'token' or 'gap', got {self.classifier!r}")
         if self.representation_size is not None and self.representation_size <= 0:

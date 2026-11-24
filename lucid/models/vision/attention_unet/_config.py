@@ -5,6 +5,7 @@ from typing import ClassVar
 
 from lucid.models._base import ModelConfig
 from lucid.models._meta import model_family_meta
+from lucid.models._utils._common import check_choice, check_positive
 
 
 @model_family_meta(
@@ -110,3 +111,7 @@ class AttentionUNetConfig(ModelConfig):
     depth: int = 4
     bilinear: bool = False
     deep_supervision: bool = False
+
+    def __post_init__(self) -> None:
+        check_positive(self, "num_classes", "in_channels", "base_channels", "depth")
+        check_choice(self, "spatial_dims", (2, 3))

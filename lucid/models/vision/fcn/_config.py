@@ -5,6 +5,7 @@ from typing import ClassVar
 
 from lucid.models._base import ModelConfig
 from lucid.models._meta import model_family_meta
+from lucid.models._utils._common import check_choice, check_positive
 
 
 @model_family_meta(
@@ -123,3 +124,5 @@ class FCNConfig(ModelConfig):
                 f"(a scored pool4, and pool3 for fcn8s), which this module "
                 f"does not build; only the single-scale head is implemented."
             )
+        check_positive(self, "num_classes", "in_channels")
+        check_choice(self, "backbone", ("resnet50", "resnet101"))

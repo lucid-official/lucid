@@ -7,7 +7,7 @@ regardless of its output task (classification, detection, segmentation …).
 import random
 from collections.abc import Mapping, Sequence, Sized
 from dataclasses import replace
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Protocol, cast
 
 import lucid
 import lucid.nn as nn
@@ -92,6 +92,256 @@ def check_stage_lengths(owner: str, **per_stage: Sized) -> None:
         raise ValueError(
             f"{owner}: {', '.join(lengths)} hold one entry per stage and must be "
             f"the same length; got {got}"
+        )
+
+
+def check_stage_count(owner: str, count: int, **per_stage: Sized) -> None:
+    """Refuse per-stage config tuples that do not match a fixed stage count.
+
+    Some builders lay out a set number of stages (the four residual stages
+    of a ResNet) and index each per-stage field directly.  A short tuple
+    raised a bare ``IndexError`` mid-build; a long one was silently
+    truncated, or read at ``[-1]`` for the head width, which then
+    disagreed with the last stage actually built.
+
+    Parameters
+    ----------
+    owner : str
+        The config class, named in the message.
+    count : int
+        The number of stages the network builds.
+    **per_stage : Sized
+        Each per-stage field by its config name.
+
+    Raises
+    ------
+    ValueError
+        When any field does not hold exactly ``count`` entries.
+
+    Examples
+    --------
+    >>> from lucid.models._utils._common import check_stage_count
+    >>> check_stage_count("Cfg", 2, layers=(1, 1), widths=(8, 16))
+    >>> check_stage_count("Cfg", 2, layers=(1, 1, 1), widths=(8, 16))
+    Traceback (most recent call last):
+        ...
+    ValueError: Cfg: layers, widths hold one entry per stage and the network has 2 stages; got layers=3, widths=2
+    """
+    lengths = {name: len(value) for name, value in per_stage.items()}
+    if any(n != count for n in lengths.values()):
+        got = ", ".join(f"{name}={n}" for name, n in lengths.items())
+        raise ValueError(
+            f"{owner}: {', '.join(lengths)} hold one entry per stage and the network "
+            f"has {count} stages; got {got}"
+        )
+
+
+def check_positive(config: object, *names: str) -> None:
+    """Refuse a size, count, or channel width that is zero or negative.
+
+    A zero-width layer builds without complaint (``Linear(8, 0)``,
+    ``Conv2d(0, 8, 3)``) and only fails, or quietly produces an empty head,
+    far from the value that caused it; a negative one reaches the engine as
+    an opaque ``InvalidArgument``.  Checking the config field here names it
+    where it was written.  A sequence field (``hidden_sizes``) is checked
+    entry by entry.
+
+    Parameters
+    ----------
+    config : object
+        The config instance; its class name leads the message.
+    *names : str
+        The fields that must be positive.  Each is a number or a sequence
+        of numbers.
+
+    Raises
+    ------
+    ValueError
+        On the first field (or sequence entry) that is not ``> 0``.
+
+    Examples
+    --------
+    >>> from dataclasses import dataclass
+    >>> from lucid.models._utils._common import check_positive
+    >>> @dataclass(frozen=True)
+    ... class Cfg:
+    ...     num_classes: int = 10
+    ...     widths: tuple[int, ...] = (8, 0)
+    >>> check_positive(Cfg(), "num_classes")
+    >>> check_positive(Cfg(), "widths")
+    Traceback (most recent call last):
+        ...
+    ValueError: Cfg: widths[1] must be positive, got 0
+    """
+    owner = type(config).__name__
+    for name in names:
+        value = getattr(config, name)
+        if isinstance(value, Sequence):
+            for i, entry in enumerate(value):
+                if not entry > 0:
+                    raise ValueError(f"{owner}: {name}[{i}] must be positive, got {entry}")
+        elif not value > 0:
+            raise ValueError(f"{owner}: {name} must be positive, got {value}")
+
+
+def check_divisible(owner: str, name: str, value: int, by_name: str, by: int) -> None:
+    """Refuse a width that does not split evenly across heads, groups, or patches.
+
+    Attention reshapes ``dim`` into ``num_heads`` equal slices and a patch
+    embedding tiles the image, so a remainder is a reshape error (or a
+    silently cropped border) at the first forward rather than at build.
+
+    Parameters
+    ----------
+    owner : str
+        The config class, named in the message.
+    name : str
+        The dividend's label, as a config field or a derived width.
+    value : int
+        The dividend's size.
+    by_name : str
+        The divisor's label.
+    by : int
+        The divisor's size.  Must already be known positive.
+
+    Raises
+    ------
+    ValueError
+        When ``value`` is not a multiple of ``by``.
+
+    Examples
+    --------
+    >>> from lucid.models._utils._common import check_divisible
+    >>> check_divisible("Cfg", "dim", 64, "num_heads", 8)
+    >>> check_divisible("Cfg", "dim", 30, "num_heads", 4)
+    Traceback (most recent call last):
+        ...
+    ValueError: Cfg: dim (30) must be divisible by num_heads (4)
+    """
+    if value % by != 0:
+        raise ValueError(f"{owner}: {name} ({value}) must be divisible by {by_name} ({by})")
+
+
+def check_stage_divisible(
+    owner: str, name: str, values: Sequence[int], by_name: str, divisors: Sequence[int]
+) -> None:
+    """Refuse a per-stage width that does not split across its stage's heads.
+
+    The per-stage form of :func:`check_divisible`: ``values[i]`` must be a
+    multiple of ``divisors[i]`` for every stage.
+
+    Parameters
+    ----------
+    owner : str
+        The config class, named in the message.
+    name : str
+        The widths' config field.
+    values : Sequence[int]
+        One width per stage.
+    by_name : str
+        The divisors' config field.
+    divisors : Sequence[int]
+        One divisor per stage, each already known positive.  The two
+        sequences must be the same length (see :func:`check_stage_lengths`).
+
+    Raises
+    ------
+    ValueError
+        On the first stage whose width is not a multiple of its divisor.
+
+    Examples
+    --------
+    >>> from lucid.models._utils._common import check_stage_divisible
+    >>> check_stage_divisible("Cfg", "dims", (8, 16), "num_heads", (2, 4))
+    >>> check_stage_divisible("Cfg", "dims", (8, 16), "num_heads", (2, 3))
+    Traceback (most recent call last):
+        ...
+    ValueError: Cfg: dims[1] (16) must be divisible by num_heads[1] (3)
+    """
+    for i, (value, by) in enumerate(zip(values, divisors, strict=True)):
+        check_divisible(owner, f"{name}[{i}]", value, f"{by_name}[{i}]", by)
+
+
+class _HasLayers(Protocol):
+    """A config whose ``layers`` field lists the blocks of each residual stage."""
+
+    @property
+    def layers(self) -> Sequence[int]: ...
+
+
+def check_residual_layers(config: _HasLayers) -> None:
+    """Refuse a ``layers`` field that is not four non-empty residual stages.
+
+    ResNet, ResNeXt, ResNeSt, SE-ResNet and SK-ResNet all build exactly four
+    stages and index ``layers[0..3]``.  A stage with no blocks cannot change
+    the width the next stage expects, so every entry is at least 1.
+
+    Parameters
+    ----------
+    config : _HasLayers
+        The config instance, with a ``layers`` sequence field.
+
+    Raises
+    ------
+    ValueError
+        When ``layers`` does not hold four entries, or an entry is not
+        positive.
+
+    Examples
+    --------
+    >>> from dataclasses import dataclass
+    >>> from lucid.models._utils._common import check_residual_layers
+    >>> @dataclass(frozen=True)
+    ... class Cfg:
+    ...     layers: tuple[int, ...] = (3, 4, 6, 3)
+    >>> check_residual_layers(Cfg())
+    >>> check_residual_layers(Cfg(layers=(3, 4, 6)))
+    Traceback (most recent call last):
+        ...
+    ValueError: Cfg: layers hold one entry per stage and the network has 4 stages; got layers=3
+    """
+    check_stage_count(type(config).__name__, 4, layers=config.layers)
+    check_positive(config, "layers")
+
+
+def check_choice(config: object, name: str, choices: Sequence[object]) -> None:
+    """Refuse a mode field whose value is not one the builder branches on.
+
+    Builders pick between a few layouts with ``if cfg.x == "a" ... else``,
+    so a misspelt value (``variant="smal"``) silently selects the ``else``
+    layout instead of failing.
+
+    Parameters
+    ----------
+    config : object
+        The config instance; its class name leads the message.
+    name : str
+        The field to check.
+    choices : Sequence[object]
+        The accepted values.
+
+    Raises
+    ------
+    ValueError
+        When the field's value is not in ``choices``.
+
+    Examples
+    --------
+    >>> from dataclasses import dataclass
+    >>> from lucid.models._utils._common import check_choice
+    >>> @dataclass(frozen=True)
+    ... class Cfg:
+    ...     variant: str = "smal"
+    >>> check_choice(Cfg("large"), "variant", ("large", "small"))
+    >>> check_choice(Cfg(), "variant", ("large", "small"))
+    Traceback (most recent call last):
+        ...
+    ValueError: Cfg: variant must be one of ('large', 'small'), got 'smal'
+    """
+    value = getattr(config, name)
+    if value not in choices:
+        raise ValueError(
+            f"{type(config).__name__}: {name} must be one of {tuple(choices)}, got {value!r}"
         )
 
 

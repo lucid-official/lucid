@@ -5,6 +5,7 @@ from typing import ClassVar
 
 from lucid.models._base import ModelConfig
 from lucid.models._meta import model_family_meta
+from lucid.models._utils._common import check_positive
 
 
 @model_family_meta(
@@ -86,3 +87,6 @@ class MobileNetConfig(ModelConfig):
     in_channels: int = 3
     width_mult: float = 1.0
     dropout: float = 0.001
+
+    def __post_init__(self) -> None:
+        check_positive(self, "num_classes", "in_channels", "width_mult")

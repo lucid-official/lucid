@@ -5,6 +5,7 @@ from typing import ClassVar
 
 from lucid.models._base import ModelConfig
 from lucid.models._meta import model_family_meta
+from lucid.models._utils._common import check_positive
 
 
 @model_family_meta(
@@ -185,3 +186,14 @@ class CSPNetConfig(ModelConfig):
                 raise ValueError(
                     f"CSPNetConfig: {f!r} length {len(getattr(self, f))} " f"!= depths length {n}"
                 )
+        check_positive(
+            self,
+            "num_classes",
+            "in_channels",
+            "stem_out_chs",
+            "stem_kernel",
+            "stem_stride",
+            "out_chs",
+            "strides",
+            "groups",
+        )

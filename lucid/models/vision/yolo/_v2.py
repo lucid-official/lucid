@@ -82,7 +82,7 @@ from lucid.models._utils._detection_results import (
 )
 from lucid.models.vision.yolo._v1 import _threshold_by_class
 from lucid.models.vision.yolo._weights import YOLOV2Weights
-from lucid.models._utils._common import apply_overrides
+from lucid.models._utils._common import apply_overrides, check_positive
 import lucid.weights as weights_mod
 
 if TYPE_CHECKING:
@@ -210,6 +210,7 @@ class YOLOV2Config(ModelConfig):
                 f"num_anchors ({self.num_anchors})"
             )
         object.__setattr__(self, "anchors", tuple((float(a), float(b)) for a, b in self.anchors))
+        check_positive(self, "num_classes", "in_channels", "num_anchors")
 
 
 # ---------------------------------------------------------------------------

@@ -5,6 +5,7 @@ from typing import ClassVar
 
 from lucid.models._base import ModelConfig
 from lucid.models._meta import model_family_meta
+from lucid.models._utils._common import check_positive
 
 
 @model_family_meta(
@@ -88,3 +89,6 @@ class DenseNetConfig(ModelConfig):
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "block_config", tuple(self.block_config))
+        check_positive(
+            self, "num_classes", "in_channels", "growth_rate", "num_init_features", "bn_size"
+        )

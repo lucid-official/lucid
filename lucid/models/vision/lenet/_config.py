@@ -5,6 +5,7 @@ from typing import ClassVar
 
 from lucid.models._base import ModelConfig
 from lucid.models._meta import model_family_meta
+from lucid.models._utils._common import check_positive
 
 
 @model_family_meta(
@@ -99,3 +100,4 @@ class LeNetConfig(ModelConfig):
             raise ValueError(f"activation must be 'tanh' or 'relu', got {self.activation!r}")
         if self.pooling not in ("avg", "max"):
             raise ValueError(f"pooling must be 'avg' or 'max', got {self.pooling!r}")
+        check_positive(self, "num_classes", "in_channels")

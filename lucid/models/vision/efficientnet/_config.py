@@ -5,6 +5,7 @@ from typing import ClassVar
 
 from lucid.models._base import ModelConfig
 from lucid.models._meta import model_family_meta
+from lucid.models._utils._common import check_positive
 
 
 @model_family_meta(
@@ -97,3 +98,6 @@ class EfficientNetConfig(ModelConfig):
     # divides by sqrt(running_var + eps).
     bn_eps: float = 1e-5
     bn_momentum: float = 0.1
+
+    def __post_init__(self) -> None:
+        check_positive(self, "num_classes", "in_channels", "width_mult", "depth_mult")

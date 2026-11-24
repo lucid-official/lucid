@@ -456,6 +456,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - A negative `max_new_tokens` raises `ValueError` on every `generate` that takes it, before the encoder runs. Before, decoder-only `generate` returned the prompt unchanged (LCD-1110).
 
+- vision configs refuse sizes their model cannot build
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

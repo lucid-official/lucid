@@ -72,7 +72,7 @@ from lucid.models.vision.yolo._v3 import (
     _postprocess_detections,
     _scale_priors,
 )
-from lucid.models._utils._common import apply_overrides
+from lucid.models._utils._common import apply_overrides, check_positive
 from lucid.models._utils._detection_results import check_per_image
 
 _IGNORE_IOU_THRESH = 0.7
@@ -204,6 +204,7 @@ class YOLOV4Config(ModelConfig):
                 f"each of P3, P4, P5 — but got {len(self.anchors)} anchors and "
                 f"{len(self.strides)} strides {self.strides}"
             )
+        check_positive(self, "num_classes", "in_channels")
 
 
 # ---------------------------------------------------------------------------

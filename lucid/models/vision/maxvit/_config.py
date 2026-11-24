@@ -5,7 +5,7 @@ from typing import ClassVar
 
 from lucid.models._base import ModelConfig
 from lucid.models._meta import model_family_meta
-from lucid.models._utils._common import check_stage_lengths
+from lucid.models._utils._common import check_divisible, check_positive, check_stage_lengths
 
 
 @model_family_meta(
@@ -150,3 +150,10 @@ class MaxViTConfig(ModelConfig):
         object.__setattr__(self, "depths", tuple(self.depths))
         object.__setattr__(self, "dims", tuple(self.dims))
         check_stage_lengths(type(self).__name__, depths=self.depths, dims=self.dims)
+        check_positive(
+            self, "num_classes", "in_channels", "dims", "head_dim", "window_size", "mlp_ratio"
+        )
+        # Heads are ``dim // head_dim`` per stage, so each stage width must be a
+        # whole number of heads.
+        for stage, dim in enumerate(self.dims):
+            check_divisible(type(self).__name__, f"dims[{stage}]", dim, "head_dim", self.head_dim)

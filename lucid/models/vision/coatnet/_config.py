@@ -5,6 +5,7 @@ from typing import ClassVar
 
 from lucid.models._base import ModelConfig
 from lucid.models._meta import model_family_meta
+from lucid.models._utils._common import check_divisible, check_positive, check_stage_count
 
 
 @model_family_meta(
@@ -172,3 +173,25 @@ class CoAtNetConfig(ModelConfig):
         object.__setattr__(self, "blocks_per_stage", tuple(self.blocks_per_stage))
         object.__setattr__(self, "dims", tuple(self.dims))
         object.__setattr__(self, "attn_heads", tuple(self.attn_heads))
+        owner = type(self).__name__
+        check_stage_count(owner, 4, blocks_per_stage=self.blocks_per_stage, dims=self.dims)
+        check_stage_count(owner, 2, attn_heads=self.attn_heads)
+        check_positive(
+            self,
+            "num_classes",
+            "in_channels",
+            "image_size",
+            "stem_width",
+            "mbconv_expand",
+            "blocks_per_stage",
+            "dims",
+            "attn_heads",
+        )
+        # The third stage's attention runs at ``dims[2]`` (or the mixed-S3
+        # transformer width) and the fourth at ``dims[3]``, each split across
+        # its own head count.
+        s3_width = self.dims[2] if self.mixed_s3 is None else self.mixed_s3[2]
+        check_divisible(
+            owner, "attention width of stage 3", s3_width, "attn_heads[0]", self.attn_heads[0]
+        )
+        check_divisible(owner, "dims[3]", self.dims[3], "attn_heads[1]", self.attn_heads[1])

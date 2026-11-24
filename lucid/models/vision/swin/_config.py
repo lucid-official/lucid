@@ -5,7 +5,7 @@ from typing import ClassVar
 
 from lucid.models._base import ModelConfig
 from lucid.models._meta import model_family_meta
-from lucid.models._utils._common import check_stage_lengths
+from lucid.models._utils._common import check_positive, check_stage_divisible, check_stage_lengths
 
 
 @model_family_meta(
@@ -118,6 +118,16 @@ class SwinConfig(ModelConfig):
     model_type : ClassVar[str]
         Constant string ``"swin"`` used by the model registry.
 
+    Raises
+    ------
+    ValueError
+        At construction, when a size or channel field (``image_size``,
+        ``patch_size``, ``embed_dim``, ``window_size``, ``num_classes``,
+        ``in_channels``, an entry of ``num_heads``) is not positive, when
+        ``depths`` and ``num_heads`` differ in length, or when a stage's
+        width (``embed_dim * 2**stage``) is not a multiple of its
+        ``num_heads`` entry.
+
     Notes
     -----
     The canonical variants registered as factory functions in
@@ -170,4 +180,20 @@ class SwinConfig(ModelConfig):
     def __post_init__(self) -> None:
         object.__setattr__(self, "depths", tuple(self.depths))
         object.__setattr__(self, "num_heads", tuple(self.num_heads))
-        check_stage_lengths(type(self).__name__, depths=self.depths, num_heads=self.num_heads)
+        owner = type(self).__name__
+        check_stage_lengths(owner, depths=self.depths, num_heads=self.num_heads)
+        check_positive(
+            self,
+            "image_size",
+            "patch_size",
+            "in_channels",
+            "num_classes",
+            "embed_dim",
+            "num_heads",
+            "window_size",
+            "mlp_ratio",
+        )
+        # Each stage doubles ``embed_dim``, and its attention splits that
+        # width across its own head count.
+        widths = tuple(self.embed_dim * 2**stage for stage in range(len(self.num_heads)))
+        check_stage_divisible(owner, "stage width", widths, "num_heads", self.num_heads)

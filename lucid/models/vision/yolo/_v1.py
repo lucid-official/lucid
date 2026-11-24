@@ -50,7 +50,11 @@ from lucid.models._utils._detection_results import (
     detection_result,
     empty_detection_result,
 )
-from lucid.models._utils._common import apply_overrides, reject_unavailable_pretrained
+from lucid.models._utils._common import (
+    apply_overrides,
+    check_positive,
+    reject_unavailable_pretrained,
+)
 
 if TYPE_CHECKING:
     pass
@@ -213,6 +217,9 @@ class YOLOConfig(ModelConfig):
     score_thresh: float = 0.5
     nms_thresh: float = 0.5
     tiny: bool = False
+
+    def __post_init__(self) -> None:
+        check_positive(self, "num_classes", "in_channels", "split_size", "num_boxes")
 
 
 # ---------------------------------------------------------------------------
