@@ -440,6 +440,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - complex pow answers std::pow at a zero base (LCD-1082)
 
+- complex pow zero base sees a d*pi overflow as infinite
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

@@ -17,13 +17,14 @@
 // ``libc++`` recovers an infinity from a NaN pair).  Working that product and
 // ``exp`` through gives a table over the signs and classes of ``c`` and ``d``
 // (``lucid_zero_base_pow`` below); it was checked against the reference over a
-// grid of 143 exponents per signed zero (finite, +-0, +-inf, NaN, 1e+-30) in
-// both widths, and the CPU stream is held to the same grid.
+// grid of 169 exponents per signed zero (finite, +-0, +-inf, NaN, 1e+-30, and
+// +-3e38, whose product with pi overflows float32) in both widths, and the CPU
+// stream is held to the same grid.
 //
 // The rest of the tensor is ``mx::power``'s own answer, unchanged: a one-pass
 // patch kernel replaces the lanes MLX answered from its zero branch, so no
 // other lane changes by a bit.  The extra pass over the operands and the result
-// costs 1.7-2.0x of ``mx::power`` alone (M1 Pro, 64K to 16M elements), the price
+// costs 1.5-1.7x of ``mx::power`` alone (M1 Pro, 64K to 16M elements), the price
 // of leaving MLX's transcendental formula as it is.
 //
 // A custom ``mx::fast::metal_kernel`` rather than array ops, because the table
@@ -59,7 +60,8 @@ namespace mx = ::mlx::core;
 //   * ``d`` infinite, ``Re x`` +0 (theta is +-0) -> N for a finite ``c``, else
 //                                                 Z for ``c > 0``, I for ``c < 0``
 //   * ``d`` infinite, ``Re x`` -0 (theta is +-pi): with ``q`` true when the signs
-//     of ``d`` and ``Im x`` are the same,
+//     of ``d`` and ``Im x`` are the same,  (a finite ``d`` whose product with pi
+//     overflows float32 counts as infinite here)
 //                                                 q: Z for ``c > 0``, N for ``c < 0``
 //                                                 not q: N for ``c > 0``, I for ``c < 0``
 inline const char* header_src() {
@@ -92,7 +94,12 @@ inline complex64_t lucid_zero_base_pow(complex64_t x, complex64_t y) {
     if (lucid_cpow_is_nan(c) || lucid_cpow_is_zero(c))
         return n_val;
     const bool c_pos = !lucid_cpow_sign(c);
-    if (!lucid_cpow_is_inf(d))
+    // At Re x = -0 theta is +-pi, and libc++ forms d * theta in float32: a finite
+    // |d| above ~1.083e38 overflows it to +-inf and takes the infinite-d path.
+    const bool d_over =
+        lucid_cpow_is_inf(d) ||
+        (lucid_cpow_sign(x.real) && lucid_cpow_is_inf(metal::fabs(d) * 3.14159274f));
+    if (!d_over)
         return c_pos ? z_val : i_val;
     if (!lucid_cpow_sign(x.real))
         return !lucid_cpow_is_inf(c) ? n_val : (c_pos ? z_val : i_val);
@@ -106,14 +113,22 @@ inline complex64_t lucid_zero_base_pow(complex64_t x, complex64_t y) {
 // ``out = r`` except where the base is a zero, where it is the ``std::pow``
 // value.  ``r`` is ``mx::power(a, b)`` at the broadcast shape; ``a`` and ``b``
 // are read through their own strides, so a broadcast or permuted operand costs
-// no copy.
+// no copy, and ``b`` is read only for a zero base.
+//
+// Metal flushes float32 subnormals, so a subnormal base compares equal to zero
+// here as in MLX's own branch (a known limit, not a change).
 inline mx::fast::CustomKernelFunction make_kernel() {
     const std::string body = R"(
+        T av = a[elem_to_loc(int64_t(elem), a_shape, a_strides, a_ndim)];
         complex64_t rv = r[elem];
-        out[elem] = (av.real == 0.0f && av.imag == 0.0f) ? lucid_zero_base_pow(av, bv) : rv;
+        if (av.real == 0.0f && av.imag == 0.0f) {
+            T bv = b[elem_to_loc(int64_t(elem), b_shape, b_strides, b_ndim)];
+            rv = lucid_zero_base_pow(av, bv);
+        }
+        out[elem] = rv;
     )";
     return mx::fast::metal_kernel("lucid_cpow_zero_base", {"a", "b", "r"}, {"out"},
-                                  binary_kernel_load_src(/*strided=*/true) + body, header_src(),
+                                  std::string(unary_elem_index_src()) + body, header_src(),
                                   /*ensure_row_contiguous=*/false,
                                   /*atomic_outputs=*/false, mx::CompileOptions{});
 }
