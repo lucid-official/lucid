@@ -400,6 +400,10 @@
     },
     {
       "kind": "module",
+      "module": "lucid.linalg._cross"
+    },
+    {
+      "kind": "module",
       "module": "lucid.linalg._dtype_guard"
     },
     {
@@ -2613,6 +2617,12 @@
     {
       "kind": "module",
       "module": "lucid.peft.tuners.psoft._subspace"
+    }
+  ],
+  "lucid.linalg._cross.cross": [
+    {
+      "kind": "module",
+      "module": "lucid.linalg"
     }
   ],
   "lucid.linalg._ex.cholesky_ex": [
