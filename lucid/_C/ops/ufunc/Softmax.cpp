@@ -64,8 +64,7 @@ TensorImplPtr SoftmaxBackward::forward(const TensorImplPtr& a, int axis) {
     Storage out_storage = backend::Dispatcher::for_device(x->device())
                               .softmax(x->storage(), x->shape(), wrapped, x->dtype());
 
-    auto result = std::make_shared<TensorImpl>(std::move(out_storage), x->shape(), x->dtype(),
-                                               x->device(), false);
+    auto result = helpers::fresh(std::move(out_storage), x->shape(), x->dtype(), x->device());
     scope.set_flops(static_cast<std::int64_t>(x->numel()) * 5);
 
     // wire_autograd is called unconditionally so the 3.5 compile-path
@@ -135,8 +134,7 @@ TensorImplPtr LogSoftmaxBackward::forward(const TensorImplPtr& a, int axis) {
     Storage out_storage = backend::Dispatcher::for_device(x->device())
                               .log_softmax(x->storage(), x->shape(), wrapped, x->dtype());
 
-    auto result = std::make_shared<TensorImpl>(std::move(out_storage), x->shape(), x->dtype(),
-                                               x->device(), false);
+    auto result = helpers::fresh(std::move(out_storage), x->shape(), x->dtype(), x->device());
 
     // Unconditional wire_autograd — see SoftmaxBackward::forward for the
     // rationale (trace-hook visibility under no-grad / no-requires-grad).

@@ -51,8 +51,7 @@ TensorImplPtr ContiguousBackward::forward(const TensorImplPtr& a) {
                               .contiguous(src, a->shape(), a->stride(), a->storage_offset(),
                                           a->is_contiguous(), a->dtype());
 
-    auto result = std::make_shared<TensorImpl>(std::move(out_storage), a->shape(), a->dtype(),
-                                               a->device(), false);
+    auto result = helpers::fresh(std::move(out_storage), a->shape(), a->dtype(), a->device());
 
     kernel::NaryKernel<ContiguousBackward, 1>::wire_autograd({a}, result, false);
     return result;

@@ -105,8 +105,8 @@ TensorImplPtr finish_conv_transpose_forward(Storage out_storage,
                                             const int (&pad)[N],
                                             const int (&opad)[N],
                                             const int (&dilation)[N]) {
-    auto out = std::make_shared<TensorImpl>(std::move(out_storage), std::move(out_shape), eff_dt,
-                                            ins[0]->device(), false);
+    auto out =
+        helpers::fresh(std::move(out_storage), std::move(out_shape), eff_dt, ins[0]->device());
     auto bwd = std::make_shared<ConvTransposeNdBackward<N>>();
     bwd->groups_ = groups;
     for (int i = 0; i < N; ++i) {

@@ -842,8 +842,7 @@ TensorImplPtr masked_select_op(const TensorImplPtr& a, const TensorImplPtr& mask
     Shape out_shape{n};
     Storage out =
         be.masked_select(a->storage(), mask->storage(), a->shape(), mask->shape(), n, a->dtype());
-    auto result =
-        std::make_shared<TensorImpl>(std::move(out), out_shape, a->dtype(), a->device(), false);
+    auto result = helpers::fresh(std::move(out), out_shape, a->dtype(), a->device());
     // The output length is the mask's count of true entries, a value, so no
     // emitter can build this op.  Recording it keeps the node, and its inputs,
     // in the trace: unrecorded, the result is an anonymous tensor that the

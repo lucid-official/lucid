@@ -59,8 +59,7 @@ TensorImplPtr one_hot_op(const TensorImplPtr& input, int num_classes, Dtype out_
     auto& be = backend::Dispatcher::for_device(input->device());
     Storage out_storage =
         be.one_hot_forward(input->storage(), input->shape(), num_classes, out_dtype);
-    auto out = std::make_shared<TensorImpl>(std::move(out_storage), out_shape, out_dtype,
-                                            input->device(), false);
+    auto out = helpers::fresh(std::move(out_storage), out_shape, out_dtype, input->device());
     if (auto* trc = ::lucid::compile::current_tracer()) {
         trc->on_op_io({input}, out);
     }
@@ -79,8 +78,8 @@ TensorImplPtr rotate_op(const TensorImplPtr& input, double angle_deg, double cy,
     auto& be = backend::Dispatcher::for_device(input->device());
     Storage out_storage =
         be.rotate_forward(input->storage(), input->shape(), angle_rad_neg, cx, cy, input->dtype());
-    auto out = std::make_shared<TensorImpl>(std::move(out_storage), input->shape(), input->dtype(),
-                                            input->device(), false);
+    auto out =
+        helpers::fresh(std::move(out_storage), input->shape(), input->dtype(), input->device());
     if (auto* trc = ::lucid::compile::current_tracer()) {
         trc->on_op_io({input}, out);
     }
@@ -174,8 +173,7 @@ TensorImplPtr BilinearLayerBackward::forward(const TensorImplPtr& x1_in,
         be.bilinear_layer_forward(x1->storage(), x2->storage(), weight->storage(), bias_storage,
                                   has_bias, x1->shape(), x2->shape(), weight->shape(), x1->dtype());
 
-    auto out = std::make_shared<TensorImpl>(std::move(out_storage), out_shape, x1->dtype(),
-                                            x1->device(), false);
+    auto out = helpers::fresh(std::move(out_storage), out_shape, x1->dtype(), x1->device());
     if (auto* trc = ::lucid::compile::current_tracer()) {
         std::vector<TensorImplPtr> ins{x1, x2, weight};
         if (bias)

@@ -127,8 +127,7 @@ TensorImplPtr LayerNormBackward::forward(const TensorImplPtr& x,
                                 N, eps, x_eff->shape(), eff_dt);
     scope.set_flops(static_cast<std::int64_t>(outer * N) * 5);
 
-    auto out = std::make_shared<TensorImpl>(std::move(forward[0]), x_eff->shape(), eff_dt,
-                                            x_eff->device(), false);
+    auto out = helpers::fresh(std::move(forward[0]), x_eff->shape(), eff_dt, x_eff->device());
 
     auto bwd = std::make_shared<LayerNormBackward>();
     bwd->saved_mean_ = std::move(forward[1]);

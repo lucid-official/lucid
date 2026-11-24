@@ -21,6 +21,7 @@
 #include <cstdint>
 #include <limits>
 #include <numeric>
+#include <string>
 #include <vector>
 
 namespace lucid {
@@ -57,6 +58,23 @@ using Shape = std::vector<std::int64_t>;
 // A tensor is *contiguous* when its stride vector equals
 // :func:`contiguous_stride` for its shape and element size.
 using Stride = std::vector<std::int64_t>;
+
+// Spells ``shape`` for a message: ``[2, 3, 4]``, and ``[]`` for a scalar.
+//
+// The one spelling every diagnostic that names a shape uses — an error, a
+// refusal — so two messages never write the same shape two ways.  A negative
+// extent prints as it is, because the refusal of one names it.  It builds a
+// string, so it belongs on a throw path, not a hot one.
+inline std::string shape_to_string(const Shape& shape) {
+    std::string out = "[";
+    for (std::size_t i = 0; i < shape.size(); ++i) {
+        if (i > 0)
+            out += ", ";
+        out += std::to_string(shape[i]);
+    }
+    out += "]";
+    return out;
+}
 
 // Refuses a shape with a negative extent.
 //

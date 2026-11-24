@@ -111,8 +111,7 @@ TensorImplPtr BatchNormEvalBackward::forward(const TensorImplPtr& x,
     Storage out_storage = std::move(fwd[0]);
     Storage rstd_storage = std::move(fwd[1]);
 
-    auto out = std::make_shared<TensorImpl>(std::move(out_storage), x_eff->shape(), eff_dt,
-                                            x_eff->device(), false);
+    auto out = helpers::fresh(std::move(out_storage), x_eff->shape(), eff_dt, x_eff->device());
 
     auto bwd = std::make_shared<BatchNormEvalBackward>();
     bwd->eps_ = eps;
@@ -359,8 +358,7 @@ LpNormalizeBackward::forward(const TensorImplPtr& x0, double ord, int axis, doub
     Storage y_storage = std::move(fwd[0]);
     Storage norm_storage = std::move(fwd[1]);
 
-    auto out = std::make_shared<TensorImpl>(std::move(y_storage), x->shape(), x->dtype(),
-                                            x->device(), false);
+    auto out = helpers::fresh(std::move(y_storage), x->shape(), x->dtype(), x->device());
     // wire_autograd records on_op_io internally — no explicit call.
     {
         auto bwd = std::make_shared<LpNormalizeBackward>();
@@ -441,8 +439,7 @@ TensorImplPtr GlobalResponseNormBackward::forward(const TensorImplPtr& x,
     Storage out_storage = std::move(fwd[0]);
     Storage nx_storage = std::move(fwd[1]);
 
-    auto out = std::make_shared<TensorImpl>(std::move(out_storage), x->shape(), x->dtype(),
-                                            x->device(), false);
+    auto out = helpers::fresh(std::move(out_storage), x->shape(), x->dtype(), x->device());
     // wire_autograd records on_op_io internally — no explicit call.
     auto bwd = std::make_shared<GlobalResponseNormBackward>();
     bwd->eps_ = eps;

@@ -99,9 +99,8 @@ TensorImplPtr MseLossBackward::forward(const TensorImplPtr& input0,
                               .mse_loss(input->storage(), target->storage(), input->shape(),
                                         input->dtype(), static_cast<int>(reduction));
 
-    auto out = std::make_shared<TensorImpl>(std::move(out_storage),
-                                            reduced_shape(input->shape(), reduction),
-                                            input->dtype(), input->device(), false);
+    auto out = helpers::fresh(std::move(out_storage), reduced_shape(input->shape(), reduction),
+                              input->dtype(), input->device());
 
     {
         auto bwd = std::make_shared<MseLossBackward>();
@@ -165,9 +164,8 @@ TensorImplPtr BCELossBackward::forward(const TensorImplPtr& input,
             .bce_loss(input->storage(), target->storage(), weight->storage(), input->shape(),
                       input->dtype(), eps, static_cast<int>(reduction));
 
-    auto out = std::make_shared<TensorImpl>(std::move(out_storage),
-                                            reduced_shape(input->shape(), reduction),
-                                            input->dtype(), input->device(), false);
+    auto out = helpers::fresh(std::move(out_storage), reduced_shape(input->shape(), reduction),
+                              input->dtype(), input->device());
 
     {
         auto bwd = std::make_shared<BCELossBackward>();
@@ -223,9 +221,8 @@ TensorImplPtr BCEWithLogitsBackward::forward(const TensorImplPtr& input,
                                   pos_weight->storage(), input->shape(), weight->shape(),
                                   pos_weight->shape(), input->dtype(), static_cast<int>(reduction));
 
-    auto out = std::make_shared<TensorImpl>(std::move(out_storage),
-                                            reduced_shape(input->shape(), reduction),
-                                            input->dtype(), input->device(), false);
+    auto out = helpers::fresh(std::move(out_storage), reduced_shape(input->shape(), reduction),
+                              input->dtype(), input->device());
 
     {
         auto bwd = std::make_shared<BCEWithLogitsBackward>();
@@ -293,8 +290,7 @@ TensorImplPtr CrossEntropyBackward::forward(const TensorImplPtr& input,
                                           input->shape(), target->shape(), input->dtype(), eps,
                                           ignore_index, static_cast<int>(reduction));
 
-    auto out = std::make_shared<TensorImpl>(std::move(result.output), out_shape, input->dtype(),
-                                            input->device(), false);
+    auto out = helpers::fresh(std::move(result.output), out_shape, input->dtype(), input->device());
     if (auto* trc = ::lucid::compile::current_tracer()) {
         if (weight_or_null)
             trc->on_op_io({input, target, weight_or_null}, out);
@@ -375,8 +371,7 @@ TensorImplPtr NLLLossBackward::forward(const TensorImplPtr& input,
             .nll_loss(input->storage(), target->storage(), weight_storage, input->shape(),
                       target->shape(), input->dtype(), ignore_index, static_cast<int>(reduction));
 
-    auto out = std::make_shared<TensorImpl>(std::move(result.output), out_shape, input->dtype(),
-                                            input->device(), false);
+    auto out = helpers::fresh(std::move(result.output), out_shape, input->dtype(), input->device());
     if (auto* trc = ::lucid::compile::current_tracer()) {
         if (weight_or_null)
             trc->on_op_io({input, target, weight_or_null}, out);
@@ -447,9 +442,8 @@ TensorImplPtr HuberLossBackward::forward(const TensorImplPtr& input0,
                               .huber_loss(input->storage(), target->storage(), input->shape(),
                                           input->dtype(), delta, static_cast<int>(reduction));
 
-    auto out = std::make_shared<TensorImpl>(std::move(out_storage),
-                                            reduced_shape(input->shape(), reduction),
-                                            input->dtype(), input->device(), false);
+    auto out = helpers::fresh(std::move(out_storage), reduced_shape(input->shape(), reduction),
+                              input->dtype(), input->device());
 
     {
         auto bwd = std::make_shared<HuberLossBackward>();
@@ -538,8 +532,8 @@ TensorImplPtr ctc_loss_op(const TensorImplPtr& log_probs_in,
                                       input_lengths->storage(), target_lengths->storage(), lp_shape,
                                       blank, zero_infinity, log_probs->dtype());
 
-    auto result = std::make_shared<TensorImpl>(std::move(out), out_shape, log_probs->dtype(),
-                                               log_probs->device(), false);
+    auto result =
+        helpers::fresh(std::move(out), out_shape, log_probs->dtype(), log_probs->device());
     // The forward recorded no graph, so every loss built on it trained
     // nothing: the per-sample losses came back detached from log_probs.
     auto bwd = std::make_shared<CtcLossBackward>();

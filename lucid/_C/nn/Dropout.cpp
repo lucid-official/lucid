@@ -108,8 +108,7 @@ DropoutBackward::forward(const TensorImplPtr& a, double p, bool training, Genera
     // Pass-through path: no mask is applied; backward copies grad unchanged.
     if (!training || p == 0.0) {
         Storage clone = clone_storage(a->storage(), numel, a->dtype(), a->device());
-        auto out = std::make_shared<TensorImpl>(std::move(clone), a->shape(), a->dtype(),
-                                                a->device(), false);
+        auto out = helpers::fresh(std::move(clone), a->shape(), a->dtype(), a->device());
         auto bwd = std::make_shared<DropoutBackward>();
         bwd->p_ = 0.0;
 
@@ -134,8 +133,7 @@ DropoutBackward::forward(const TensorImplPtr& a, double p, bool training, Genera
     // :file:`compile/RngFeeds.h`.
     if (auto* trc = compile::current_tracer();
         trc != nullptr && gen == nullptr && trc->redraw_rng()) {
-        auto mask_t = std::make_shared<TensorImpl>(std::move(scaled_mask), a->shape(), a->dtype(),
-                                                   a->device(), false);
+        auto mask_t = helpers::fresh(std::move(scaled_mask), a->shape(), a->dtype(), a->device());
         compile::RngRecipe r;
         r.kind = compile::RngRecipe::Kind::DropoutMask;
         r.a = 1.0 - p;
@@ -150,8 +148,7 @@ DropoutBackward::forward(const TensorImplPtr& a, double p, bool training, Genera
     }
     Storage y = multiply_storages(a->storage(), scaled_mask, numel, a->dtype(), a->device());
 
-    auto out =
-        std::make_shared<TensorImpl>(std::move(y), a->shape(), a->dtype(), a->device(), false);
+    auto out = helpers::fresh(std::move(y), a->shape(), a->dtype(), a->device());
     scope.set_flops(static_cast<std::int64_t>(numel));
 
     {
@@ -214,9 +211,8 @@ std::pair<TensorImplPtr, TensorImplPtr> dropout_stateful_op(const TensorImplPtr&
     // ``randomTensorWithShape:descriptor:stateTensor:``.
     Storage cloned = clone_storage(state_in->storage(), state_in->numel(), state_in->dtype(),
                                    state_in->device());
-    auto state_out = std::make_shared<TensorImpl>(std::move(cloned), state_in->shape(),
-                                                  state_in->dtype(), state_in->device(),
-                                                  /*requires_grad=*/false);
+    auto state_out =
+        helpers::fresh(std::move(cloned), state_in->shape(), state_in->dtype(), state_in->device());
 
     // Wire 2 inputs + 2 outputs onto the just-recorded node.
     // The Tracer's repeat-call multi-output protocol (see Tracer.cpp:
@@ -271,8 +267,7 @@ TensorImplPtr traced_mask_multiply(std::string_view name,
                                    double keep,
                                    double scale) {
     auto* trc = compile::current_tracer();
-    auto mask_t =
-        std::make_shared<TensorImpl>(std::move(scaled), mask_shape, a->dtype(), a->device(), false);
+    auto mask_t = helpers::fresh(std::move(scaled), mask_shape, a->dtype(), a->device());
     compile::RngRecipe r;
     r.kind = compile::RngRecipe::Kind::DropoutMask;
     r.a = keep;
@@ -312,8 +307,7 @@ DropoutNdBackward::forward(const TensorImplPtr& a, double p, bool training, Gene
 
     if (!training || p == 0.0) {
         Storage clone = clone_storage(a->storage(), numel, a->dtype(), a->device());
-        auto out = std::make_shared<TensorImpl>(std::move(clone), a->shape(), a->dtype(),
-                                                a->device(), false);
+        auto out = helpers::fresh(std::move(clone), a->shape(), a->dtype(), a->device());
         auto bwd = std::make_shared<DropoutNdBackward>();
         bwd->p_ = 0.0;
         kernel::NaryKernel<DropoutNdBackward, 1>::wire_autograd(std::move(bwd), {a}, out, false);
@@ -339,8 +333,7 @@ DropoutNdBackward::forward(const TensorImplPtr& a, double p, bool training, Gene
     auto [full_mask, y] =
         be.expand_and_multiply(scaled_small, a->storage(), mask_shape, a->shape(), a->dtype());
 
-    auto out =
-        std::make_shared<TensorImpl>(std::move(y), a->shape(), a->dtype(), a->device(), false);
+    auto out = helpers::fresh(std::move(y), a->shape(), a->dtype(), a->device());
     scope.set_flops(static_cast<std::int64_t>(numel));
 
     {
@@ -401,8 +394,7 @@ AlphaDropoutBackward::forward(const TensorImplPtr& a, double p, bool training, G
 
     if (!training || p == 0.0) {
         Storage clone = clone_storage(a->storage(), numel, a->dtype(), a->device());
-        auto out = std::make_shared<TensorImpl>(std::move(clone), a->shape(), a->dtype(),
-                                                a->device(), false);
+        auto out = helpers::fresh(std::move(clone), a->shape(), a->dtype(), a->device());
         auto bwd = std::make_shared<AlphaDropoutBackward>();
         bwd->p_ = 0.0;
         bwd->a_coef_ = 1.0;
@@ -434,8 +426,7 @@ AlphaDropoutBackward::forward(const TensorImplPtr& a, double p, bool training, G
     Storage scaled = mul_scalar_storage(inner, a_coef, numel, a->dtype(), a->device());
     Storage y = add_scalar_storage(scaled, b_coef, numel, a->dtype(), a->device());
 
-    auto out =
-        std::make_shared<TensorImpl>(std::move(y), a->shape(), a->dtype(), a->device(), false);
+    auto out = helpers::fresh(std::move(y), a->shape(), a->dtype(), a->device());
     scope.set_flops(static_cast<std::int64_t>(numel));
 
     {
@@ -507,8 +498,7 @@ TensorImplPtr DropBlockBackward::forward(
     Storage keep_storage = be.drop_block_mask(seed, p, block_size, a->shape(), a->dtype());
     Storage y = multiply_storages(a->storage(), keep_storage, numel, a->dtype(), a->device());
 
-    auto out =
-        std::make_shared<TensorImpl>(std::move(y), a->shape(), a->dtype(), a->device(), false);
+    auto out = helpers::fresh(std::move(y), a->shape(), a->dtype(), a->device());
     scope.set_flops(static_cast<std::int64_t>(numel));
 
     {
@@ -554,8 +544,7 @@ DropPathBackward::forward(const TensorImplPtr& a, double p, bool scale_by_keep, 
 
     if (p == 0.0) {
         Storage clone = clone_storage(a->storage(), numel, a->dtype(), a->device());
-        auto out = std::make_shared<TensorImpl>(std::move(clone), a->shape(), a->dtype(),
-                                                a->device(), false);
+        auto out = helpers::fresh(std::move(clone), a->shape(), a->dtype(), a->device());
         kernel::NaryKernel<DropPathBackward, 1>::wire_autograd({a}, out, false);
         return out;
     }
@@ -577,8 +566,7 @@ DropPathBackward::forward(const TensorImplPtr& a, double p, bool scale_by_keep, 
     auto [full_mask, y] =
         be.expand_and_multiply(small, a->storage(), sshape, a->shape(), a->dtype());
 
-    auto out =
-        std::make_shared<TensorImpl>(std::move(y), a->shape(), a->dtype(), a->device(), false);
+    auto out = helpers::fresh(std::move(y), a->shape(), a->dtype(), a->device());
     scope.set_flops(static_cast<std::int64_t>(numel));
 
     {

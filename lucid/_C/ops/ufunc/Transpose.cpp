@@ -113,8 +113,7 @@ TensorImplPtr PermuteBackward::forward(const TensorImplPtr& a, const std::vector
     } else {
         Storage out_storage = backend::Dispatcher::for_device(a->device())
                                   .permute(a->storage(), a->shape(), perm, a->dtype());
-        out = std::make_shared<TensorImpl>(std::move(out_storage), out_shape, a->dtype(),
-                                           a->device(), false);
+        out = helpers::fresh(std::move(out_storage), out_shape, a->dtype(), a->device());
     }
 
     auto bwd = std::make_shared<PermuteBackward>();

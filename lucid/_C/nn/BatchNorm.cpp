@@ -252,8 +252,7 @@ TensorImplPtr BatchNormNdBackward<N>::forward(const TensorImplPtr& x,
             .batch_norm_forward(x_eff->storage(), gamma_eff->storage(), beta_eff->storage(), B, C,
                                 spatial_total, N, eps, x_eff->shape(), eff_dt);
 
-    auto out = std::make_shared<TensorImpl>(std::move(forward[0]), x_eff->shape(), eff_dt,
-                                            x_eff->device(), false);
+    auto out = helpers::fresh(std::move(forward[0]), x_eff->shape(), eff_dt, x_eff->device());
     auto bwd = std::make_shared<BatchNormNdBackward<N>>();
     bwd->saved_mean_ = std::move(forward[1]);
     bwd->saved_rstd_ = std::move(forward[2]);
@@ -383,10 +382,8 @@ TensorImplPtr BatchNormNdBackward<N>::forward(const TensorImplPtr& x,
             // shape / dtype / device matter.
             Storage rm_copy = be.clone(new_rm, stat_shape, buf_dt);
             Storage rv_copy = be.clone(new_rv, stat_shape, buf_dt);
-            new_rm_t = std::make_shared<TensorImpl>(std::move(rm_copy), stat_shape, buf_dt,
-                                                    x_eff->device(), false);
-            new_rv_t = std::make_shared<TensorImpl>(std::move(rv_copy), stat_shape, buf_dt,
-                                                    x_eff->device(), false);
+            new_rm_t = helpers::fresh(std::move(rm_copy), stat_shape, buf_dt, x_eff->device());
+            new_rv_t = helpers::fresh(std::move(rv_copy), stat_shape, buf_dt, x_eff->device());
         } else {
             take_running_stats(running_mean, running_var, std::move(new_rm), std::move(new_rv));
             if (x_eff->device() == Device::GPU)

@@ -31,17 +31,6 @@ namespace lucid {
 
 namespace {
 
-std::string format_shape(const Shape& sh) {
-    std::string out = "[";
-    for (std::size_t i = 0; i < sh.size(); ++i) {
-        if (i > 0)
-            out += ", ";
-        out += std::to_string(sh[i]);
-    }
-    out += "]";
-    return out;
-}
-
 template <typename T>
 std::int64_t bsearch_one(const T* seq, std::int64_t n, T v, bool right) {
     std::int64_t lo = 0;
@@ -163,7 +152,7 @@ void check_search_shapes(const Shape& ss, const Shape& vs, bool& seq_1d) {
             .invalid_argument("boundaries tensor should be 1 dimension or the first N-1 "
                               "dimensions of boundaries tensor and input value tensor must match, "
                               "got boundaries " +
-                              format_shape(ss) + " and input value " + format_shape(vs));
+                              shape_to_string(ss) + " and input value " + shape_to_string(vs));
 }
 
 const char* searchsorted_head_src() {

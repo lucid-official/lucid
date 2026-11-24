@@ -77,8 +77,7 @@ TensorImplPtr PowScalarBackward::forward(const TensorImplPtr& a_in, double exp) 
     scope.set_attr("exp", exp);
     Storage out_storage = backend::Dispatcher::for_device(a->device())
                               .pow_scalar(a->storage(), a->shape(), a->dtype(), exp);
-    auto out = std::make_shared<TensorImpl>(std::move(out_storage), a->shape(), a->dtype(),
-                                            a->device(), false);
+    auto out = helpers::fresh(std::move(out_storage), a->shape(), a->dtype(), a->device());
     scope.set_flops(static_cast<std::int64_t>(out->numel()) * 11);
 
     auto bwd = std::make_shared<PowScalarBackward>();
@@ -131,8 +130,7 @@ TensorImplPtr RPowScalarBackward::forward(double base, const TensorImplPtr& a_in
     scope.set_attr("base", base);
     Storage out_storage = backend::Dispatcher::for_device(a->device())
                               .rpow_scalar(a->storage(), a->shape(), a->dtype(), base);
-    auto out = std::make_shared<TensorImpl>(std::move(out_storage), a->shape(), a->dtype(),
-                                            a->device(), false);
+    auto out = helpers::fresh(std::move(out_storage), a->shape(), a->dtype(), a->device());
     scope.set_flops(static_cast<std::int64_t>(out->numel()) * 11);
 
     auto bwd = std::make_shared<RPowScalarBackward>();
@@ -168,8 +166,7 @@ TensorImplPtr ClipBackward::forward(const TensorImplPtr& a, double min_v, double
     scope.set_attr("max", max_v);
     Storage out_storage = backend::Dispatcher::for_device(a->device())
                               .clip(a->storage(), a->shape(), a->dtype(), min_v, max_v);
-    auto out = std::make_shared<TensorImpl>(std::move(out_storage), a->shape(), a->dtype(),
-                                            a->device(), false);
+    auto out = helpers::fresh(std::move(out_storage), a->shape(), a->dtype(), a->device());
     scope.set_flops(static_cast<std::int64_t>(out->numel()));
 
     auto bwd = std::make_shared<ClipBackward>();
@@ -229,8 +226,7 @@ TensorImplPtr NanToNumBackward::forward(const TensorImplPtr& a,
     Storage out_storage =
         backend::Dispatcher::for_device(a->device())
             .nan_to_num(a->storage(), a->shape(), a->dtype(), nan_val, posinf_val, neginf_val);
-    auto out = std::make_shared<TensorImpl>(std::move(out_storage), a->shape(), a->dtype(),
-                                            a->device(), false);
+    auto out = helpers::fresh(std::move(out_storage), a->shape(), a->dtype(), a->device());
     scope.set_flops(static_cast<std::int64_t>(out->numel()));
     // ``wire_autograd`` also records the op on an active trace.
     kernel::NaryKernel<NanToNumBackward, 1>::wire_autograd(std::make_shared<NanToNumBackward>(),

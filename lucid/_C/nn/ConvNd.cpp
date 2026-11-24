@@ -210,8 +210,8 @@ TensorImplPtr ConvNdBackward<N>::forward(const TensorImplPtr& x,
         be.conv_nd_forward(x_eff->storage(), W_eff->storage(), b_eff->storage(), B, Cin, Cout,
                            Cin_g, Cout_g, S, K, O, opts, out_shape, eff_dt);
 
-    auto out = std::make_shared<TensorImpl>(std::move(out_storage), std::move(out_shape), eff_dt,
-                                            x_eff->device(), false);
+    auto out =
+        helpers::fresh(std::move(out_storage), std::move(out_shape), eff_dt, x_eff->device());
     // wire_autograd (below) calls ``on_op_io`` internally — recording it
     // here too would double-feed the trace (6 inputs instead of 3) and
     // abort the compile.  Conv1d/3d still rely on the wire_autograd
@@ -494,8 +494,8 @@ TensorImplPtr UnfoldBackward::forward(const TensorImplPtr& x,
     Storage out_storage = be.unfold_forward(x->storage(), B, C, S, K, O, stride, pad, dilation,
                                             out_shape, x->dtype());
 
-    auto out = std::make_shared<TensorImpl>(std::move(out_storage), std::move(out_shape),
-                                            x->dtype(), x->device(), false);
+    auto out =
+        helpers::fresh(std::move(out_storage), std::move(out_shape), x->dtype(), x->device());
     if (auto* trc = ::lucid::compile::current_tracer()) {
         trc->on_op_io({x}, out);
     }
@@ -609,8 +609,7 @@ TensorImplPtr fold_op(const TensorImplPtr& x,
     auto& be = backend::Dispatcher::for_device(x->device());
     Storage out = be.nn_fold(x->storage(), x->shape(), out_shape, kernel_size, stride, padding,
                              dilation, x->dtype());
-    auto result =
-        std::make_shared<TensorImpl>(std::move(out), out_shape, x->dtype(), x->device(), false);
+    auto result = helpers::fresh(std::move(out), out_shape, x->dtype(), x->device());
     if (auto* trc = ::lucid::compile::current_tracer()) {
         trc->on_op_io({x}, result);
     }

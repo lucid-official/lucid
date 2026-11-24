@@ -12,52 +12,41 @@
 // wrong buffer without a word.
 //
 // The check is a byte-count comparison on what the storage already records, with
-// no evaluation and no allocation.  It is made where a kernel family builds its
-// result tensor, not in the :class:`TensorImpl` constructor: a view is built by
-// the same constructor over its parent's buffer and holds more or fewer bytes
-// than its shape on purpose, so the constructor cannot tell a view from a result
-// that went wrong.
+// no evaluation and no allocation.  It is made in :func:`helpers::fresh` — the one
+// function an op's forward builds its result tensor through, whether it is a
+// kernel family's (``UnaryKernel``, ``BinaryKernel``, ``ReduceKernel``) or an op's
+// own (bitwise, compare, linalg, nn, a generator) — so a forward that builds its
+// result by hand is held to the same count and no op remembers to ask for it
+// (LCD-1072).  It is not made in the :class:`TensorImpl` constructor: a view is
+// built by the same constructor over its parent's buffer and holds more or fewer
+// bytes than its shape on purpose, so the constructor cannot tell a view from a
+// result that went wrong.
 #pragma once
 
 #include <cstddef>
-#include <string>
-#include <string_view>
 #include <variant>
 
 #include "Dtype.h"
-#include "ErrorBuilder.h"
 #include "Shape.h"
 #include "Storage.h"
 
 namespace lucid {
 
-[[noreturn]] inline void
-refuse_result_extent(std::string_view op, std::size_t held, const Shape& shape, Dtype dtype) {
-    std::string dims = "(";
-    for (std::size_t i = 0; i < shape.size(); ++i) {
-        if (i > 0)
-            dims += ", ";
-        dims += std::to_string(shape[i]);
-    }
-    dims += ")";
-    ErrorBuilder(op).fail("the GPU result holds " + std::to_string(held) + " bytes, but shape " +
-                          dims + " of dtype " + std::string(dtype_name(dtype)) + " takes " +
-                          std::to_string(shape_numel(shape) * dtype_size(dtype)) +
-                          ": the backend returned an array of another extent than the op's shape");
-}
+// Raises :class:`LucidError` naming the innermost op on the error-context stack,
+// the shape and dtype, and both byte counts.  Defined out of line in
+// ``ErrorBuilder.cpp``, where the stack lives, like :func:`throw_negative_dim`;
+// not exported: only the engine itself calls it.
+[[noreturn]] void refuse_result_extent(std::size_t held, const Shape& shape, Dtype dtype);
 
 // Refuses a GPU ``storage`` whose byte count is not ``shape``'s element count
 // times ``dtype``'s size.  CPU and phantom storage are left alone: a CPU buffer
 // is sized by the shape at allocation, and a phantom has no buffer to compare.
-inline void require_result_extent(const Storage& storage,
-                                  const Shape& shape,
-                                  Dtype dtype,
-                                  std::string_view op) {
+inline void require_result_extent(const Storage& storage, const Shape& shape, Dtype dtype) {
     const auto* gpu = std::get_if<GpuStorage>(&storage);
     if (gpu == nullptr)
         return;
     if (gpu->nbytes != shape_numel(shape) * dtype_size(dtype)) [[unlikely]]
-        refuse_result_extent(op, gpu->nbytes, shape, dtype);
+        refuse_result_extent(gpu->nbytes, shape, dtype);
 }
 
 }  // namespace lucid

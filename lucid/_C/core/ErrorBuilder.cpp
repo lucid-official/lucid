@@ -13,6 +13,8 @@
 #include <string_view>
 #include <vector>
 
+#include "ResultExtent.h"
+
 namespace lucid {
 
 namespace {
@@ -85,43 +87,48 @@ void ErrorContext::reset() {
     tl_stack_.clear();
 }
 
-// The op is the innermost frame — the op whose entry pushed it is the one
-// about to build the tensor; a call from outside any op names none.
+namespace {
+
+// ``"<op>: "`` for the innermost frame — the op whose entry pushed it is the
+// one about to build the tensor — and nothing for a call from outside any op.
+std::string innermost_op_prefix() {
+    return tl_stack_.empty() ? std::string{} : tl_stack_.back() + ": ";
+}
+
+}  // namespace
+
 void throw_negative_dim(const Shape& shape) {
-    std::string dims;
     std::int64_t bad = 0;
-    for (std::size_t i = 0; i < shape.size(); ++i) {
-        if (i)
-            dims += ", ";
-        dims += std::to_string(shape[i]);
-        if (shape[i] < 0 && bad == 0)
-            bad = shape[i];
+    for (const auto d : shape) {
+        if (d < 0) {
+            bad = d;
+            break;
+        }
     }
-    std::string msg = tl_stack_.empty() ? std::string{} : tl_stack_.back() + ": ";
-    msg += "Trying to create tensor with negative dimension " + std::to_string(bad) + ": [" + dims +
-           "]";
-    throw InvalidArgument(std::move(msg));
+    throw InvalidArgument(innermost_op_prefix() +
+                          "Trying to create tensor with negative dimension " + std::to_string(bad) +
+                          ": " + shape_to_string(shape));
 }
 
 void throw_numel_overflow(const Shape& shape) {
-    std::string dims;
-    for (std::size_t i = 0; i < shape.size(); ++i) {
-        if (i)
-            dims += ", ";
-        dims += std::to_string(shape[i]);
-    }
-    std::string msg = tl_stack_.empty() ? std::string{} : tl_stack_.back() + ": ";
-    msg += "Storage size calculation overflowed with sizes=[" + dims +
-           "] (a tensor holds at most " + std::to_string(kMaxNumel) +
-           " elements, and its strides are 64-bit byte offsets)";
-    throw InvalidArgument(std::move(msg));
+    throw InvalidArgument(
+        innermost_op_prefix() + "Storage size calculation overflowed with sizes=" +
+        shape_to_string(shape) + " (a tensor holds at most " + std::to_string(kMaxNumel) +
+        " elements, and its strides are 64-bit byte offsets)");
 }
 
 void throw_extent_overflow(std::int64_t a, std::int64_t b) {
-    std::string msg = tl_stack_.empty() ? std::string{} : tl_stack_.back() + ": ";
-    msg += "Storage size calculation overflowed: an extent of " + std::to_string(a) + " * " +
-           std::to_string(b) + " does not fit in 64 bits";
-    throw InvalidArgument(std::move(msg));
+    throw InvalidArgument(innermost_op_prefix() +
+                          "Storage size calculation overflowed: an extent of " + std::to_string(a) +
+                          " * " + std::to_string(b) + " does not fit in 64 bits");
+}
+
+void refuse_result_extent(std::size_t held, const Shape& shape, Dtype dtype) {
+    throw LucidError(innermost_op_prefix() + "the GPU result holds " + std::to_string(held) +
+                     " bytes, but shape " + shape_to_string(shape) + " of dtype " +
+                     std::string(dtype_name(dtype)) + " takes " +
+                     std::to_string(shape_numel(shape) * dtype_size(dtype)) +
+                     ": the backend returned an array of another extent than the op's shape");
 }
 
 ErrorContextGuard::ErrorContextGuard(std::string op_name) {

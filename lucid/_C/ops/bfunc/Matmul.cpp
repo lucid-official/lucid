@@ -177,8 +177,7 @@ TensorImplPtr MatmulBackward::forward(const TensorImplPtr& a, const TensorImplPt
     Storage out_storage = backend::Dispatcher::for_device(a_eff->device())
                               .matmul(a_use, b_use, matmul_opts(info, false, false), eff_dt);
 
-    auto out = std::make_shared<TensorImpl>(std::move(out_storage), info.out_shape, eff_dt,
-                                            a_eff->device(), false);
+    auto out = helpers::fresh(std::move(out_storage), info.out_shape, eff_dt, a_eff->device());
 
     kernel::NaryKernel<MatmulBackward, 2>::wire_autograd({a_eff, b_eff}, out);
     return out;

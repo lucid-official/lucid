@@ -154,7 +154,7 @@ TensorImplPtr broadcast_to_op(const TensorImplPtr& a, const Shape& shape) {
 
     // Wrap the broadcast storage, wiring autograd and the tracer to ``a``.
     auto build_with_grad = [&](Storage&& out_storage) {
-        auto out = std::make_shared<TensorImpl>(std::move(out_storage), shape, dt, device, false);
+        auto out = helpers::fresh(std::move(out_storage), shape, dt, device);
         auto bwd = std::make_shared<BroadcastBackward>();
         bwd->input_shape_ = a->shape();
         bwd->output_shape_ = shape;

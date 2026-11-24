@@ -190,8 +190,8 @@ TensorImplPtr MaxPoolNdBackward<N>::forward(const TensorImplPtr& x,
     Storage out_storage = std::move(pool_out[0]);
     Storage saved_argmax = std::move(pool_out[1]);
 
-    auto out = std::make_shared<TensorImpl>(std::move(out_storage), std::move(out_shape), eff_dt,
-                                            x_eff->device(), false);
+    auto out =
+        helpers::fresh(std::move(out_storage), std::move(out_shape), eff_dt, x_eff->device());
     // wire_autograd (below) records ``on_op_io`` internally — calling it
     // again here would double-feed the trace (2 inputs instead of 1) and
     // abort the compile.
@@ -285,8 +285,8 @@ TensorImplPtr AvgPoolNdBackward<N>::forward(const TensorImplPtr& x,
     Storage out_storage =
         avg_be.avg_pool_nd_forward(x_eff->storage(), x_eff->shape(), out_shape, avg_opts, eff_dt);
 
-    auto out = std::make_shared<TensorImpl>(std::move(out_storage), std::move(out_shape), eff_dt,
-                                            x_eff->device(), false);
+    auto out =
+        helpers::fresh(std::move(out_storage), std::move(out_shape), eff_dt, x_eff->device());
     // wire_autograd (below) records ``on_op_io`` internally — calling it
     // again here would double-feed the trace.
 

@@ -1,12 +1,14 @@
 // lucid/_C/test/core/test_result_extent.cpp
 //
-// LCD-1062: a kernel family refuses a GPU result whose byte count is not its
-// shape's element count times the dtype's size.  A shapeless-compiled
-// ``maximum`` of ``(0,)`` and ``(1,)`` had returned one element under the label
-// ``(0,)``; nothing compared the two, so the tensor was built and the in-place
-// form failed much later in ``copy_from``.  ``require_result_extent`` reads only
-// the byte count the storage records, so a GpuStorage with no array is enough to
-// exercise it.
+// LCD-1062: a GPU result whose byte count is not its shape's element count
+// times the dtype's size is refused.  A shapeless-compiled ``maximum`` of
+// ``(0,)`` and ``(1,)`` had returned one element under the label ``(0,)``;
+// nothing compared the two, so the tensor was built and the in-place form
+// failed much later in ``copy_from``.  ``require_result_extent`` reads only the
+// byte count the storage records, so a GpuStorage with no array is enough to
+// exercise it.  LCD-1072 moved the check into ``helpers::fresh``, the one
+// function every forward builds its result through (``test_fresh_extent.cpp``);
+// what is held here is the check itself and the words it refuses in.
 
 #include <string>
 #include <utility>
@@ -15,6 +17,7 @@
 
 #include "../../core/Dtype.h"
 #include "../../core/Error.h"
+#include "../../core/ErrorBuilder.h"
 #include "../../core/ResultExtent.h"
 #include "../../core/Shape.h"
 #include "../../core/Storage.h"
@@ -34,7 +37,7 @@ Storage gpu_holding(std::size_t nbytes, Dtype dtype) {
 // accepts the result.
 std::string refusal(const Storage& s, const Shape& shape, Dtype dtype) {
     try {
-        require_result_extent(s, shape, dtype, "maximum");
+        require_result_extent(s, shape, dtype);
     } catch (const LucidError& e) {
         return e.what();
     }
@@ -63,10 +66,9 @@ TEST(ResultExtentTest, RefusesOneElementUnderAnEmptyShape) {
     // What the shapeless trace returned for ``maximum((0,), (1,))``.
     const std::string msg = refusal(gpu_holding(4, Dtype::F32), {0}, Dtype::F32);
     EXPECT_NE(msg.find("holds 4 bytes"), std::string::npos) << msg;
-    EXPECT_NE(msg.find("(0)"), std::string::npos) << msg;
+    EXPECT_NE(msg.find("[0]"), std::string::npos) << msg;
     EXPECT_NE(msg.find("takes 0"), std::string::npos) << msg;
-    EXPECT_THROW(require_result_extent(gpu_holding(4, Dtype::F32), {0}, Dtype::F32, "maximum"),
-                 LucidError);
+    EXPECT_THROW(require_result_extent(gpu_holding(4, Dtype::F32), {0}, Dtype::F32), LucidError);
 }
 
 TEST(ResultExtentTest, RefusesTooFewAndTooManyBytes) {
@@ -79,8 +81,22 @@ TEST(ResultExtentTest, RefusesTooFewAndTooManyBytes) {
 
 TEST(ResultExtentTest, NamesTheShapeAndTheDtype) {
     const std::string msg = refusal(gpu_holding(4, Dtype::F32), {2, 0}, Dtype::F32);
-    EXPECT_NE(msg.find("(2, 0)"), std::string::npos) << msg;
+    EXPECT_NE(msg.find("[2, 0]"), std::string::npos) << msg;
     EXPECT_NE(msg.find(std::string(dtype_name(Dtype::F32))), std::string::npos) << msg;
+}
+
+TEST(ResultExtentTest, NamesTheOpThatWasBuildingTheResult) {
+    // The innermost frame of the error context, the way the negative-dimension
+    // refusal names the op: no op passes its own name to the check.
+    ErrorContextGuard outer("outer_composite");
+    ErrorContextGuard inner("bitwise_left_shift");
+    const std::string msg = refusal(gpu_holding(4, Dtype::I32), {0}, Dtype::I32);
+    EXPECT_EQ(msg.rfind("bitwise_left_shift: ", 0), 0u) << msg;
+}
+
+TEST(ResultExtentTest, NamesNoOpOutsideOne) {
+    const std::string msg = refusal(gpu_holding(4, Dtype::F32), {0}, Dtype::F32);
+    EXPECT_EQ(msg.rfind("the GPU result holds", 0), 0u) << msg;
 }
 
 TEST(ResultExtentTest, LeavesACpuStorageAlone) {
@@ -89,4 +105,11 @@ TEST(ResultExtentTest, LeavesACpuStorageAlone) {
     // the byte count.
     Storage cpu{CpuStorage{}};
     EXPECT_EQ(refusal(cpu, {3, 4}, Dtype::F32), "");
+}
+
+TEST(ShapeToStringTest, SpellsAShapeOneWay) {
+    EXPECT_EQ(shape_to_string({}), "[]");
+    EXPECT_EQ(shape_to_string({0}), "[0]");
+    EXPECT_EQ(shape_to_string({2, 3, 4}), "[2, 3, 4]");
+    EXPECT_EQ(shape_to_string({2, -1}), "[2, -1]");
 }

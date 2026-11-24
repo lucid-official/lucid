@@ -38,6 +38,7 @@
 #include "../core/Error.h"
 #include "../core/ErrorBuilder.h"
 #include "../core/GradMode.h"
+#include "../core/Helpers.h"
 #include "../core/Scope.h"
 #include "../core/TensorImpl.h"
 #include "../ops/ufunc/Astype.h"
@@ -341,9 +342,9 @@ std::vector<TensorImplPtr> LstmBackward::forward(const TensorImplPtr& input_in,
             ErrorBuilder("lstm").fail("backend returned < 3 outputs");
         auto hn_3d = be.reshape(res[1], hn_storage_2d, hn_shape, dt);
         auto cn_3d = be.reshape(res[2], cn_storage_2d, cn_shape, dt);
-        auto out_t = std::make_shared<TensorImpl>(std::move(res[0]), out_shape, dt, dev, false);
-        auto hn_t = std::make_shared<TensorImpl>(std::move(hn_3d), hn_shape, dt, dev, false);
-        auto cn_t = std::make_shared<TensorImpl>(std::move(cn_3d), cn_shape, dt, dev, false);
+        auto out_t = helpers::fresh(std::move(res[0]), out_shape, dt, dev);
+        auto hn_t = helpers::fresh(std::move(hn_3d), hn_shape, dt, dev);
+        auto cn_t = helpers::fresh(std::move(cn_3d), cn_shape, dt, dev);
         register_trace_outputs(out_t, hn_t, cn_t);
         return {out_t, hn_t, cn_t};
     }
@@ -355,10 +356,9 @@ std::vector<TensorImplPtr> LstmBackward::forward(const TensorImplPtr& input_in,
 
     auto hn_3d = be.reshape(res[1], hn_storage_2d, hn_shape, dt);
     auto cn_3d = be.reshape(res[2], cn_storage_2d, cn_shape, dt);
-    std::vector<TensorImplPtr> outputs{
-        std::make_shared<TensorImpl>(std::move(res[0]), out_shape, dt, dev, true),
-        std::make_shared<TensorImpl>(std::move(hn_3d), hn_shape, dt, dev, true),
-        std::make_shared<TensorImpl>(std::move(cn_3d), cn_shape, dt, dev, true)};
+    std::vector<TensorImplPtr> outputs{helpers::fresh(std::move(res[0]), out_shape, dt, dev, true),
+                                       helpers::fresh(std::move(hn_3d), hn_shape, dt, dev, true),
+                                       helpers::fresh(std::move(cn_3d), cn_shape, dt, dev, true)};
 
     auto bwd = std::make_shared<LstmBackward>();
     bwd->saved_input = input->storage();

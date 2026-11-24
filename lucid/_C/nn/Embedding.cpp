@@ -105,8 +105,7 @@ TensorImplPtr EmbeddingBackward::forward(const TensorImplPtr& weight,
         be.embedding_forward(weight->storage(), indices->storage(), weight->shape(),
                              indices->shape(), out_shape, padding_idx, weight->dtype());
 
-    auto out = std::make_shared<TensorImpl>(std::move(out_storage), out_shape, weight->dtype(),
-                                            weight->device(), false);
+    auto out = helpers::fresh(std::move(out_storage), out_shape, weight->dtype(), weight->device());
 
     auto bwd = std::make_shared<EmbeddingBackward>();
     bwd->saved_indices_ = indices->storage();
@@ -218,8 +217,8 @@ TensorImplPtr RotaryPosEmbeddingBackward::forward(const TensorImplPtr& input,
 
     Storage out_storage = std::move(rope_out[0]);
 
-    auto out = std::make_shared<TensorImpl>(std::move(out_storage), input->shape(), input->dtype(),
-                                            input->device(), false);
+    auto out =
+        helpers::fresh(std::move(out_storage), input->shape(), input->dtype(), input->device());
     // wire_autograd records on_op_io internally — no explicit call.
 
     {
@@ -315,8 +314,7 @@ TensorImplPtr embedding_bag_op(const TensorImplPtr& weight,
         weight->storage(), indices->storage(), offsets->storage(), weight->shape(),
         indices->shape(), mode, padding_idx, include_last_offset, weight->dtype());
 
-    auto out = std::make_shared<TensorImpl>(std::move(out_storage), out_shape, weight->dtype(),
-                                            weight->device(), false);
+    auto out = helpers::fresh(std::move(out_storage), out_shape, weight->dtype(), weight->device());
 
     // This op used to return here, with no backward of any kind.
     //

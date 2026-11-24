@@ -36,6 +36,7 @@
 
 #include "../api.h"
 #include "Allocator.h"
+#include "ResultExtent.h"
 #include "Shape.h"
 #include "Storage.h"
 #include "TensorImpl.h"
@@ -113,13 +114,17 @@ inline CpuStorage allocate_cpu(const Shape& shape, Dtype dt) {
 // device : Device
 //     Device on which the storage resides.  Must match the storage's
 //     actual location.
+// requires_grad : bool
+//     ``true`` for the few forwards that hand back a result already marked
+//     as a gradient leaf (an LSTM's outputs, a factory called with
+//     ``requires_grad=True``).  Default ``false``.
 //
 // Returns
 // -------
 // TensorImplPtr
 //     ``std::shared_ptr<TensorImpl>`` to a freshly constructed tensor.
 //     The stride is initialised to the C-contiguous default by the
-//     :class:`TensorImpl` constructor; ``requires_grad`` is ``false``.
+//     :class:`TensorImpl` constructor.
 //
 // Notes
 // -----
@@ -132,6 +137,14 @@ inline CpuStorage allocate_cpu(const Shape& shape, Dtype dt) {
 // This matches the kernel pattern where storage and tensor are
 // produced in adjacent statements and the storage handle is no
 // longer needed after wrapping.
+//
+// A GPU ``s`` must hold exactly ``shape``'s element count of ``dt`` — a
+// storage of another extent raises :class:`LucidError` naming the op
+// (:func:`require_result_extent`).  The check lives here, not at each op,
+// because this is the one function a forward builds its result through: a
+// kernel family and an op with a forward of its own alike.  A view is not
+// built here (it shares its parent's buffer on purpose), and a CPU or phantom
+// storage is not compared.
 //
 // Examples
 // --------
@@ -146,8 +159,10 @@ inline CpuStorage allocate_cpu(const Shape& shape, Dtype dt) {
 // :func:`helpers::allocate_cpu` — typical Storage producer for the
 //     first argument.
 // :class:`TensorImpl` — concrete wrapper type returned.
-inline TensorImplPtr fresh(Storage&& s, Shape shape, Dtype dt, Device device) {
-    return std::make_shared<TensorImpl>(std::move(s), std::move(shape), dt, device, false);
+inline TensorImplPtr
+fresh(Storage&& s, Shape shape, Dtype dt, Device device, bool requires_grad = false) {
+    require_result_extent(s, shape, dt);
+    return std::make_shared<TensorImpl>(std::move(s), std::move(shape), dt, device, requires_grad);
 }
 
 }  // namespace lucid::helpers

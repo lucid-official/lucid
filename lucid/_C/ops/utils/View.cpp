@@ -234,8 +234,7 @@ TensorImplPtr build_view_output(const TensorImplPtr& a,
         // copies: ``storage()`` hands the backend its elements packed.
         Storage out_storage = backend::Dispatcher::for_device(a->device())
                                   .reshape(a->storage(), a->shape(), out_shape, a->dtype());
-        out = std::make_shared<TensorImpl>(std::move(out_storage), out_shape, a->dtype(),
-                                           a->device(), false);
+        out = helpers::fresh(std::move(out_storage), out_shape, a->dtype(), a->device());
     }
     // Autograd wires to ``a`` itself either way.
     kernel::NaryKernel<ViewBackward, 1>::wire_autograd({a}, out, false);

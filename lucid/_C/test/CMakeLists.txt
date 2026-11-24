@@ -29,7 +29,10 @@ set(BUILD_GMOCK            ON  CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 
 # ── Test sources ──────────────────────────────────────────────────────────────
-file(GLOB_RECURSE LUCID_TEST_SRCS
+# CONFIGURE_DEPENDS re-runs the glob on every build: without it a test file added
+# after the first configure is not in ``lucid_test`` until someone re-runs cmake,
+# and the gtest that was meant to guard a fix is silently absent.
+file(GLOB_RECURSE LUCID_TEST_SRCS CONFIGURE_DEPENDS
     core/*.cpp
     ops/*.cpp
     nn/*.cpp

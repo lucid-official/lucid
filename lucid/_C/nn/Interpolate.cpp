@@ -91,8 +91,7 @@ TensorImplPtr InterpolateBilinearBackward::forward(const TensorImplPtr& input0,
     Storage out_storage = be.interpolate_bilinear_forward(input->storage(), input->shape(), H_out,
                                                           W_out, align_corners, input->dtype());
 
-    auto out = std::make_shared<TensorImpl>(std::move(out_storage), out_shape, input->dtype(),
-                                            input->device(), false);
+    auto out = helpers::fresh(std::move(out_storage), out_shape, input->dtype(), input->device());
     // wire_autograd records on_op_io internally — no explicit call.
     {
         auto bwd = std::make_shared<InterpolateBilinearBackward>();
@@ -199,8 +198,7 @@ TensorImplPtr InterpolateTrilinearBackward::forward(
     Storage out_storage = be.interpolate_trilinear_forward(
         input->storage(), input->shape(), D_out, H_out, W_out, align_corners, input->dtype());
 
-    auto out = std::make_shared<TensorImpl>(std::move(out_storage), out_shape, input->dtype(),
-                                            input->device(), false);
+    auto out = helpers::fresh(std::move(out_storage), out_shape, input->dtype(), input->device());
     {
         auto bwd = std::make_shared<InterpolateTrilinearBackward>();
         bwd->D_in_ = static_cast<int>(input->shape()[2]);
@@ -268,8 +266,7 @@ InterpolateNearestBackward2D::forward(const TensorImplPtr& input0, int H_out, in
     auto& be = backend::Dispatcher::for_device(input->device());
     Storage out_storage = be.interpolate_nearest_2d_forward(input->storage(), input->shape(), H_out,
                                                             W_out, input->dtype());
-    auto out = std::make_shared<TensorImpl>(std::move(out_storage), out_shape, input->dtype(),
-                                            input->device(), false);
+    auto out = helpers::fresh(std::move(out_storage), out_shape, input->dtype(), input->device());
     {
         auto bwd = std::make_shared<InterpolateNearestBackward2D>();
         bwd->H_in_ = static_cast<int>(input->shape()[2]);
@@ -339,8 +336,7 @@ TensorImplPtr InterpolateNearestBackward3D::forward(const TensorImplPtr& input0,
     auto& be = backend::Dispatcher::for_device(input->device());
     Storage out_storage = be.interpolate_nearest_3d_forward(input->storage(), input->shape(), D_out,
                                                             H_out, W_out, input->dtype());
-    auto out = std::make_shared<TensorImpl>(std::move(out_storage), out_shape, input->dtype(),
-                                            input->device(), false);
+    auto out = helpers::fresh(std::move(out_storage), out_shape, input->dtype(), input->device());
     {
         auto bwd = std::make_shared<InterpolateNearestBackward3D>();
         bwd->D_in_ = static_cast<int>(input->shape()[2]);

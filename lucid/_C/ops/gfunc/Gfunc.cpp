@@ -81,8 +81,7 @@ using helpers::allocate_cpu;
 // requires_grad, dtype, and device are forwarded correctly.
 inline TensorImplPtr
 finalize(Storage&& storage, Shape shape, Dtype dt, Device device, bool requires_grad) {
-    return std::make_shared<TensorImpl>(std::move(storage), std::move(shape), dt, device,
-                                        requires_grad);
+    return helpers::fresh(std::move(storage), std::move(shape), dt, device, requires_grad);
 }
 
 // A factory's result, declared to an active compile trace as made from
@@ -470,13 +469,6 @@ void require_scatter_dtypes(const char* op,
                             std::string(op) + ": src must have self's dtype");
 }
 
-std::string format_scatter_shape(const Shape& sh) {
-    std::string out = "[";
-    for (std::size_t i = 0; i < sh.size(); ++i)
-        out += (i ? ", " : "") + std::to_string(sh[i]);
-    return out + "]";
-}
-
 AxisScatterOperands empty_axis_scatter_operands(int d,
                                                 const Shape& bs,
                                                 const TensorImplPtr& indices,
@@ -494,8 +486,8 @@ void check_axis_scatter_shapes(
     const char* op, int d, const Shape& bs, const Shape& is, const Shape& ss) {
     const int ndim = static_cast<int>(bs.size());
     if (is.size() != bs.size() || ss.size() != bs.size())
-        ErrorBuilder(op).fail("index " + format_scatter_shape(is) + ", self " +
-                              format_scatter_shape(bs) + " and src " + format_scatter_shape(ss) +
+        ErrorBuilder(op).fail("index " + shape_to_string(is) + ", self " + shape_to_string(bs) +
+                              " and src " + shape_to_string(ss) +
                               " must have the same number of dimensions");
     // The index walks src and lands in base, so it may be no larger than src
     // on any axis, nor than base on any but ``dim``.  Unchecked, a larger
@@ -503,10 +495,10 @@ void check_axis_scatter_shapes(
     for (int i = 0; i < ndim; ++i) {
         const auto k = static_cast<std::size_t>(i);
         if (is[k] > ss[k] || (i != d && is[k] > bs[k]))
-            ErrorBuilder(op).fail("Expected index " + format_scatter_shape(is) +
-                                  " to be no larger than self " + format_scatter_shape(bs) +
+            ErrorBuilder(op).fail("Expected index " + shape_to_string(is) +
+                                  " to be no larger than self " + shape_to_string(bs) +
                                   " apart from dimension " + std::to_string(d) +
-                                  " and to be no larger than src " + format_scatter_shape(ss));
+                                  " and to be no larger than src " + shape_to_string(ss));
     }
     // Any index into an empty axis is out of range; saying so needs only the
     // shapes, so Metal, which reads no index back, refuses it too (as
@@ -567,7 +559,7 @@ TensorImplPtr dispatch_axis_scatter(const char* scope_name,
     auto& be = backend::Dispatcher::for_device(dv);
     Storage out_s = (be.*kernel)(base->storage(), ops.indices->storage(), ops.values->storage(), bs,
                                  is, ops.dim, dt);
-    auto out = std::make_shared<TensorImpl>(std::move(out_s), bs, dt, dv, false);
+    auto out = helpers::fresh(std::move(out_s), bs, dt, dv);
     if (auto* trc = ::lucid::compile::current_tracer())
         trc->on_op_io({base, ops.indices, ops.values}, out);
     return out;
@@ -1196,8 +1188,7 @@ TensorImplPtr unfold_dim_op(const TensorImplPtr& a, int dim, int size, int step)
     } else {
         auto& be = backend::Dispatcher::for_device(a->device());
         Storage out_s = be.unfold_dim(a->storage(), in_shape, d, size, step, a->dtype());
-        result = std::make_shared<TensorImpl>(std::move(out_s), out_shape, a->dtype(), a->device(),
-                                              false);
+        result = helpers::fresh(std::move(out_s), out_shape, a->dtype(), a->device());
     }
     if (auto* trc = ::lucid::compile::current_tracer()) {
         trc->on_op_io({a}, result);

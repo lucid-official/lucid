@@ -11,24 +11,9 @@
 
 #include <sstream>
 
+#include "Shape.h"
+
 namespace lucid {
-
-namespace {
-
-// Converts a shape vector to a bracketed comma-separated string, e.g. [2,3,4].
-std::string format_shape(const std::vector<std::int64_t>& s) {
-    std::ostringstream os;
-    os << '[';
-    for (std::size_t i = 0; i < s.size(); ++i) {
-        if (i)
-            os << ',';
-        os << s[i];
-    }
-    os << ']';
-    return os.str();
-}
-
-}  // namespace
 
 // The LucidError base is constructed with an empty string; msg_ is overwritten
 // below after all member fields have been initialised, so the formatted message
@@ -53,8 +38,8 @@ ShapeMismatch::ShapeMismatch(std::vector<std::int64_t> expected,
                              std::string context)
     : LucidError(""), expected_(std::move(expected)), got_(std::move(got)) {
     std::ostringstream os;
-    os << "ShapeMismatch (" << context << "): expected " << format_shape(expected_) << ", got "
-       << format_shape(got_);
+    os << "ShapeMismatch (" << context << "): expected " << shape_to_string(expected_) << ", got "
+       << shape_to_string(got_);
     msg_ = os.str();
 }
 

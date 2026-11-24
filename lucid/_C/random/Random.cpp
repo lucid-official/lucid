@@ -17,6 +17,7 @@
 #include "../core/Error.h"
 #include "../core/ErrorBuilder.h"
 #include "../core/Generator.h"
+#include "../core/Helpers.h"
 #include "../core/PhantomMode.h"
 #include "../core/Profiler.h"
 #include "../core/Scope.h"
@@ -34,7 +35,7 @@ inline Generator& resolve_gen(Generator* gen) {
 // Construct a leaf TensorImpl from a freshly allocated Storage.
 // requires_grad is always false for random tensors.
 inline TensorImplPtr finalize(Storage&& storage, Shape shape, Dtype dt, Device device) {
-    return std::make_shared<TensorImpl>(std::move(storage), std::move(shape), dt, device, false);
+    return helpers::fresh(std::move(storage), std::move(shape), dt, device);
 }
 
 // Draws complex128 on the CPU as twice as many float64 parts, relabelled.

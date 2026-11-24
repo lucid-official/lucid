@@ -52,8 +52,7 @@ TensorImplPtr astype_op(const TensorImplPtr& a, Dtype dst_dtype) {
     OpScopeFull scope{"astype", a->device(), dst_dtype, shape};
     auto& be = backend::Dispatcher::for_device(a->device());
     Storage out = be.astype(a->storage(), shape, a->dtype(), dst_dtype);
-    auto out_impl =
-        std::make_shared<TensorImpl>(std::move(out), shape, dst_dtype, a->device(), false);
+    auto out_impl = helpers::fresh(std::move(out), shape, dst_dtype, a->device());
     // 3.5 Phase 1.3: trace hook — push the destination dtype as an
     // attribute (raw int8 of the Dtype enum) so the MPSGraph emitter
     // can route to the right ``castTensor:toType:`` call.  Pushed

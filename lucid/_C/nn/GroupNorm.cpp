@@ -90,8 +90,7 @@ TensorImplPtr GroupNormBackward::forward(const TensorImplPtr& x,
             .group_norm_forward(x_eff->storage(), gamma_eff->storage(), beta_eff->storage(), B, C,
                                 spatial_total, G, S, eps, x_eff->shape(), eff_dt);
 
-    auto out = std::make_shared<TensorImpl>(std::move(forward[0]), x_eff->shape(), eff_dt,
-                                            x_eff->device(), false);
+    auto out = helpers::fresh(std::move(forward[0]), x_eff->shape(), eff_dt, x_eff->device());
     auto bwd = std::make_shared<GroupNormBackward>();
     bwd->saved_mean_ = std::move(forward[1]);
     bwd->saved_rstd_ = std::move(forward[2]);

@@ -171,8 +171,7 @@ ForwardCore run_forward(const TensorImplPtr& q,
                           scale, is_causal, need_weights, q->dtype());
 
     // results[0] = weights storage; results[1] = output storage.
-    auto out = std::make_shared<TensorImpl>(std::move(results[1]), out_shape, q->dtype(),
-                                            q->device(), false);
+    auto out = helpers::fresh(std::move(results[1]), out_shape, q->dtype(), q->device());
 
     scope.set_flops(static_cast<std::int64_t>(2) * static_cast<std::int64_t>(fq.B) *
                     static_cast<std::int64_t>(fq.L) * static_cast<std::int64_t>(fk.L) *
@@ -376,8 +375,8 @@ scaled_dot_product_attention_with_weights_op(const TensorImplPtr& q_in,
     auto core = run_forward(q, k, v, attn_mask_or_null, scale, is_causal, /*need_weights=*/true);
 
     Shape weights_shape = core.weights_shape;
-    auto weights = std::make_shared<TensorImpl>(
-        std::move(core.weights_storage), std::move(weights_shape), q->dtype(), q->device(), false);
+    auto weights = helpers::fresh(std::move(core.weights_storage), std::move(weights_shape),
+                                  q->dtype(), q->device());
 
     if (GradMode::is_enabled() &&
         (q->requires_grad() || k->requires_grad() || v->requires_grad())) {

@@ -77,8 +77,7 @@ RMSNormBackward::forward(const TensorImplPtr& x, const TensorImplPtr& gamma, dou
                                          x_eff->shape(), eff_dt);
     scope.set_flops(static_cast<std::int64_t>(outer * N) * 4);
 
-    auto out = std::make_shared<TensorImpl>(std::move(forward.first), x_eff->shape(), eff_dt,
-                                            x_eff->device(), false);
+    auto out = helpers::fresh(std::move(forward.first), x_eff->shape(), eff_dt, x_eff->device());
 
     auto bwd = std::make_shared<RMSNormBackward>();
     bwd->saved_rstd_ = std::move(forward.second);

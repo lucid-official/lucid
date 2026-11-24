@@ -416,7 +416,7 @@ TensorImplPtr forward(const Pair& p, const TensorImplPtr& a, const TensorImplPtr
     OpScopeFull scope{op_name(K), device, h, shape};
     Storage out_storage =
         compute(K, p.scalar_first, p.t->storage(), shape, h, p.s->storage(), p.s->dtype(), device);
-    auto out = std::make_shared<TensorImpl>(std::move(out_storage), shape, h, device, false);
+    auto out = helpers::fresh(std::move(out_storage), shape, h, device);
     scope.set_flops(static_cast<std::int64_t>(out->numel()));
 
     auto bwd = std::make_shared<ScalarBackward<K>>();

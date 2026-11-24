@@ -123,8 +123,8 @@ LinearBackward::forward(const TensorImplPtr& x, const TensorImplPtr& W, const Te
                               .linear(x_eff->storage(), W_eff->storage(), b_eff->storage(),
                                       x_eff->shape(), W_eff->shape(), out_shape, eff_dt);
 
-    auto out = std::make_shared<TensorImpl>(std::move(out_storage), std::move(out_shape), eff_dt,
-                                            x_eff->device(), false);
+    auto out =
+        helpers::fresh(std::move(out_storage), std::move(out_shape), eff_dt, x_eff->device());
 
     // Wire the backward node; saved_inputs_ holds {x, W} at the
     // effective (cast) dtype so apply() can do the matmul transposes

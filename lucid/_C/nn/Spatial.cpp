@@ -87,8 +87,7 @@ AffineGridBackward::forward(const TensorImplPtr& theta, int N, int H, int W, boo
     Storage out_storage =
         be.affine_grid_forward(theta_eff->storage(), N, H, W, align_corners, eff_dt);
 
-    auto out = std::make_shared<TensorImpl>(std::move(out_storage), out_shape, eff_dt,
-                                            theta_eff->device(), false);
+    auto out = helpers::fresh(std::move(out_storage), out_shape, eff_dt, theta_eff->device());
     // wire_autograd records on_op_io internally, but the early-return
     // below skips it when grad is off — record explicitly so the trace
     // captures inputs in both code paths.
@@ -223,8 +222,7 @@ TensorImplPtr GridSampleBackward::forward(const TensorImplPtr& input0,
         be.grid_sample_forward(input->storage(), grid->storage(), input->shape(), grid->shape(),
                                mode, padding_mode, align_corners, input->dtype());
 
-    auto out = std::make_shared<TensorImpl>(std::move(out_storage), out_shape, input->dtype(),
-                                            input->device(), false);
+    auto out = helpers::fresh(std::move(out_storage), out_shape, input->dtype(), input->device());
     // Same as ``affine_grid`` above: ``wire_autograd`` records on_op_io,
     // but the early return below skips it whenever no gradient is
     // wanted — which is every inference pass, and tracing is one.  The
