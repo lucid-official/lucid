@@ -566,6 +566,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - wire heaviside, complex, ldexp, take and gather (LCD-1075)
 
+- vecdot, solve and householder_product take the pair rule
+
 ### Performance
 
 - pool the MAE sets without rank-6 views

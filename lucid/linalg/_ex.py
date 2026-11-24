@@ -18,6 +18,7 @@ from lucid._dispatch import _unwrap, _wrap
 from lucid._dtype import finfo as _finfo
 from lucid._engine_scope import untraced
 from lucid._ops._autocast import _autocast_entry
+from lucid._ops._bool_refusal import refuse_unlike
 from lucid._ops._dims import _wrap_dim
 from lucid._tensor._indexing import broadcast_shapes as _broadcast_batch
 from lucid._tensor.tensor import Tensor
@@ -35,7 +36,6 @@ from lucid.linalg import (
     solve_triangular,
     svd,
 )
-from lucid.linalg._dtype_guard import _require_same_dtype
 from lucid.linalg._lu import _lu_factor_packed
 from lucid.linalg._operand_guard import _require_matrix
 
@@ -1222,10 +1222,10 @@ def householder_product(input: Tensor, tau: Tensor) -> Tensor:
     >>> Q.shape
     (4, 3)
     """
-    _require_same_dtype("linalg.householder_product", input, tau, ("input", "tau"))
     k, r = _check_householder_shapes(
         tuple(int(s) for s in input.shape), tuple(int(s) for s in tau.shape)
     )
+    refuse_unlike("linalg.householder_product", input, tau)
     with _autocast_entry("householder_product", _unwrap(input), _unwrap(tau)) as (h_impl, t_impl):
         H_cast, tau_cast = _wrap(h_impl), _wrap(t_impl)
         use_ops = (

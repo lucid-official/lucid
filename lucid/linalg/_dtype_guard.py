@@ -1,25 +1,14 @@
-"""Dtype rules of the two-operand solvers, in one place.
+"""The dtype rule of ``ldl_solve``'s packed factor.
 
-``solve`` (and ``solve_ex`` / ``tensorsolve`` through it) and
-``householder_product`` refuse operands of different dtypes, as the reference
-does; ``solve_triangular`` reads the right-hand side in the matrix's dtype and
-answers in it.  The engine's kernels are single-dtype, and used to read the
-second operand as the first's, narrowing a ``float64`` right-hand side
-silently.
+``solve`` (and ``solve_ex`` / ``tensorsolve`` through it) and ``householder_product``
+refuse operands of different dtypes, as the reference does, through
+:func:`lucid._ops._bool_refusal.refuse_unlike`, which owns that rule for every op that
+refuses a pair; ``solve_triangular`` reads the right-hand side in the matrix's dtype
+and answers in it.
 """
 
-from lucid._C import engine as _C_engine
 from lucid._ops._bool_refusal import refuse
 from lucid._tensor.tensor import Tensor
-
-
-def _require_same_dtype(op: str, a: Tensor, b: Tensor, names: tuple[str, str] = ("A", "B")) -> None:
-    """Refuse ``a`` and ``b`` of different dtypes, in ``op``'s name."""
-    if a.dtype != b.dtype:
-        raise _C_engine.DtypeMismatch(
-            f"{op}: expected {names[0]} and {names[1]} to have the same dtype, "
-            f"but found {a.dtype} and {b.dtype}"
-        )
 
 
 def _check_ldl_factor(factor: Tensor) -> None:

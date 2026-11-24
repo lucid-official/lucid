@@ -414,6 +414,9 @@ _PAIRED: tuple[Pair, ...] = (
     Pair("polar", "abs", "angle"),
     Pair("cdist", "x1", "x2"),
     Pair("linalg.cross"),
+    Pair("linalg.vecdot", "x", "y"),
+    Pair("linalg.solve", "A", "B"),
+    Pair("linalg.householder_product", "input", "tau"),
     Pair("grid_sample", "input", "grid"),
 )
 
