@@ -23,7 +23,8 @@ from typing import TYPE_CHECKING, cast
 import lucid
 from lucid import _promotion
 from lucid._C import engine as _C_engine
-from lucid._dispatch import _float_input
+from lucid._dispatch import _binary_operands, _float_input, _refuse_bool_subtraction, _wrap
+from lucid._ops._adapters import _scale_by_alpha
 from lucid._ops._bool_refusal import refuse
 from lucid._ops.composite import _bessel
 from lucid._ops.composite._expm1 import _erfc_double, _erfc_single, _expm1, _logaddexp2, _sgn
@@ -76,7 +77,7 @@ def positive(input: Tensor) -> Tensor:
     return input
 
 
-def rsub(input: Tensor, other: Tensor | Scalar, *, alpha: float = 1.0) -> Tensor:
+def rsub(input: Tensor, other: Tensor | Scalar, *, alpha: float = 1) -> Tensor:
     r"""Reverse subtraction: :math:`b - \alpha \cdot a`.
 
     Useful when ``other`` is a Python scalar that cannot left-bind the ``-``
@@ -89,7 +90,7 @@ def rsub(input: Tensor, other: Tensor | Scalar, *, alpha: float = 1.0) -> Tensor
     other : Tensor | Scalar
         Left operand (minuend).
     alpha : float, optional
-        Scalar multiplier applied to ``input``. Defaults to ``1.0``.
+        Scalar multiplier applied to ``input``. Defaults to ``1``.
 
     Returns
     -------
@@ -105,7 +106,9 @@ def rsub(input: Tensor, other: Tensor | Scalar, *, alpha: float = 1.0) -> Tensor
         \text{out}_i = b_i - \alpha \cdot a_i
 
     Equivalent to :func:`subtract` with the operands reversed (and ``alpha``
-    re-attached to the new second argument). Gradient w.r.t. ``input`` is
+    re-attached to the new second argument), so ``alpha`` is held to the same
+    rules: a float or complex ``alpha`` is refused for an integral result and a
+    complex one for a floating result. Gradient w.r.t. ``input`` is
     :math:`-\alpha`; w.r.t. ``other`` is :math:`1`.
 
     Examples
@@ -115,10 +118,9 @@ def rsub(input: Tensor, other: Tensor | Scalar, *, alpha: float = 1.0) -> Tensor
     >>> lucid.rsub(a, 10.0)
     tensor([9., 8.])
     """
-    alpha = _promotion.as_number(alpha)
-    return (
-        other - input if alpha == 1.0 and not isinstance(alpha, bool) else other - (input * alpha)
-    )
+    _refuse_bool_subtraction(other, input)
+    a, b = _binary_operands(other, input)
+    return _wrap(_C_engine.sub(a, _scale_by_alpha(a, b, alpha)))
 
 
 # ── Inverse hyperbolic (composed) ──────────────────────────────────────────

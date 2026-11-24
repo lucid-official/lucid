@@ -37,6 +37,7 @@ from lucid._ops._dims import (
     _wrap_dims,
 )
 from lucid._ops._reduce import _ValuesIndices, _logical_not_adapter
+from lucid._ops._scalar_cast import check_alpha
 from lucid._tensor_args import require_tensor, require_tensors
 from lucid._types import Scalar, TensorOrScalar
 
@@ -105,21 +106,20 @@ _ADD_SUB_SIGNATURE = _BINARY_SIGNATURE.replace(
 )
 
 
-def _scale_by_alpha(a: _Impl, b: _Impl, alpha: Scalar, name: str = "alpha") -> _Impl:
+def _scale_by_alpha(a: _Impl, b: _Impl, alpha: Scalar | complex, name: str = "alpha") -> _Impl:
     """Scale ``b`` by ``alpha`` for ``add`` / ``sub``, matching the reference's dtype rules.
 
     ``a`` is the operand whose dtype decides what a scale may be; ``name`` is
-    how a refusal spells the scalar, since ``addmm`` has a ``beta`` too.
+    how a refusal spells the scalar, since ``addmm`` has a ``beta`` too.  A
+    float or complex ``alpha`` the dtype cannot hold is refused, not cast: a
+    complex one lost its imaginary part (:func:`~lucid._ops._scalar_cast.check_alpha`).
     """
     alpha = _promotion.as_number(alpha)
     if isinstance(alpha, bool):
         if a.dtype != _C_engine.Bool:
             raise RuntimeError(f"Boolean {name} only supported for Boolean results.")
         return b if alpha else _C_engine.zeros_like(b)
-    if isinstance(alpha, float) and _promotion.is_integral(a.dtype):
-        raise RuntimeError(
-            f"For integral input tensors, argument {name} must not be a floating point number."
-        )
+    check_alpha(a.dtype, alpha, name)
     if alpha == 1 or (a.dtype == _C_engine.Bool and alpha != 0):
         return b
     if a.dtype == _C_engine.Bool:
@@ -205,7 +205,7 @@ def _make_arith_adapter(
         )
         if adds_or_subtracts:
             alpha = _promotion.as_number(alpha)
-            if alpha != 1 or isinstance(alpha, (bool, float)):
+            if alpha != 1 or isinstance(alpha, (bool, float, complex)):
                 b = _scale_by_alpha(a, b, alpha)
         return engine_fn(a, b)
 

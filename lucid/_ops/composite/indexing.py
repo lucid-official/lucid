@@ -48,6 +48,7 @@ from lucid import _promotion
 from lucid._dispatch import _cannot_cast_inplace, _unwrap, _wrap
 from lucid._ops._autocast import _autocast_entry
 from lucid._ops._dims import _dim_size, _wrap_dim
+from lucid._ops._scalar_cast import cast_scalar
 import lucid._C.engine as _C_engine
 from lucid._tensor._indexing import (
     _INDEX_DTYPES,
@@ -560,7 +561,8 @@ def index_add(
     dim, positions = _positions("index_add", input, dim, index)
     count = int(positions.shape[0])
     _require_source_slices("index_add", input, dim, count, source, same_rank=True)
-    scaled = source * alpha if alpha != 1 else source
+    factor = cast_scalar(_unwrap(input).dtype, alpha)
+    scaled = source * factor if factor != 1 else source
     return _write_slices(
         "index_add",
         input,

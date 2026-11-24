@@ -133,6 +133,11 @@ def is_integer(d: _C_engine.Dtype) -> bool:
     return _BY_CODE[d.value][0] == INTEGER
 
 
+def is_complex(d: _C_engine.Dtype) -> bool:
+    """Whether ``d`` is complex64 or complex128 — the dtypes that hold an imaginary part."""
+    return _BY_CODE[d.value][0] == COMPLEX
+
+
 def is_half(d: _C_engine.Dtype) -> bool:
     """Whether ``d`` is float16 or bfloat16 — the dtypes the engine's
     mul/div/floordiv op-math computes in float32 for."""

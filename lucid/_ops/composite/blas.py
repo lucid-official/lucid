@@ -9,6 +9,7 @@ from lucid._dispatch import _promote_impls, _unwrap, _wrap
 from lucid._ops._adapters import _scale_by_alpha
 from lucid._ops._autocast import _amp_op, _autocast_entry, _autocast_suspended
 from lucid._ops._products import _require_vector
+from lucid._ops._scalar_cast import cast_scalar, real_scalar
 import lucid.linalg as _la
 
 if TYPE_CHECKING:
@@ -17,7 +18,7 @@ if TYPE_CHECKING:
 _COMPLEX = (_C_engine.C64, _C_engine.C128)
 
 
-def _scaled(tensor: Tensor, factor: float, name: str) -> Tensor:
+def _scaled(tensor: Tensor, factor: float | complex, name: str) -> Tensor:
     """``tensor * factor`` under the reference's rule for ``tensor``'s dtype.
 
     An integral tensor takes an integral factor and keeps its dtype, so the
@@ -28,23 +29,11 @@ def _scaled(tensor: Tensor, factor: float, name: str) -> Tensor:
     return _wrap(_scale_by_alpha(impl, impl, factor, name))
 
 
-def _cast_scalar(dtype: _C_engine.Dtype, factor: int | float) -> int | float:
-    """``factor`` as the reference's GEMM-backed ops read it for an integer ``dtype``.
-
-    ``addmm``, ``addmv``, ``baddbmm``, ``addbmm`` and ``addcmul`` cast their
-    scalars to the tensor dtype (``beta=0.5`` on ``int32`` is ``0``), where
-    ``addr``, ``add`` and ``sub`` refuse a float for an integer tensor.
-    """
-    if isinstance(factor, float) and _promotion.is_integer(dtype):
-        return int(factor)
-    return factor
-
-
 def _scaled_add(
     input: Tensor,
-    beta: float,
+    beta: float | complex,
     prod: Tensor,
-    alpha: float,
+    alpha: float | complex,
     *,
     op: str | None = None,
     cast_scalars: bool = True,
@@ -54,9 +43,8 @@ def _scaled_add(
         raise _C_engine.DtypeMismatch(
             f"DtypeMismatch ({op}): expected {input.dtype._name}, got {prod.dtype._name}"
         )
-    if cast_scalars:
-        beta = _cast_scalar(_unwrap(input).dtype, beta)
-        alpha = _cast_scalar(_unwrap(prod).dtype, alpha)
+    beta = cast_scalar(_unwrap(input).dtype, beta, cast_integral=cast_scalars)
+    alpha = cast_scalar(_unwrap(prod).dtype, alpha, cast_integral=cast_scalars)
     scaled_input = _scaled(input, beta, "beta")
     scaled_prod = _scaled(prod, alpha, "alpha")
     if beta == 0:
@@ -116,7 +104,11 @@ def addmm(
     (CPU stream) or MLX (GPU stream).  An integer ``input`` keeps its dtype,
     ``beta`` and ``alpha`` being cast to it; bool operands are refused, as
     for every product summed over an axis (``addmv``, ``baddbmm``,
-    ``addbmm``, ``mv``, ``vdot``).
+    ``addbmm``, ``mv``, ``vdot``).  A complex ``beta`` or ``alpha`` is for a
+    complex tensor: a real one reads it as its real part when the imaginary part
+    is zero and raises ``RuntimeError`` otherwise, so an imaginary part is never
+    dropped silently (the same holds for ``addmv``, ``addbmm``, ``baddbmm``,
+    ``addcmul`` and ``addcdiv``).
 
     Examples
     --------
@@ -333,7 +325,7 @@ def addr(input: Tensor, vec1: Tensor, vec2: Tensor, *, beta: float = 1, alpha: f
     The outer product is a rank-1 matrix, so this update can be used to
     build rank-1 corrections in optimisation algorithms (Broyden / BFGS).
     An integer or bool ``input`` keeps its dtype; unlike ``addmm``, a float
-    ``beta`` or ``alpha`` for it is refused rather than cast.
+    or complex ``beta`` or ``alpha`` for it is refused rather than cast.
 
     Examples
     --------
@@ -432,8 +424,9 @@ def _lerp(input: Tensor, end: Tensor, weight: float | Tensor) -> Tensor:
         scaled = _C_engine.mul(weight_impl, _unwrap(diff))
     else:
         diff_impl = _C_engine.sub(end_impl, input_impl)
+        step = float(real_scalar(diff_impl.dtype, weight))
         scaled = _C_engine.mul(
-            _C_engine.full(list(diff_impl.shape), float(weight), diff_impl.dtype, diff_impl.device),
+            _C_engine.full(list(diff_impl.shape), step, diff_impl.dtype, diff_impl.device),
             diff_impl,
         )
     return _wrap(_C_engine.add(input_impl, scaled))
@@ -502,7 +495,7 @@ def addcmul(input: Tensor, tensor1: Tensor, tensor2: Tensor, *, value: float = 1
         t2,
     ):
         input, tensor1, tensor2 = _wrap(inp), _wrap(t1), _wrap(t2)
-        return input + (tensor1 * tensor2) * _cast_scalar(common, value)
+        return input + (tensor1 * tensor2) * cast_scalar(common, value)
 
 
 def addcdiv(input: Tensor, tensor1: Tensor, tensor2: Tensor, *, value: float = 1) -> Tensor:
@@ -556,13 +549,14 @@ def addcdiv(input: Tensor, tensor1: Tensor, tensor2: Tensor, *, value: float = 1
         raise RuntimeError(
             "Integer division with addcdiv is no longer supported; use floor_divide instead."
         )
+    common = _promotion.result_type(*(_unwrap(t) for t in (input, tensor1, tensor2)))
     with _autocast_entry("addcdiv", _unwrap(input), _unwrap(tensor1), _unwrap(tensor2)) as (
         inp,
         t1,
         t2,
     ):
         input, tensor1, tensor2 = _wrap(inp), _wrap(t1), _wrap(t2)
-        return input + (tensor1 / tensor2) * value
+        return input + (tensor1 / tensor2) * cast_scalar(common, value)
 
 
 @_amp_op("mv")

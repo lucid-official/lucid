@@ -427,6 +427,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `max(a, b)` and `min(a, b)`, and the methods `Tensor.max(other)` and `Tensor.min(other)`, with a tensor second argument (positional or `other=`), failed with "item() can only be called on a tensor with one element". They now return the elementwise maximum or minimum, exactly `maximum(a, b)` / `minimum(a, b)`: same promotion, broadcasting, NaN propagation and gradient (LCD-1073).
 
+- refuse a complex alpha, beta or value a tensor cannot hold
 
 ### Added
 
