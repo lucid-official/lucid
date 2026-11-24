@@ -440,7 +440,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `pow` of a complex64 tensor on Metal answers `std::pow`'s special values at a zero base, as the CPU and the reference do. `0 ** 0` is `nan+nanj` and `0 ** -1` is `inf+nanj`, where MLX gave 0 for every exponent. This covers the tensor, scalar-exponent and scalar-base forms and the zero-base gradient, which had been a finite 0 where the reference is NaN. The patch costs one extra pass over `mx::power` (about 1.5-1.7x the bare op); lanes with a non-zero base are unchanged (LCD-1082).
 
-- refuse a 1-D rhs in solve_triangular, lu_solve, ldl_solve
+- `linalg.solve_triangular` refuses a non-square A, a B whose rows (columns with `left=False`) do not fit A, and batches that do not broadcast with the reference's class, message and order of checks (LCD-1083).
 
 ### Added
 
@@ -658,6 +658,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `addcmul` and `addcdiv` with a complex `value` that has no imaginary part keep a real tensor real; they used to promote the result to complex (LCD-1076).
 - `rsub` scales through the same `alpha` rule as `sub`: a float, complex or bool `alpha` on an integer tensor is refused as `sub` refuses it, where it used to be promoted or accepted. Its default `alpha` is `1`, not `1.0` (LCD-1076).
 - every engine forward checks that its result's storage holds its shape's bytes before handing it back; a short result is an error rather than a silent out-of-bounds read. Engine shape messages now spell a shape as `[2, 3]` (LCD-1072).
+- **Behaviour change:** `linalg.solve_triangular`, `linalg.lu_solve` and `linalg.ldl_solve` need a right-hand side `B` of at least two dimensions, as the reference does. A 1-D (or 0-d) `B` was solved as a vector and now raises: `ShapeMismatch` (a `RuntimeError` and a `ValueError`) reading `linalg.solve_triangular: The input tensor B must have at least 2 dimensions.` (`lu_solve` alike; `ldl_solve` raises the reference's `IndexError`). To migrate, pass one column: `lu_solve(LU, pivots, b.unsqueeze(-1))`, then `.squeeze(-1)` the answer. `linalg.solve`, `solve_ex` and `lstsq` still read a vector `B` (LCD-1083).
 
 ---
 
