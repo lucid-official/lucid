@@ -615,6 +615,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - record that 1055fa3b9 moves no binary interface
 
+- The footprint tests in `test_cache_memory.py` no longer fail about half the time on a loaded machine. The cache did evict; Metal returned the memory of the released executables 2–13 s later, after the tests' fixed 3 s sleep. They now wait until the release the assertion needs has arrived, against the lowest footprint seen, with the threshold unchanged and larger graphs (LCD-1112).
+
 ### Changed
 
 - one spelling for which grads backward wants (LCD-839)
