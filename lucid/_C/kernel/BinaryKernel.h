@@ -380,8 +380,7 @@ inline TensorImplPtr maybe_cast_for_kernel(const TensorImplPtr& t, Dtype dt) {
         return t;
     auto& be = backend::Dispatcher::for_device(t->device());
     Storage cast_storage = be.cast(t->storage(), t->shape(), t->dtype(), dt);
-    return std::make_shared<TensorImpl>(std::move(cast_storage), t->shape(), dt, t->device(),
-                                        false);
+    return helpers::fresh(std::move(cast_storage), t->shape(), dt, t->device());
 }
 
 // The dtype an input's gradient goes back in, when the kernel computed with

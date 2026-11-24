@@ -613,6 +613,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - outer, ger and addr refuse a vector that is not 1-D with ShapeMismatch ("Expected 1-D argument vec1, but got 2-D"), and addr refuses an accumulator of more than 2 dimensions. Before, they raised a LucidError or broadcast to a result of the wrong rank (LCD-1061).
 - block_diag ranks its operands as given, as the reference does: a 0-d int16 beside an int8 vector now answers int8, not int16 (LCD-1060).
 - drop the unused mlx compile include (LCD-1072)
+- build the input dtype cast through fresh (LCD-1072)
 
 ---
 
