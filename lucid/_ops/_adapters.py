@@ -172,8 +172,8 @@ def _make_arith_adapter(
 
     matmul/dot/inner/outer deliberately bypass it: a scalar operand is
     meaningless there.  ``outer`` promotes its two tensors through
-    ``_outer_adapter`` instead; the others have dtype constraints of their
-    own that the engine enforces.
+    ``_outer_adapter`` instead; ``dot`` and ``inner`` (``_products``) and
+    ``matmul`` have dtype constraints of their own that the engine enforces.
 
     mul and floor division — in place or not — hand a half tensor's scalar
     partner over unrounded, for the engine's op-math.  ``div`` and ``div_``,

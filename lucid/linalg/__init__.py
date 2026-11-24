@@ -12,6 +12,7 @@ from lucid._dtype import _ENGINE_TO_DTYPE, to_engine_dtype
 from lucid._ops._adapters import _outer_adapter
 from lucid._ops._autocast import _autocast_entry
 from lucid._ops._bool_refusal import refuse as _refuse, refuse_bool as _refuse_bool
+from lucid._ops._products import _dot_adapter, _inner_adapter
 from lucid._ops._reduce import _reduction_axes, _require_normable, _truth_mask
 from lucid._promotion import try_unwrap as _try_unwrap
 from lucid._tensor._indexing import broadcast_shapes as _broadcast_batch
@@ -2079,9 +2080,8 @@ def dot(x: Tensor, y: Tensor) -> Tensor:
 
     Notes
     -----
-    For higher-rank tensors use :func:`inner` (last-dim contraction)
-    or :func:`vecdot` (explicit axis), and :func:`matmul` for matrix
-    products.
+    Any other rank is refused with a ``ShapeMismatch`` (a ``RuntimeError``);
+    :func:`inner`, :func:`vecdot` and :func:`matmul` take those.
 
     Examples
     --------
@@ -2090,7 +2090,7 @@ def dot(x: Tensor, y: Tensor) -> Tensor:
     >>> dot(lucid.tensor([1.0, 2.0, 3.0]), lucid.tensor([4.0, 5.0, 6.0]))
     tensor(32.)
     """
-    return _wrap(_C_engine.dot(_unwrap(x), _unwrap(y)))
+    return _wrap(_dot_adapter(_unwrap(x), _unwrap(y)))
 
 
 def inner(x: Tensor, y: Tensor) -> Tensor:
@@ -2119,9 +2119,9 @@ def inner(x: Tensor, y: Tensor) -> Tensor:
             \sum_{k} x_{\ldots, k}\, y_{\ldots', k}.
 
     For 1-D inputs, this is the standard vector dot product.  For higher
-    ranks the leading axes of ``x`` and ``y`` are kept independent and
-    appear consecutively in the output — handy for batched dot products
-    when the contraction axis is the trailing one.
+    ranks the leading axes of ``x`` and ``y`` stay independent and come out
+    consecutively.  A 0-d operand has no axis to contract: the result is
+    ``x * y``, with that product's dtype promotion.
 
     Examples
     --------
@@ -2130,7 +2130,7 @@ def inner(x: Tensor, y: Tensor) -> Tensor:
     >>> inner(lucid.tensor([1.0, 2.0]), lucid.tensor([3.0, 4.0]))
     tensor(11.)
     """
-    return _wrap(_C_engine.inner(_unwrap(x), _unwrap(y)))
+    return _wrap(_inner_adapter(_unwrap(x), _unwrap(y)))
 
 
 def outer(x: Tensor, y: Tensor) -> Tensor:

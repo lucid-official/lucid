@@ -225,7 +225,7 @@ class TestANodeIsNamed:
             ),
             # These live in an anonymous namespace inside ``lucid``, which
             # mangles differently again and was the worse of the two.
-            ("dot 2-D", lambda x: x.dot(x)),
+            ("dot", lambda x: x.reshape(4).dot(x.reshape(4))),
             ("cummax", lambda x: lucid.cummax(x, dim=1).values),
         ],
     )

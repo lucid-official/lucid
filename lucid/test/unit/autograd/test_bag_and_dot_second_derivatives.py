@@ -1,10 +1,11 @@
-"""embedding_bag and 2-D Tensor.dot differentiate twice.
+"""embedding_bag and Tensor.dot differentiate twice.
 
 The last graph-mode refusals among the ops a model reaches: the rows an
 embedding bag drew from are data (read on the host from the saved indices,
 offsets and — for max — the weight, as the eager backward reads them) and
 the gradient is a scatter-add of the bag gradients onto those rows;
-``Tensor.dot`` on matrices is two matmuls.
+``Tensor.dot`` on vectors is two products (it took matrices too, until the
+reference's 1-D rule was enforced: LCD-1061).
 
 Checked against central differences of the first gradient in float64.
 """
@@ -71,7 +72,7 @@ def test_embedding_bag(name: str, kw: dict[str, object]) -> None:
     _second_derivative_matches(bag, w0, len(name))
 
 
-def test_dot_on_matrices() -> None:
-    b = lucid.tensor(np.random.default_rng(3).standard_normal((4, 2)))
-    a0 = np.random.default_rng(4).standard_normal((3, 4))
+def test_dot_on_vectors() -> None:
+    b = lucid.tensor(np.random.default_rng(3).standard_normal(4))
+    a0 = np.random.default_rng(4).standard_normal(4)
     _second_derivative_matches(lambda a: a.dot(b), a0, 5)

@@ -413,6 +413,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - take a bool outer product through the elementwise product
 
+- dot takes 1-D only, inner of a 0-d operand is a product
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call
