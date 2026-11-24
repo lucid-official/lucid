@@ -318,8 +318,7 @@ def column_stack(tensors: Sequence[Tensor]) -> Tensor:
     >>> lucid.column_stack([lucid.tensor(1.), lucid.tensor([2.])])
     tensor([[1., 2.]])
     """
-    fixed = [t_i.reshape(1, 1) if t_i.ndim == 0 else t_i for t_i in tensors]
-    fixed = [t_i.unsqueeze(1) if t_i.ndim == 1 else t_i for t_i in fixed]
+    fixed = [t_i.reshape(t_i.numel(), 1) if t_i.ndim < 2 else t_i for t_i in tensors]
     return lucid.cat(fixed, 1)
 
 

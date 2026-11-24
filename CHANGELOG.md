@@ -606,6 +606,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Mixup and CutMix accept int8–32 labels.
   - The engine's duplicate `concat` binding is gone. ABI 59.
 - name ShapelessFused in AxisIndex, drop the alias
+- column_stack lifts a 0-d or 1-D input in one pass
 
 ---
 
