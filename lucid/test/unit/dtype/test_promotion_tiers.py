@@ -262,7 +262,7 @@ def _column_stack(lib: Any, z: Any, d: Any) -> Any:
             lucid.int8,
             marks=pytest.mark.xfail(
                 strict=True,
-                reason="LCD-1060 FOUND: inner with a 0-d operand is a product in the reference "
+                reason="LCD-1068: inner with a 0-d operand is a product in the reference "
                 "and ranks by tier; Lucid hands the engine's single-dtype kernel both and refuses",
             ),
             id="inner",
@@ -273,7 +273,7 @@ def _column_stack(lib: Any, z: Any, d: Any) -> Any:
             lucid.float16,
             marks=pytest.mark.xfail(
                 strict=True,
-                reason="LCD-1060 FOUND: lerp's 0-d weight ranks below the half-precision "
+                reason="LCD-1068: lerp's 0-d weight ranks below the half-precision "
                 "operands in the reference; Lucid refuses the dtype pair",
             ),
             id="lerp",
@@ -284,7 +284,7 @@ def _column_stack(lib: Any, z: Any, d: Any) -> Any:
             lucid.int8,
             marks=pytest.mark.xfail(
                 strict=True,
-                reason="LCD-1060 FOUND: column_stack does not lift a 0-d input to a column",
+                reason="LCD-1069: column_stack does not lift a 0-d input to a column",
             ),
             id="column_stack",
         ),
