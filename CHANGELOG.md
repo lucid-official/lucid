@@ -456,9 +456,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - A negative `max_new_tokens` raises `ValueError` on every `generate` that takes it, before the encoder runs. Before, decoder-only `generate` returned the prompt unchanged (LCD-1110).
 
-- vision configs refuse sizes their model cannot build
+- Vision, detection and segmentation configs refuse, when they are constructed and by field name, values their model cannot build. Before, such a value failed later or built a broken model. `ViTConfig` refuses an `image_size` that is not a multiple of `patch_size`, and a `dim` that is not a multiple of `num_heads` (before, a `ShapeMismatch` in the first forward). Swin, CvT, PVT, MaxViT, CoAtNet and CrossViT check their per-stage head splits (LCD-1109).
+- `ResNetConfig`, `ResNeXtConfig`, `ResNeStConfig`, `SENetConfig`, `SKNetConfig`, `CoAtNetConfig` and the R-CNN / DETR / MaskFormer `backbone_layers` require exactly the number of stages the builder lays out, each at least 1. Before, a short `hidden_sizes` raised `IndexError` at build, a long `layers` was silently cut, and a 0 entry was silently built as one block. `FCNConfig.backbone` accepts exactly the backbones the model builds (LCD-1109).
 
-- review fixes for the vision config validators
 
 ### Added
 
@@ -686,6 +686,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - every engine forward checks that its result's storage holds its shape's bytes before handing it back; a short result is an error rather than a silent out-of-bounds read. Engine shape messages now spell a shape as `[2, 3]` (LCD-1072).
 - **Behaviour change:** `linalg.solve_triangular`, `linalg.lu_solve` and `linalg.ldl_solve` need a right-hand side `B` of at least two dimensions, as the reference does. A 1-D (or 0-d) `B` was solved as a vector and now raises: `ShapeMismatch` (a `RuntimeError` and a `ValueError`) reading `linalg.solve_triangular: The input tensor B must have at least 2 dimensions.` (`lu_solve` alike; `ldl_solve` raises the reference's `IndexError`). To migrate, pass one column: `lu_solve(LU, pivots, b.unsqueeze(-1))`, then `.squeeze(-1)` the answer. `linalg.solve`, `solve_ex` and `lstsq` still read a vector `B` (LCD-1083).
 - `reset_classifier(n)` raises `ValueError` for `n < 1`; it used to build a zero-width head (LCD-1106).
+- **Behaviour change:** `num_classes` and `in_channels` must be at least 1 on every vision, detection and segmentation config. Before, `num_classes=0` built a zero-width head and a negative value raised an engine `InvalidArgument`. EfficientNet, MobileNet, UNet, AttentionUNet, VGG and others also refuse non-positive widths, including a `width_mult` or `depth_mult` of 0, which used to be silently floored. `MobileNetV3Config.variant`, `UNetConfig.dim` and `block`, `AttentionUNetConfig.spatial_dims`, `SENetConfig.block_type` and `SKNetConfig.block_type` and `FCNConfig.backbone` refuse an unknown value. Before, an unknown value silently selected the other layout (LCD-1109).
 
 - Half-precision `addmm`, `addbmm` and `baddbmm` multiply in float32, so a half GEMM becomes a float32 GEMM. That costs more memory and lower Metal throughput, and buys the reference's single rounding. `addbmm` rounds once, where the reference's CPU kernel rounds after each batch: 1-2 half ulp apart (LCD-1087).
 
