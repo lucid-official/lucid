@@ -1,16 +1,16 @@
 """The linear-solve family reads its right-hand side one way, and differentiates.
 
-``solve``, ``lu_solve`` and ``solve_triangular`` share one contract, owned by
-the engine (``solve_rhs_contract``): ``B`` is ``(*, n, k)``, or a 1-D ``(n,)``
-vector, and the batch axes of ``A`` and ``B`` broadcast.  ``solve`` alone also
-reads a ``B`` of exactly ``A.shape[:-1]`` as one vector per matrix, as the
-reference does; for ``lu_solve`` and ``solve_triangular`` that ``B`` is a
-matrix (the reference has no such reading for them).  Every other ``B`` is refused with
-``ShapeMismatch`` before a backend sees it.  Before, each backend took the
-batch count from ``A`` and the column count from ``B``'s last axis, so a
-single ``A`` against a batch of ``B`` solved only the first batch, a ``B``
-with the wrong row count was solved anyway, and a batch of vectors had its
-batch axis read as the column count.
+``solve``, ``lu_solve`` and ``solve_triangular`` share one broadcast rule, owned by
+the engine (``solve_rhs_contract``): ``B`` is ``(*, n, k)`` and the batch axes of
+``A`` and ``B`` broadcast.  Only ``solve`` also reads a 1-D ``(n,)`` right-hand side
+as a vector, and a ``B`` of exactly ``A.shape[:-1]`` as one vector per matrix, as the
+reference does; ``lu_solve`` and ``solve_triangular`` refuse a vector (the reference
+takes a matrix ``B`` of two or more dimensions there, LCD-1083) and read that
+``B`` as a matrix.  Every other ``B`` is refused with ``ShapeMismatch`` before a
+backend sees it.  Before, each backend took the batch count from ``A`` and the
+column count from ``B``'s last axis, so a single ``A`` against a batch of ``B``
+solved only the first batch, a ``B`` with the wrong row count was solved anyway,
+and a batch of vectors had its batch axis read as the column count.
 
 All three record a gradient in every tensor input (``lu_solve`` in the
 factor and ``B``), and ``det`` differentiates at a singular matrix — its
@@ -32,7 +32,8 @@ from lucid.test._fixtures.tolerance_guard import noise_when_below
 N = 3
 _OPS = ("solve", "lu_solve", "solve_triangular")
 
-# (A batch, B shape) — every legal way to spell the right-hand side.
+# (A batch, B shape) — every legal way to spell the right-hand side.  A vector is
+# one only for ``solve``; the other two refuse it (``_SOLVE_ONLY``).
 _GOOD: dict[str, tuple[tuple[int, ...], tuple[int, ...]]] = {
     "vector": ((), (N,)),
     "matrix": ((), (N, 2)),
@@ -41,14 +42,13 @@ _GOOD: dict[str, tuple[tuple[int, ...], tuple[int, ...]]] = {
     "batched A, single B": ((2,), (N, 2)),
     "broadcast batch": ((2, 1), (3, N, 2)),
     "vector against a batch": ((2,), (N,)),
-    # ``solve`` only: one vector per matrix.  The others refuse it (2 rows).
     "batched vector": ((2,), (2, N)),
     # Batch size equal to n, so B == A.shape[:-1] is also a valid matrix:
     # ``solve`` reads vectors, ``lu_solve`` / ``solve_triangular`` a matrix
     # broadcast over the batch.
     "ambiguous: A batch = n": ((N,), (N, N)),
 }
-_SOLVE_ONLY = {"batched vector"}
+_SOLVE_ONLY = ("vector", "vector against a batch", "batched vector")
 
 # (A batch, B shape) — shapes the reference refuses.
 _BAD: dict[str, tuple[tuple[int, ...], tuple[int, ...]]] = {
@@ -70,7 +70,7 @@ def _well_conditioned(batch: tuple[int, ...], seed: int) -> np.ndarray:
 
 
 def _is_vector(op: str, a_batch: tuple[int, ...], b: tuple[int, ...]) -> bool:
-    return len(b) == 1 or (op == "solve" and b == (*a_batch, N))
+    return op == "solve" and (len(b) == 1 or b == (*a_batch, N))
 
 
 _GOOD_PAIRS = [
@@ -139,7 +139,9 @@ def test_a_malformed_rhs_is_refused(op: str, case: str, device: str) -> None:
     dt = _dtype(device)
     A = lucid.tensor(_operand(op, _well_conditioned(a_batch, 0)), dtype=dt, device=device)
     B = lucid.zeros(*b_shape, dtype=dt, device=device)
-    with pytest.raises(_C_engine.ShapeMismatch, match=op):
+    # ``solve_triangular`` words a batch that does not broadcast as the reference does,
+    # which names no op.
+    with pytest.raises(_C_engine.ShapeMismatch, match=rf"{op}|non-singleton dimension"):
         _call(op, A, B)
 
 

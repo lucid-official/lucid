@@ -325,7 +325,7 @@ def test_ldl_solve_over_every_pivot_pattern(device: str) -> None:
     assert worst < (1e-3 if device == "metal" else 1e-10), worst
 
 
-def test_ldl_solve_batched_broadcast_and_vector() -> None:
+def test_ldl_solve_batched_and_broadcast() -> None:
     s = np.stack([_symmetric(seed, 5) for seed in (3, 4, 5)])
     b = np.random.default_rng(9).standard_normal((3, 5, 2))
     ld, piv = LA.ldl_factor(lucid.tensor(s))
@@ -336,10 +336,11 @@ def test_ldl_solve_batched_broadcast_and_vector() -> None:
     np.testing.assert_allclose(
         _np(x), np.linalg.solve(s, np.broadcast_to(b[0], (3, 5, 2))), atol=1e-10
     )
-    # A single vector.
-    x = LA.ldl_solve(ld[1], piv[1], lucid.tensor(b[1, :, 0]))
-    assert tuple(x.shape) == (5,)
-    np.testing.assert_allclose(_np(x), np.linalg.solve(s[1], b[1, :, 0]), atol=1e-10)
+    # A single vector is given its column; ``ldl_solve`` refuses the bare vector
+    # (``linalg/test_solver_operand_refusal.py``).
+    x = LA.ldl_solve(ld[1], piv[1], lucid.tensor(b[1, :, :1]))
+    assert tuple(x.shape) == (5, 1)
+    np.testing.assert_allclose(_np(x), np.linalg.solve(s[1], b[1, :, :1]), atol=1e-10)
 
 
 def test_ldl_solve_is_differentiable_in_b() -> None:

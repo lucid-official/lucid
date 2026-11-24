@@ -332,7 +332,8 @@ def test_a_factorisation_result_and_its_gradient_have_matching_storage(
         _consistent(a.grad, f"{name} grad")
 
 
-#: (A, right-hand side): a matrix of the same shape, a wider one, and — for a single A — a vector
+#: (A, right-hand side): a matrix of the same shape, a wider one, and — for a single A — a vector,
+#: which only ``solve`` reads (``solve_triangular`` and ``lu_solve`` refuse it, as the reference does)
 _SOLVES = [(s, r) for s in _SQUARES for r in ("same", "wide")] + [
     ((3, 3), "vector"),
     ((0, 0), "vector"),
@@ -347,11 +348,13 @@ def test_a_solve_result_and_its_gradients_have_matching_storage(
     b_shape = {"same": shape, "vector": shape[:-1], "wide": (*shape[:-1], 2)}[rhs]
     b = _t(b_shape, lucid.float32, device, grad=True)
     lu, pivots = la.lu_factor(_square(shape, lucid.float32, device))
-    for name, out in (
-        ("solve", la.solve(a, b)),
-        ("solve_triangular", la.solve_triangular(a, b, upper=True)),
-        ("lu_solve", la.lu_solve(lu, pivots, b)),
-    ):
+    solved = [("solve", la.solve(a, b))]
+    if rhs != "vector":
+        solved += [
+            ("solve_triangular", la.solve_triangular(a, b, upper=True)),
+            ("lu_solve", la.lu_solve(lu, pivots, b)),
+        ]
+    for name, out in solved:
         for t in _tensors(out):
             _consistent(t, name)
             if t.requires_grad:
