@@ -239,10 +239,14 @@ def _make_join_adapter(engine_fn: Callable[..., _Impl]) -> Callable[..., _Impl]:
     ``int64`` and a ``float32`` raised ``DtypeMismatch``, where the
     reference joins them at their common dtype.  The inputs are brought
     there first; inputs that already agree pass straight through.
+
+    Every join ranks its inputs as dimensioned: ``hstack`` and ``vstack`` lift a
+    0-d input to a row first, so it does not rank below the others as in ``a * b``.
     """
 
     def _adapter(tensors: Sequence[_Impl], *args: object, **kwargs: object) -> _Impl:
-        return engine_fn(_promote_impls(tensors), *args, **kwargs)
+        joined = _promote_impls(tensors, tiers=_promotion.Tiers.DIMENSIONED)
+        return engine_fn(joined, *args, **kwargs)
 
     _keep_engine_signature(_adapter, engine_fn)
     return _adapter
@@ -979,9 +983,13 @@ _keep_engine_signature(_outer_adapter, _C_engine.outer)
 
 
 def _kron_adapter(a_impl: _Impl, b_impl: _Impl) -> _Impl:
-    """kron(a, b) — the two tensors at their common dtype."""
+    """kron(a, b) — the two tensors at their common dtype, ranked as dimensioned.
+
+    ``kron`` lifts both operands to rank >= 1 first, so a 0-d ``int16`` beside
+    an ``int8`` vector answers ``int16``, not the ``int8`` of ``a * b``.
+    """
     _require_tensor_operands("kron", a_impl, b_impl)
-    a_impl, b_impl = _promote_impls([a_impl, b_impl])
+    a_impl, b_impl = _promote_impls([a_impl, b_impl], tiers=_promotion.Tiers.DIMENSIONED)
     return _C_engine.kron(a_impl, b_impl)
 
 

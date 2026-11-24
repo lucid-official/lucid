@@ -429,15 +429,22 @@ def _binary_operands(
     return _number_pair(a, b, true_div)
 
 
-def _promote_impls(impls: Sequence[_C_engine.TensorImpl]) -> list[_C_engine.TensorImpl]:
+def _promote_impls(
+    impls: Sequence[_C_engine.TensorImpl], *, tiers: _promotion.Tiers = _promotion.Tiers.BY_RANK
+) -> list[_C_engine.TensorImpl]:
     """Cast ``impls`` to the one dtype they promote to together.
 
     The n-ary form of :func:`_binary_operands`, for the ops whose engine
     kernel wants every tensor operand at a single dtype — the joins,
-    ``where``, ``outer``, ``einsum`` — and so raised ``DtypeMismatch`` for
-    an ``int64`` beside a ``float32``, where the reference answers at their
+    ``where``, ``outer``, ``kron`` — and so raised ``DtypeMismatch`` for an
+    ``int64`` beside a ``float32``, where the reference answers at their
     common dtype.  Operands that already agree come back uncast, so the
     common case costs one comparison each.
+
+    ``tiers`` is how the reference ranks the operands for the op.  An op that
+    reshapes each one to rank >= 1 before it combines them (``kron``, the
+    joins) passes ``Tiers.DIMENSIONED``, so a 0-d tensor does not rank below
+    the others and is not cast down to their width.
     """
     out = list(impls)
     if not out:
@@ -445,7 +452,7 @@ def _promote_impls(impls: Sequence[_C_engine.TensorImpl]) -> list[_C_engine.Tens
     first = out[0].dtype
     if all(t.dtype == first for t in out):
         return out
-    dt = _promotion.result_type(*out)
+    dt = _promotion.result_type(*out, tiers=tiers)
     return [t if t.dtype == dt else _C_engine.astype(t, dt) for t in out]
 
 

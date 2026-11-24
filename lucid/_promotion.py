@@ -19,6 +19,13 @@ floating < complex) but never its width inside a category, so
 ``float16_tensor * tensor(0.5)`` stays float16 and ``int8_tensor + 1`` stays
 int8, while ``int32_tensor + 2.5`` becomes floating.
 
+The tiers rank operands as the op *receives* them — the reference's rule for
+``a * b`` and for ``block_diag``, which settle the dtype before any reshape.
+An op that reshapes every operand to rank >= 1 first (``kron``, ``hstack``,
+``vstack``) is ranked by the reference after the reshape, where no tensor is
+0-d any more: it passes ``Tiers.DIMENSIONED``, and a 0-d ``int16`` beside a
+1-d ``int8`` is ``int16``, not ``int8``.  The default is ``Tiers.BY_RANK``.
+
 A Python ``bool`` is bool, an ``int`` is int64, a ``float`` is the default
 dtype and a ``complex`` the complex dtype of the default (complex64, or
 complex128 under a float64 default).  Off the CPU stream, which cannot hold
@@ -33,6 +40,7 @@ can all import it without a cycle.  It decides dtypes only; casting the
 operands and building scalar operands is :mod:`lucid._dispatch`'s job.
 """
 
+import enum
 import math
 import numbers
 from typing import overload
@@ -67,6 +75,22 @@ HALF: frozenset[_C_engine.Dtype] = frozenset({_D.F16, _D.BF16})
 NUMBER = (bool, int, float, complex)
 
 Operand = _C_engine.TensorImpl | bool | int | float | complex
+
+
+class Tiers(enum.Enum):
+    """How :func:`result_type` ranks the tensors it is given.
+
+    ``BY_RANK`` is the rule of an op that combines its operands as they
+    arrive: a 0-d tensor sits in a tier of its own, below the tensors with a
+    dimension (``a * b``, ``where``).  ``DIMENSIONED`` is the rule of an op
+    that reshapes every operand to rank >= 1 before it combines them, so the
+    reference sees no 0-d tensor and joins all of them in one tier (``kron``,
+    ``hstack``, ``vstack``).  Python numbers keep their own tier in both.
+    """
+
+    BY_RANK = enum.auto()
+    DIMENSIONED = enum.auto()
+
 
 # The table again, keyed by each dtype's integer code.  An engine enum hashes
 # and compares through C++ (150-250 ns a time) and this runs on every binary
@@ -408,7 +432,7 @@ def tensor_pair_type(
     return _DTYPE[_join(ca, cb) if a_dim else _join(cb, ca)]
 
 
-def result_type(*operands: Operand) -> _C_engine.Dtype:
+def result_type(*operands: Operand, tiers: Tiers = Tiers.BY_RANK) -> _C_engine.Dtype:
     """The dtype a binary or n-ary op over ``operands`` computes in.
 
     Parameters
@@ -416,6 +440,10 @@ def result_type(*operands: Operand) -> _C_engine.Dtype:
     *operands : TensorImpl or bool or int or float or complex
         Engine tensors and Python numbers, in any order.  A tensor is read
         through ``dtype``, ``shape`` and ``device`` only.
+    tiers : Tiers, default=Tiers.BY_RANK
+        How the tensors are ranked.  ``Tiers.DIMENSIONED`` counts every tensor
+        as having a dimension, for an op that reshapes its operands to
+        rank >= 1 before it combines them.
 
     Returns
     -------
@@ -432,6 +460,7 @@ def result_type(*operands: Operand) -> _C_engine.Dtype:
     zero: int | None = None
     first: _C_engine.TensorImpl | None = None
     kind = -1
+    by_rank = tiers is Tiers.BY_RANK
     for x in operands:
         if isinstance(x := as_number(x), NUMBER):
             kind = max(kind, _number_kind(x))
@@ -439,7 +468,7 @@ def result_type(*operands: Operand) -> _C_engine.Dtype:
         c = x.dtype.value
         if first is None:
             first = x
-        if x.shape:
+        if x.shape or not by_rank:
             dim = c if dim is None else _promote(dim, c)
         else:
             zero = c if zero is None else _promote(zero, c)

@@ -705,6 +705,10 @@ def block_diag(*tensors: Tensor) -> Tensor:
 
     Called with zero arguments, returns an empty ``(0, 0)`` matrix.
 
+    The result's dtype is the promotion of the inputs' dtypes as they are
+    given, as in ``a * b``: a 0-d tensor ranks below the ones with a
+    dimension, so a 0-d ``int16`` beside an ``int8`` vector answers ``int8``.
+
     Examples
     --------
     >>> import lucid
@@ -716,6 +720,7 @@ def block_diag(*tensors: Tensor) -> Tensor:
     if not tensors:
         return lucid.zeros(0, 0)
 
+    common = _promotion.result_type(*(_unwrap(t_i) for t_i in tensors))
     parts: list[Tensor] = []
     for index, t_i in enumerate(tensors):
         if t_i.ndim > 2:
@@ -723,6 +728,8 @@ def block_diag(*tensors: Tensor) -> Tensor:
                 f"block_diag(): inputs must have 2 or fewer dimensions, but input {index} "
                 f"has {t_i.ndim} dimensions"
             )
+        if _unwrap(t_i).dtype != common:
+            t_i = _wrap(_C_engine.astype(_unwrap(t_i), common))
         if t_i.ndim == 0:
             t_i = t_i.reshape(1, 1)
         elif t_i.ndim == 1:
