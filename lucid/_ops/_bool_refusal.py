@@ -329,11 +329,7 @@ _DECLARED: tuple[Row, ...] = (
     _row("take_along_dim", "indices", bool=GUARD_INT64, narrow=GUARD_INT64),
     _row("take", "index", bool=GUARD_INT64, narrow=GUARD_INT64),
     Row(
-        "gather",
-        "index",
-        on_bool=GUARD_INT32_OR_64,
-        on_short=GUARD_INT32_OR_64,
-        answers_empty=True,
+        "gather", "index", on_bool=GUARD_INT32_OR_64, on_short=GUARD_INT32_OR_64, answers_empty=True
     ),
     # ``ldexp`` of a real float refuses a bool exponent (an integer or complex base answers).
     _row("ldexp", "exponent", bool=KERNEL_NUMBER),
