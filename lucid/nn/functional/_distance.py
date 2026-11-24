@@ -4,10 +4,12 @@ Re-exported by :mod:`lucid.nn.functional.activations`.
 """
 
 import lucid as _l
+from lucid import _promotion
 from lucid._C import engine as _C_engine
-from lucid._dispatch import _unwrap, _wrap
+from lucid._dispatch import _promote_impls, _unwrap, _wrap
 from lucid._ops._autocast import _autocast_entry, _autocast_suspended
 from lucid._ops._reduce import _require_floating
+from lucid._tensor._indexing import broadcast_shapes
 from lucid._tensor.tensor import Tensor
 from lucid.nn.functional.normalization import normalize
 
@@ -22,10 +24,14 @@ def cosine_similarity(x1: Tensor, x2: Tensor, dim: int = 1, eps: float = 1e-8) -
     Parameters
     ----------
     x1, x2 : Tensor
-        Tensors of the same shape.
+        Tensors that broadcast together; both are expanded to the common shape
+        first, and the norms are taken over the expanded tensors, so a 0-d
+        operand is the scalar repeated along ``dim``.  Operands of two floating
+        dtypes meet in their promoted dtype, a 0-d one counting as the
+        dimensioned tensor it has become.
     dim : int, optional
-        Dimension along which the dot product / norms are taken.
-        Default ``1``.
+        Dimension of the broadcast shape along which the dot product / norms
+        are taken.  Default ``1``.
     eps : float, optional
         Lower bound on the denominator to avoid division by zero.
         Default ``1e-8``.
@@ -57,8 +63,13 @@ def cosine_similarity(x1: Tensor, x2: Tensor, dim: int = 1, eps: float = 1e-8) -
     """
     for operand in (x1, x2):
         _require_floating(_unwrap(operand), "cosine_similarity")
-    io = [_unwrap(t.to(_l.result_type(x1, x2))) for t in (x1, x2)]
-    with _autocast_entry("cosine_similarity", *io) as io:
+    with _autocast_entry("cosine_similarity", _unwrap(x1), _unwrap(x2)) as io:
+        # Broadcast first, then rank the dtypes: each norm is the one of the expanded
+        # operand, as the reference takes it (a 0-d ``x1`` beside a vector normalised on
+        # its own is always +-1), and neither operand is 0-d any more when the two meet.
+        shape = list(broadcast_shapes(*(t.shape for t in io)))
+        io = [t if list(t.shape) == shape else _C_engine.broadcast_to(t, shape) for t in io]
+        io = _promote_impls(io, tiers=_promotion.Tiers.DIMENSIONED)
         x1n, x2n = (_unwrap(normalize(_wrap(t), p=2.0, dim=dim, eps=eps)) for t in io)
         return _wrap(_C_engine.sum(_C_engine.mul(x1n, x2n), [dim]))
 

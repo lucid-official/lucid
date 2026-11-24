@@ -22,7 +22,7 @@ call with the :func:`_amp_op` decorator.
 import annotationlib
 import functools
 import inspect
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 
 from lucid import _promotion
@@ -83,7 +83,9 @@ def _autocast_entry(
         yield cast
 
 
-def _amp_op[**P, R](row: str) -> Callable[[Callable[P, R]], Callable[P, R]]:
+def _amp_op[**P, R](
+    row: str, *, refuse: Callable[[Mapping[str, object]], None] | None = None
+) -> Callable[[Callable[P, R]], Callable[P, R]]:
     """Decorate a composite with ``row``'s entry: :func:`_autocast_entry` around the call.
 
     Every tensor argument, by position or by keyword, enters cast by the
@@ -105,6 +107,13 @@ def _amp_op[**P, R](row: str) -> Callable[[Callable[P, R]], Callable[P, R]]:
         :func:`_autocast_entry`, it must be a row:
         ``lucid/test/unit/amp/test_composite_autocast_entry.py`` checks every
         name passed here.
+    refuse : callable, optional
+        A check of the arguments exactly as the caller passed them, by name,
+        that raises for a set the caller got wrong — and runs only where no
+        autocast is active on the first tensor's device.  Inside autocast the
+        row has decided the operands' dtypes, and a row that keeps them leaves
+        a float16 input beside a float32 target, which is the policy's doing
+        and not the caller's.  A call that does not bind skips it.
 
     Returns
     -------
@@ -118,7 +127,8 @@ def _amp_op[**P, R](row: str) -> Callable[[Callable[P, R]], Callable[P, R]]:
 
         @functools.wraps(fn)
         def at_entry(*args: P.args, **kwargs: P.kwargs) -> R:
-            if not _C_engine.amp_is_active():
+            active = _C_engine.amp_is_active()
+            if not active and refuse is None:
                 return fn(*args, **kwargs)
             try:
                 bound = signature.bind(*args, **kwargs)
@@ -130,7 +140,11 @@ def _amp_op[**P, R](row: str) -> Callable[[Callable[P, R]], Callable[P, R]]:
                 for name, value in bound.arguments.items()
                 if (impl := _promotion.try_unwrap(value)) is not None
             }
-            if not held:
+            if refuse is not None and not (
+                active and held and _C_engine.amp_is_active(next(iter(held.values())).device)
+            ):
+                refuse(bound.arguments)
+            if not active or not held:
                 return fn(*args, **kwargs)
             with _autocast_entry(row, *held.values()) as cast:
                 for (name, impl), out in zip(held.items(), cast, strict=True):

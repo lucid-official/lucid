@@ -40,11 +40,23 @@ hold has a check of its own, each measured against the reference:
   (:func:`_check_poisson_bools`);
 - a bool or integer input is a dtype mismatch rather than the kernel's error beside a target
   the reference will not promote it to (``_MISMATCH_BESIDE_TARGET``, per loss).
+
+Where the dtypes are ranked
+---------------------------
+The dtype two operands promote to depends on whether a 0-d tensor still counts as one.  The
+regression losses broadcast input and target before the reference's kernel sees them, so a
+float32 scalar beside a float16 vector is float32 (``_RANKED_AFTER_BROADCAST``, read through
+:func:`_tiers` by :func:`_loss_dtype`); every other loss combines its operands as they arrive,
+and ranks a 0-d one below the rest.  ``binary_cross_entropy`` reads its two operands through one
+scalar type and refuses a mixed floating pair (``_SAME_DTYPE``, :func:`_check_pair_dtype` —
+outside autocast only, where the policy table rather than the caller has chosen the dtypes), and
+``binary_cross_entropy_with_logits`` returns the target's dtype.  Each new loss decides, from
+the reference, which of these it is — a table row, not a branch in the loss.
 """
 
 import math
 import warnings
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from typing import Literal, SupportsIndex, TYPE_CHECKING, override, overload
 
 import lucid as _lucid
@@ -487,6 +499,22 @@ _OPERAND_DTYPES: dict[str, tuple[str, str]] = {
 #: kernel for them.
 _FLOATING_RESULT: frozenset[str] = frozenset({"mse_loss", "smooth_l1_loss", "l1_loss"})
 
+#: The losses whose reference lifts input and target to their broadcast shape *before* it
+#: ranks their dtypes: the regression losses (``broadcast_tensors`` ahead of the kernel, the
+#: reason they also warn about a target of another shape).  A 0-d operand is a dimensioned one
+#: by then, so it meets the other at its own width — a float32 scalar beside a float16 vector
+#: is float32 — where the rest, which broadcast through their arithmetic, rank a 0-d operand
+#: below the others (:func:`_tiers`).
+_RANKED_AFTER_BROADCAST: frozenset[str] = frozenset(
+    op for op, rule in _TARGET_SHAPE.items() if rule == "broadcast-warn"
+)
+
+#: The losses whose reference kernel reads input and target through one scalar type, so a
+#: floating target of another dtype than the floating input is refused (``Found dtype … but
+#: expected …``) rather than promoted or cast (:func:`_check_pair_dtype`).  A class ``weight``
+#: and the other extras are not in the pair.
+_SAME_DTYPE: frozenset[str] = frozenset({"binary_cross_entropy"})
+
 #: The losses whose answer for a bool operand turns on the call, not on the operand's
 #: place alone, so the table above says ``numeric`` and the loss checks the rest itself
 #: (:func:`_check_poisson_bools`).
@@ -624,12 +652,50 @@ def _check_dtypes(op: str, target: Tensor | None = None, **inputs: Tensor) -> No
         raise refusal(op, _unwrap(next(iter(inputs.values()))).dtype.value)
 
 
-def _loss_dtype(*operands: Tensor) -> _C_engine.Dtype:
+def _check_pair_dtype(op: str, x: object, target: object) -> None:
+    """Refuse a floating ``target`` whose dtype is not the floating ``x``'s, for a loss in
+    ``_SAME_DTYPE``.
+
+    The caller's own mixture: the loss's :func:`~lucid._ops._autocast._amp_op` runs this only
+    outside autocast, where nothing but the caller chose the two dtypes.  It reads dtypes
+    alone, so it dispatches nothing; a bool, an integer or a complex operand is left to
+    :func:`_check_dtypes`, which names it.
+    """
+    if (
+        op in _SAME_DTYPE
+        and isinstance(x, _lucid.Tensor)
+        and isinstance(target, _lucid.Tensor)
+        and x.dtype != target.dtype
+        and x.is_floating_point()
+        and target.is_floating_point()
+    ):
+        raise _C_engine.DtypeMismatch(
+            f"{op}: expected the target of the input's dtype {x.dtype}, got {target.dtype}"
+        )
+
+
+def _refuse_mixed_bce(arguments: Mapping[str, object]) -> None:
+    """:func:`~lucid.nn.functional.loss.binary_cross_entropy`'s check of the caller's own
+    dtypes, which its ``_amp_op`` runs outside autocast only."""
+    _check_pair_dtype("binary_cross_entropy", arguments["input"], arguments["target"])
+
+
+def _tiers(op: str) -> _promotion.Tiers:
+    """How loss ``op``'s reference ranks its operands' dtypes: after broadcasting them to one
+    shape for the ones in ``_RANKED_AFTER_BROADCAST``, as they arrive for the rest."""
+    return (
+        _promotion.Tiers.DIMENSIONED if op in _RANKED_AFTER_BROADCAST else _promotion.Tiers.BY_RANK
+    )
+
+
+def _loss_dtype(
+    *operands: Tensor, tiers: _promotion.Tiers = _promotion.Tiers.BY_RANK
+) -> _C_engine.Dtype:
     """The dtype a loss over ``operands`` computes in: the dtype they
-    promote to, or the default floating dtype when that is not floating
-    point (an integer or bool pair loss)."""
+    promote to under ``tiers`` (:func:`_tiers`), or the default floating
+    dtype when that is not floating point (an integer or bool pair loss)."""
     impls = [_unwrap(t) for t in operands]
-    d = _promotion.result_type(*impls)
+    d = _promotion.result_type(*impls, tiers=tiers)
     if _promotion.is_integral(d):
         return _promotion.default_float(impls[0].device)
     return d
@@ -689,7 +755,7 @@ def _operands(
             _check_kind(t, "real", what, op, mismatch=True)
     if floating_input and not x.is_floating_point():
         x = _cast(x, _promotion.default_float(_unwrap(x).device))
-    d = _loss_dtype(x, target) if promote else _loss_dtype(x)
+    d = _loss_dtype(x, target, tiers=_tiers(op)) if promote else _loss_dtype(x)
     return _cast(x, d), _cast(target, d)
 
 
@@ -772,6 +838,24 @@ def _align_gaussian_var(x: Tensor, var: Tensor | float) -> Tensor:
     if var.device == "cpu" and _host_read(lambda: bool((var < 0.0).any().item())):
         raise _C_engine.InvalidArgument("var has negative entry/entries")
     return var
+
+
+def _gaussian_operands(
+    x: Tensor, target: Tensor, var: Tensor | float
+) -> tuple[Tensor, Tensor, Tensor]:
+    """``x``, ``target`` and the aligned ``var`` of :func:`~lucid.nn.functional.loss.gaussian_nll_loss`,
+    each in the dtype the loss computes in.
+
+    The loss is ``(x - target) ** 2 / var``: the first two meet, then ``var`` divides — and it
+    has been aligned to ``x`` by then, a 0-d one beside a vector unsqueezed to rank 1, so the
+    reference ranks it as a dimensioned operand (a bfloat16 0-d ``var`` beside float16 vectors is
+    float32, not float16).  ``var`` is aligned after the first cast so that a Python number, which
+    takes ``x``'s dtype, takes the floating one."""
+    d = _loss_dtype(x, target)
+    x, target = _cast(x, d), _cast(target, d)
+    var_t = _align_gaussian_var(x, var)
+    d = _loss_dtype(x, target, var_t)
+    return _cast(x, d), _cast(target, d), _cast(var_t, d)
 
 
 def _triplet_distances(

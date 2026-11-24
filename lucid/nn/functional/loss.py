@@ -24,9 +24,7 @@ from lucid._dtype import float16 as _float16, float32 as _float32
 from lucid._types import Reduction, ReductionKL
 from lucid.nn.functional._loss_checks import (
     _REDUCTIONS,
-    _align_gaussian_var,
     _broadcast_operands,
-    _cast,
     _check_beta as _check_beta,
     _check_broadcasts_to,
     _check_class_target,
@@ -46,13 +44,14 @@ from lucid.nn.functional._loss_checks import (
     _check_triplet_margin as _check_triplet_margin,
     _check_unit_interval,
     _ctc_lengths,
+    _gaussian_operands,
     _l2_pairwise_distance,
     _legacy_reduction,
-    _loss_dtype,
     _num_classes,
     _operands,
     _pair_operands,
     _poisson_stirling,
+    _refuse_mixed_bce,
     _shape,
     _triplet_distances,
 )
@@ -797,7 +796,7 @@ def _bce_elementwise(x: Tensor, target: Tensor, out_dtype: _dtype, acc: _dtype) 
     return _lucid.where(inside, interior, edge)
 
 
-@_amp_op("bce_loss")
+@_amp_op("bce_loss", refuse=_refuse_mixed_bce)
 def binary_cross_entropy(
     input: Tensor,
     target: Tensor,
@@ -833,8 +832,9 @@ def binary_cross_entropy(
         an entry makes the loss NaN instead.
     target : Tensor
         Target probabilities (typically binary) in :math:`[0, 1]`, of
-        the same shape — another shape raises ``ValueError`` rather than
-        being broadcast.  Its range is checked as ``input``'s is.
+        the same shape and dtype — another shape raises ``ValueError`` rather than
+        being broadcast, and another dtype ``DtypeMismatch`` (outside autocast, which
+        casts the operands itself).  Its range is checked as ``input``'s is.
     weight : Tensor or None, optional
         Element-wise rescaling factor that broadcasts to ``input``'s shape;
         one that does not, or that would enlarge it, raises
@@ -949,7 +949,7 @@ def binary_cross_entropy_with_logits(
     Returns
     -------
     Tensor
-        Scalar or full-shape per ``reduction``.
+        Scalar or full-shape per ``reduction``, in ``target``'s dtype.
 
     Notes
     -----
@@ -984,11 +984,14 @@ def binary_cross_entropy_with_logits(
     """
     op = "binary_cross_entropy_with_logits"
     reduction = _legacy_reduction(size_average, reduce, reduction, op)
+    # The reference writes the loss in place into a tensor of the target's dtype, so it
+    # comes back in the target's whatever the input's is: the two meet in their promoted
+    # dtype, rounded once at the end.
+    out_dtype = target.dtype
     x, target = _operands(op, input, target, weight=weight, pos_weight=pos_weight)
     _check_target(x, target, op)
     _check_broadcasts_to(weight, _shape(x), "weight", op)
     _check_broadcasts_to(pos_weight, _shape(x), "pos_weight", op)
-    out_dtype = x.dtype
     loss: Tensor = _bce_with_logits_elementwise(x, target, pos_weight, _accumulation_dtype(x))
     if weight is not None:
         loss = loss * weight
@@ -1689,12 +1692,7 @@ def gaussian_nll_loss(
     _check_dtypes("gaussian_nll_loss", target, input=x)
     if not isinstance(var := _promotion.as_number(var), (int, float)):
         _check_gaussian_var(var, x, "gaussian_nll_loss")
-        d = _loss_dtype(x, target, var)
-        var = _cast(var, d)
-    else:
-        d = _loss_dtype(x, target)
-    x, target = _cast(x, d), _cast(target, d)
-    var_t = _align_gaussian_var(x, var)
+    x, target, var_t = _gaussian_operands(x, target, var)
     # Clamped at ``eps`` in value, not in gradient: the reference clamps a
     # copy under ``no_grad``, so the gradient flows to ``var`` unchanged.
     var_d: Tensor = var_t.detach()

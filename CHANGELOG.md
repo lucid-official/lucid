@@ -429,6 +429,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `index_add` casts a float `alpha` to an integer tensor's dtype, as the reference does; it raised `DtypeMismatch`. `lerp` with a zero-imaginary complex weight on a float tensor now answers; it raised `TypeError` (LCD-1076).
 
+- rank 0-d loss operands after broadcast, as the reference
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call
