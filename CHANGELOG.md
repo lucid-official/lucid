@@ -429,7 +429,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `index_add` casts a float `alpha` to an integer tensor's dtype, as the reference does; it raised `DtypeMismatch`. `lerp` with a zero-imaginary complex weight on a float tensor now answers; it raised `TypeError` (LCD-1076).
 
-- rank 0-d loss operands after broadcast, as the reference
+- `mse_loss`, `l1_loss` and `smooth_l1_loss` rank a 0-d operand as a dimensioned one after broadcasting, as the reference does. A float32 scalar beside a float16 vector now gives float32 (was float16) (LCD-1074).
+- `cosine_similarity` broadcasts its operands before taking the norms. `cosine_similarity(tensor(0.5), tensor([1., 2.]), dim=0)` is now `0.9487` (was `1.342`), and a 0-d operand beside a matrix with `dim=1` no longer raises (LCD-1074).
+- `gaussian_nll_loss` ranks a 0-d `var` as the dimensioned operand the reference unsqueezes it to (LCD-1074).
 
 ### Added
 
@@ -639,6 +641,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - an `other=` that is not a tensor;
   - a number as `input` (this was an AttributeError) (LCD-1073).
 - A lone tensor in the second position of `max` / `min`, including a 0-d integer tensor, is now the `other` operand. A 0-d integer tensor there used to be an axis through `__index__`. It is still an axis as `dim=`, or in the second place when `keepdim` follows: `max(x, dim=tensor(0))`, `max(x, tensor(0), True)` (LCD-1073).
+- `binary_cross_entropy_with_logits` returns the target's dtype, as the reference does: a float32 input with a float16 target gives float16 (was float32) (LCD-1074).
+- `binary_cross_entropy` and `nn.BCELoss` refuse a floating target of another dtype than the input (`DtypeMismatch`), as the reference does. Inside autocast the policy table owns the dtypes, and a mixed pair is still accepted (LCD-1074).
 - A complex `alpha`, `beta`, `value` or `weight` on a tensor that cannot hold it now raises, instead of silently dropping its imaginary part (LCD-1076).
   - `add`, `sub`, `rsub`, `subtract` and their method and in-place forms raise by type, `0j` included: `RuntimeError: For non-complex input tensors, argument alpha must not be a complex number.` for a floating result, and `...integral input tensors... must not be a floating point number.` for a bool or integer result.
   - `addmm`, `addmv`, `addbmm`, `baddbmm`, `addr`, `addcmul`, `addcdiv`, `lerp` and `index_add` read a scalar with no imaginary part as its real part. A scalar with one raises `RuntimeError: value cannot be converted to type <T> without overflow`.
