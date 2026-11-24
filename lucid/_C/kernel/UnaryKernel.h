@@ -44,6 +44,7 @@
 #include "../core/OpSchema.h"
 #include "../core/PhantomMode.h"
 #include "../core/Profiler.h"
+#include "../core/ResultExtent.h"
 #include "../core/SchemaGuard.h"
 #include "../core/Scope.h"
 #include "../core/Storage.h"
@@ -351,6 +352,7 @@ std::shared_ptr<TensorImpl> UnaryKernel<Derived>::forward(const std::shared_ptr<
     OpScopeFull scope{Derived::schema_v1.name, a_ptr->device(), eff_dt, a_ptr->shape()};
 
     Storage out_storage = compute_storage(a_ptr, eff_dt);
+    require_result_extent(out_storage, a_ptr->shape(), eff_dt, Derived::schema_v1.name);
 
     auto out = std::make_shared<TensorImpl>(std::move(out_storage), a_ptr->shape(), eff_dt,
                                             a_ptr->device(), false);

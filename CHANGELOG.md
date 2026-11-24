@@ -501,6 +501,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - OpSchema declares integer refusals, one guard enforces
 
+- refuse a GPU result whose bytes disagree with its shape
+
 ### Performance
 
 - pool the MAE sets without rank-6 views
