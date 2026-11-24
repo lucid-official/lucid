@@ -637,6 +637,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `addcmul` and `addcdiv` with a complex `value` that has no imaginary part keep a real tensor real; they used to promote the result to complex (LCD-1076).
 - `rsub` scales through the same `alpha` rule as `sub`: a float, complex or bool `alpha` on an integer tensor is refused as `sub` refuses it, where it used to be promoted or accepted. Its default `alpha` is `1`, not `1.0` (LCD-1076).
 - every engine forward checks that its result's storage holds its shape's bytes before handing it back; a short result is an error rather than a silent out-of-bounds read. Engine shape messages now spell a shape as `[2, 3]` (LCD-1072).
+- complex log calls the existing vlog overloads (LCD-1070)
 
 ---
 

@@ -38,20 +38,12 @@ inline constexpr std::size_t kComplexMathGrain = 4096;
 // magnitudes lives on the stack (8 KiB of double).
 inline constexpr std::size_t kComplexLogTile = 1024;
 
-// The real logarithm of a buffer of magnitudes, through vForce.
-inline void vlog_real(const float* in, float* out, std::size_t n) {
-    vlog_f32(in, out, n);
-}
-
-inline void vlog_real(const double* in, double* out, std::size_t n) {
-    vlog_f64(in, out, n);
-}
-
 // The principal logarithm over interleaved complex values:
 // $\ln z = \ln |z| + i \arg z$.  The magnitude is ``std::abs`` (a hypot, so
-// it neither overflows nor underflows where $x^2 + y^2$ would) and the
-// argument is ``std::arg``; the logarithm of the magnitudes, the
-// transcendental part, is one vForce call per tile.
+// no intermediate $x^2 + y^2$ overflows or underflows; a magnitude past the
+// type's maximum is still inf, as in ``std::log``) and the argument is
+// ``std::arg``; the logarithm of the magnitudes, the transcendental part, is
+// one vForce call per tile.
 template <typename Scalar>
 void vzlog(const Scalar* in, Scalar* out, std::size_t n) {
     const auto* src = reinterpret_cast<const std::complex<Scalar>*>(in);
@@ -62,7 +54,7 @@ void vzlog(const Scalar* in, Scalar* out, std::size_t n) {
             const std::size_t count = std::min(kComplexLogTile, hi - start);
             for (std::size_t i = 0; i < count; ++i)
                 magnitude[i] = std::abs(src[start + i]);
-            vlog_real(magnitude, magnitude, count);
+            vlog(magnitude, magnitude, count);
             for (std::size_t i = 0; i < count; ++i)
                 dst[start + i] = std::complex<Scalar>(magnitude[i], std::arg(src[start + i]));
         }
