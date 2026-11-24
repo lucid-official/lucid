@@ -107,6 +107,7 @@
 #include "Conversion.h"
 #include "DivMod.h"
 #include "HalfAccumulation.h"
+#include "IntGemm.h"
 #include "Interpolate.h"
 #include "LinalgStatus.h"
 #include "LogSoftmax.h"

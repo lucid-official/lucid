@@ -16,20 +16,14 @@ Storage GpuBackend::matmul(const Storage& a, const Storage& b, const MatmulOpts&
         b_arr = ::mlx::core::swapaxes(b_arr, -2, -1);
     // MLX refuses integer operands outright — "[matmul] Only inexact
     // types are supported" — while the product of two integer matrices
-    // is an integer matrix, which the CPU and the reference framework
-    // both answer.  Widen to float32, multiply, round back: exact while
-    // each dot product stays inside 2^24, which is the same bound the
-    // CPU's own float path carries.
-    const bool discrete = dt != Dtype::F16 && dt != Dtype::BF16 && dt != Dtype::F32 &&
-                          dt != Dtype::F64 && dt != Dtype::C64;
-    if (discrete) {
-        a_arr = ::mlx::core::astype(a_arr, ::mlx::core::float32);
-        b_arr = ::mlx::core::astype(b_arr, ::mlx::core::float32);
-        auto wide = ::mlx::core::matmul(a_arr, b_arr);
-        auto rounded = ::mlx::core::round(wide);
-        return Storage{
-            gpu::wrap_mlx_array(::mlx::core::astype(rounded, gpu::to_mlx_dtype(dt)), dt)};
-    }
+    // is an integer matrix, wrapped at the operand width as the CPU and
+    // the reference framework have it.  A float32 round trip lost the low
+    // bits past 2^24 and saturated an overflow, so the integer dtypes take
+    // the exact product of gpu/IntGemm.h.  Bool has no matrix product.
+    if (is_integral(dt))
+        return Storage{gpu::wrap_mlx_array(gpu::int_matmul(a_arr, b_arr), dt)};
+    if (dt == Dtype::Bool)
+        ErrorBuilder("gpu_backend::matmul").not_implemented("dtype not supported");
     auto result = ::mlx::core::matmul(a_arr, b_arr);
     // PERF: matmul produces a fresh contiguous buffer; the defensive
     // wrap-in-contiguous was forcing a redundant memcpy and breaking
@@ -238,16 +232,12 @@ Storage GpuBackend::tensordot(const Storage& a,
                               Dtype dt) {
     const auto& ga = std::get<GpuStorage>(a);
     const auto& gb = std::get<GpuStorage>(b);
-    const bool discrete = dt != Dtype::F16 && dt != Dtype::BF16 && dt != Dtype::F32 &&
-                          dt != Dtype::F64 && dt != Dtype::C64;
-    if (discrete) {
-        auto a_arr = ::mlx::core::astype(*ga.arr, ::mlx::core::float32);
-        auto b_arr = ::mlx::core::astype(*gb.arr, ::mlx::core::float32);
-        auto wide = ::mlx::core::tensordot(a_arr, b_arr, axes_a, axes_b);
-        auto rounded = ::mlx::core::round(wide);
+    // The integer dtypes take the exact product of gpu/IntGemm.h, as ``matmul`` does.
+    if (is_integral(dt))
         return Storage{
-            gpu::wrap_mlx_array(::mlx::core::astype(rounded, gpu::to_mlx_dtype(dt)), dt)};
-    }
+            gpu::wrap_mlx_array(gpu::int_tensordot(*ga.arr, *gb.arr, axes_a, axes_b), dt)};
+    if (dt == Dtype::Bool)
+        ErrorBuilder("gpu_backend::tensordot").not_implemented("dtype not supported");
     auto out = ::mlx::core::tensordot(*ga.arr, *gb.arr, axes_a, axes_b);
     return Storage{gpu::wrap_mlx_array(std::move(out), dt)};
 }

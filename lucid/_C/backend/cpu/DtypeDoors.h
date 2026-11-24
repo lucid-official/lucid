@@ -262,7 +262,9 @@ inline Storage back_to_int(const Storage& wide, Dtype to) {
 }
 
 // Widen any integer storage to double; pass anything else through.
-// Used where the only kernel is a BLAS one — see matmul.
+// Used where the only kernel is a floating one — the pools and unfold.  Not for a
+// product: a double holds 53 bits, so ``matmul`` has its own integer kernel
+// (``cpu/IntGemm.h``).
 inline Storage as_f64(const Storage& s) {
     const auto* c = std::get_if<CpuStorage>(&s);
     if (c == nullptr || !c->ptr || !is_int_like(c->dtype))
@@ -298,9 +300,9 @@ inline Storage as_f64(const Storage& s) {
 //:
 //: ``Nearest`` is for arithmetic whose exact result *is* an integer and
 //: which was only routed through double because Accelerate had no
-//: integer kernel — an integer matmul, say.  There the double may sit a
-//: few ulp off the true integer, and rounding to nearest repairs that;
-//: truncating would turn 5 into 4.
+//: integer kernel — an integer unfold or max-pool, say.  There the double
+//: may sit a few ulp off the true integer, and rounding to nearest
+//: repairs that; truncating would turn 5 into 4.
 //:
 //: ``TowardZero`` is for a result that is genuinely fractional and is
 //: being narrowed because the caller asked for an integer dtype — the

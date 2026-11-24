@@ -6,18 +6,6 @@ namespace lucid {
 namespace backend {
 
 Storage CpuBackend::matmul(const Storage& a, const Storage& b, const MatmulOpts& opts, Dtype dt) {
-    // There is no integer BLAS either, and the product of two integer
-    // matrices is an integer matrix — the reference framework and Metal
-    // both answer it, and the CPU raised.  Taken in double and rounded
-    // back: exact as long as each dot product stays inside 2^53, which
-    // covers int32 and below at any realistic K.  int64 operands large
-    // enough to break that would already have overflowed their own
-    // type in a native integer GEMM.
-    if (detail::is_int_like(dt)) {
-        const std::size_t out_n = opts.batch * static_cast<std::size_t>(opts.M) * opts.N;
-        const Storage wide = matmul(detail::as_f64(a), detail::as_f64(b), opts, Dtype::F64);
-        return detail::f64_to_int(wide, out_n, dt);
-    }
     // No half BLAS to call, so the product is taken in single and
     // rounded once.  Accumulating in the wider type is what a half
     // GEMM would do internally anyway.
@@ -66,7 +54,12 @@ Storage CpuBackend::matmul(const Storage& a, const Storage& b, const MatmulOpts&
                            cp + bi * M * N, N);
             }
         }
-    } else {
+    } else if (!cpu::int_gemm_by_dtype(dt, opts.transA, opts.transB, batch,
+                                       static_cast<std::size_t>(M), static_cast<std::size_t>(N),
+                                       static_cast<std::size_t>(K), ca.ptr.get(), cb.ptr.get(),
+                                       ptr.get())) {
+        // The integer dtypes have no BLAS, so Lucid's own wrapping kernel
+        // (cpu/IntGemm.h) answers them; bool, and anything else, is refused.
         ErrorBuilder("cpu_backend::matmul").not_implemented("dtype not supported");
     }
     Shape out_shape;

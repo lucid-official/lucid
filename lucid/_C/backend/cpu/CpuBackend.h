@@ -109,6 +109,7 @@
 #include "GridSample.h"
 #include "Im2Col.h"
 #include "IndexBounds.h"
+#include "IntGemm.h"
 #include "IntPow.h"
 #include "Interpolate.h"
 #include "Lapack.h"

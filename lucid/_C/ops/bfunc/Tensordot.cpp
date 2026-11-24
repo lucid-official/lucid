@@ -16,6 +16,7 @@
 #include <variant>
 
 #include "../../backend/Dispatcher.h"
+#include "../../backend/cpu/IntGemm.h"
 #include "../../compile/Tracer.h"
 #include "../../core/Allocator.h"
 #include "../../core/Error.h"
@@ -194,20 +195,14 @@ void run_cpu_tensordot_gemm(CpuStorage& out_cpu,
     case Dtype::C64:
         gemm_loop<std::complex<float>>(out_cpu, a_cpu, b_cpu, M, K, N);
         break;
-    case Dtype::I8:
-        gemm_loop<std::int8_t>(out_cpu, a_cpu, b_cpu, M, K, N);
-        break;
-    case Dtype::I16:
-        gemm_loop<std::int16_t>(out_cpu, a_cpu, b_cpu, M, K, N);
-        break;
-    case Dtype::I32:
-        gemm_loop<std::int32_t>(out_cpu, a_cpu, b_cpu, M, K, N);
-        break;
-    case Dtype::I64:
-        gemm_loop<std::int64_t>(out_cpu, a_cpu, b_cpu, M, K, N);
-        break;
     default:
-        ErrorBuilder("tensordot").not_implemented("dtype not supported");
+        // The integer dtypes wrap at their own width.  The scalar loop above
+        // multiplies and adds in the signed type, where an overflow is undefined
+        // behaviour, so they take the one wrapping kernel the CPU matmul uses.
+        if (!backend::cpu::int_gemm_by_dtype(
+                dt, false, false, 1, static_cast<std::size_t>(M), static_cast<std::size_t>(N),
+                static_cast<std::size_t>(K), a_cpu.ptr.get(), b_cpu.ptr.get(), out_cpu.ptr.get()))
+            ErrorBuilder("tensordot").not_implemented("dtype not supported");
     }
 }
 
