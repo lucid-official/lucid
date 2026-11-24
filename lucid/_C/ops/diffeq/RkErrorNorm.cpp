@@ -14,18 +14,17 @@
 
 #include <cmath>
 #include <cstddef>
-#include <functional>
 #include <memory>
 #include <string>
 #include <variant>
 #include <vector>
 
-#include <mlx/compile.h>
 #include <mlx/ops.h>
 
 #include "../../backend/cpu/Blas.h"
 #include "../../backend/cpu/Vdsp.h"
 #include "../../backend/gpu/MlxBridge.h"
+#include "../../backend/gpu/ShapelessFused.h"
 #include "../../core/Allocator.h"
 #include "../../core/Error.h"
 #include "../../core/ErrorBuilder.h"
@@ -200,25 +199,22 @@ double error_norm_cpu(const T* y0,
 // across shapes, so a count captured at trace time would be silently wrong
 // for every later call with a different state size.  The division and the
 // square root are host arithmetic on a scalar and cost nothing.
-const std::function<std::vector<::mlx::core::array>(const std::vector<::mlx::core::array>&)>&
-fused_error_norm() {
+const gpu::ShapelessFused& fused_error_norm() {
     namespace mx = ::mlx::core;
-    static const std::function<std::vector<mx::array>(const std::vector<mx::array>&)> compiled =
-        mx::compile(
-            [](const std::vector<mx::array>& ins) -> std::vector<mx::array> {
-                const std::size_t m = (ins.size() - 4) / 2;
-                mx::array err = mx::multiply(ins[2], ins[2 + m]);
-                for (std::size_t j = 1; j < m; ++j)
-                    err = mx::add(err, mx::multiply(ins[2 + j], ins[2 + m + j]));
+    static const gpu::ShapelessFused compiled(
+        [](const std::vector<mx::array>& ins) -> std::vector<mx::array> {
+            const std::size_t m = (ins.size() - 4) / 2;
+            mx::array err = mx::multiply(ins[2], ins[2 + m]);
+            for (std::size_t j = 1; j < m; ++j)
+                err = mx::add(err, mx::multiply(ins[2 + j], ins[2 + m + j]));
 
-                const mx::array& rtol = ins[ins.size() - 2];
-                const mx::array& atol = ins[ins.size() - 1];
-                mx::array tol = mx::add(
-                    atol, mx::multiply(rtol, mx::maximum(mx::abs(ins[0]), mx::abs(ins[1]))));
-                mx::array ratio = mx::divide(err, tol);
-                return {mx::sum(mx::multiply(ratio, ratio), /*keepdims=*/false)};
-            },
-            /*shapeless=*/true);
+            const mx::array& rtol = ins[ins.size() - 2];
+            const mx::array& atol = ins[ins.size() - 1];
+            mx::array tol =
+                mx::add(atol, mx::multiply(rtol, mx::maximum(mx::abs(ins[0]), mx::abs(ins[1]))));
+            mx::array ratio = mx::divide(err, tol);
+            return {mx::sum(mx::multiply(ratio, ratio), /*keepdims=*/false)};
+        });
     return compiled;
 }
 

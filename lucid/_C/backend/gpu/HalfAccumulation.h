@@ -29,20 +29,19 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
-#include <functional>
 #include <limits>
 #include <optional>
 #include <string>
 #include <vector>
 
 #include <mlx/array.h>
-#include <mlx/compile.h>
 #include <mlx/fast.h>
 #include <mlx/ops.h>
 
 #include "../GradMask.h"
 #include "ComplexParts.h"
 #include "MlxBridge.h"
+#include "ShapelessFused.h"
 
 namespace lucid {
 namespace backend {
@@ -749,21 +748,11 @@ inline std::vector<::mlx::core::array> omi_norm_stats(const ::mlx::core::array& 
 }
 
 // Fuse an element-wise composite with any number of inputs and outputs
-// into one Metal kernel.
+// into one Metal kernel.  An empty operand runs it eagerly instead of
+// through the shapeless trace (ShapelessFused.h).
 template <class Fn>
-std::vector<::mlx::core::array> mlx_fused(const std::vector<::mlx::core::array>& ins, Fn) {
-    for (const auto& a : ins) {
-        if (a.size() == 0)
-            return Fn{}(ins);
-    }
-    static const std::function<std::vector<::mlx::core::array>(
-        const std::vector<::mlx::core::array>&)>
-        compiled = ::mlx::core::compile(
-            [](const std::vector<::mlx::core::array>& in) -> std::vector<::mlx::core::array> {
-                return Fn{}(in);
-            },
-            /*shapeless=*/true);
-    return compiled(ins);
+std::vector<::mlx::core::array> mlx_fused(const std::vector<::mlx::core::array>& ins, Fn fn) {
+    return gpu::shapeless_fused(ins, fn);
 }
 
 // ``(x - mean)^2`` in float32 for a half ``x``.

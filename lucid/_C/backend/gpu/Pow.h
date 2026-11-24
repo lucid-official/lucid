@@ -46,13 +46,13 @@
 #include <vector>
 
 #include <mlx/array.h>
-#include <mlx/compile.h>
 #include <mlx/fast.h>
 #include <mlx/ops.h>
 
 #include "../../core/Half.h"
 #include "BinaryKernelLoad.h"
 #include "MlxBridge.h"
+#include "ShapelessFused.h"
 
 namespace lucid::backend {
 
@@ -426,7 +426,7 @@ inline std::vector<mx::array> int_pow_steps(const std::vector<mx::array>& in) {
 }
 
 inline mx::array int_pow(const mx::array& a, const mx::array& b) {
-    static const auto fused = mx::compile(&int_pow_steps, /*shapeless=*/true);
+    static const gpu::ShapelessFused fused(&int_pow_steps);
     return fused({a, b})[0];
 }
 

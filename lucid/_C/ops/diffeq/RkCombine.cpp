@@ -20,14 +20,12 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <functional>
 #include <memory>
 #include <string>
 #include <utility>
 #include <variant>
 #include <vector>
 
-#include <mlx/compile.h>
 #include <mlx/ops.h>
 
 #include "../../autograd/Helpers.h"
@@ -35,6 +33,7 @@
 #include "../../backend/cpu/Blas.h"
 #include "../../backend/cpu/Vdsp.h"
 #include "../../backend/gpu/MlxBridge.h"
+#include "../../backend/gpu/ShapelessFused.h"
 #include "../../core/Allocator.h"
 #include "../../core/Error.h"
 #include "../../core/ErrorBuilder.h"
@@ -182,20 +181,17 @@ const T* cpu_data(const TensorImplPtr& t) {
 // function-pointer-convertible one) and reads its arity from the input list,
 // so a single static covers every stage count -- MLX traces once per distinct
 // input signature and reuses it after that.
-const std::function<std::vector<::mlx::core::array>(const std::vector<::mlx::core::array>&)>&
-fused_combine() {
+const gpu::ShapelessFused& fused_combine() {
     namespace mx = ::mlx::core;
-    static const std::function<std::vector<mx::array>(const std::vector<mx::array>&)> compiled =
-        mx::compile(
-            [](const std::vector<mx::array>& ins) -> std::vector<mx::array> {
-                // ins = [y0, k_0 .. k_{m-1}, w_0 .. w_{m-1}]
-                const std::size_t m = (ins.size() - 1) / 2;
-                mx::array acc = ins[0];
-                for (std::size_t j = 0; j < m; ++j)
-                    acc = mx::add(acc, mx::multiply(ins[1 + j], ins[1 + m + j]));
-                return {acc};
-            },
-            /*shapeless=*/true);
+    static const gpu::ShapelessFused compiled(
+        [](const std::vector<mx::array>& ins) -> std::vector<mx::array> {
+            // ins = [y0, k_0 .. k_{m-1}, w_0 .. w_{m-1}]
+            const std::size_t m = (ins.size() - 1) / 2;
+            mx::array acc = ins[0];
+            for (std::size_t j = 0; j < m; ++j)
+                acc = mx::add(acc, mx::multiply(ins[1 + j], ins[1 + m + j]));
+            return {acc};
+        });
     return compiled;
 }
 

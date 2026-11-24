@@ -43,7 +43,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
-#include <functional>
 #include <limits>
 #include <optional>
 #include <sstream>
@@ -54,7 +53,6 @@
 #include <vector>
 
 #include <mlx/array.h>
-#include <mlx/compile.h>
 #include <mlx/fast.h>
 #include <mlx/ops.h>
 #include <mlx/utils.h>
@@ -65,6 +63,7 @@
 #include "../../core/IndexRefusal.h"
 #include "ComplexParts.h"
 #include "HalfAccumulation.h"
+#include "ShapelessFused.h"
 
 namespace lucid {
 namespace backend {
@@ -142,8 +141,7 @@ struct AxisIndex {
 
 namespace axis_index_detail {
 
-using Fused =
-    std::function<std::vector<::mlx::core::array>(const std::vector<::mlx::core::array>&)>;
+using Fused = gpu::ShapelessFused;
 
 inline void validate_index_dtype(const ::mlx::core::array& idx) {
     namespace mx = ::mlx::core;
@@ -193,10 +191,10 @@ std::vector<::mlx::core::array> check(const std::vector<::mlx::core::array>& in)
 // is often as large as the gather it feeds, and each separate step would
 // be another pass over it.
 inline const Fused& fused(NegativeIndex negative, bool narrow) {
-    static const Fused wrap = ::mlx::core::compile(&check<true, false>, /*shapeless=*/true);
-    static const Fused wrap32 = ::mlx::core::compile(&check<true, true>, /*shapeless=*/true);
-    static const Fused strict = ::mlx::core::compile(&check<false, false>, /*shapeless=*/true);
-    static const Fused strict32 = ::mlx::core::compile(&check<false, true>, /*shapeless=*/true);
+    static const Fused wrap(&check<true, false>);
+    static const Fused wrap32(&check<true, true>);
+    static const Fused strict(&check<false, false>);
+    static const Fused strict32(&check<false, true>);
     if (negative == NegativeIndex::Wrap)
         return narrow ? wrap32 : wrap;
     return narrow ? strict32 : strict;
@@ -268,8 +266,8 @@ std::vector<::mlx::core::array> sink_check(const std::vector<::mlx::core::array>
 }
 
 inline const Fused& fused_sink(bool narrow) {
-    static const Fused wide = ::mlx::core::compile(&sink_check<false>, /*shapeless=*/true);
-    static const Fused narrow32 = ::mlx::core::compile(&sink_check<true>, /*shapeless=*/true);
+    static const Fused wide(&sink_check<false>);
+    static const Fused narrow32(&sink_check<true>);
     return narrow ? narrow32 : wide;
 }
 

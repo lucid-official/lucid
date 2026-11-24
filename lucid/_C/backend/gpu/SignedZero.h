@@ -16,12 +16,11 @@
 #pragma once
 
 #include <cstdint>
-#include <functional>
-#include <vector>
 
 #include <mlx/array.h>
-#include <mlx/compile.h>
 #include <mlx/ops.h>
+
+#include "ShapelessFused.h"
 
 namespace lucid {
 namespace gpu {
@@ -51,14 +50,11 @@ inline ::mlx::core::array clip_ranked(const ::mlx::core::array& x,
                                       const ::mlx::core::array& lo,
                                       const ::mlx::core::array& hi) {
     namespace mx = ::mlx::core;
-    static const std::function<std::vector<mx::array>(const std::vector<mx::array>&)> fused =
-        mx::compile(
-            [](const std::vector<mx::array>& in) -> std::vector<mx::array> {
-                const mx::array m =
-                    rank_zero_pair(in[0], in[1], mx::maximum(in[0], in[1]), /*is_max=*/true);
-                return {rank_zero_pair(m, in[2], mx::minimum(m, in[2]), /*is_max=*/false)};
-            },
-            /*shapeless=*/true);
+    static const ShapelessFused fused([](const FusedArrays& in) -> FusedArrays {
+        const mx::array m =
+            rank_zero_pair(in[0], in[1], mx::maximum(in[0], in[1]), /*is_max=*/true);
+        return {rank_zero_pair(m, in[2], mx::minimum(m, in[2]), /*is_max=*/false)};
+    });
     return fused({x, lo, hi})[0];
 }
 

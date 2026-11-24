@@ -117,6 +117,7 @@
 #include "PNorm.h"
 #include "Pow.h"
 #include "SdpaHeadDim.h"
+#include "ShapelessFused.h"
 #include "Shift.h"
 #include "SignedZero.h"
 #include "SortOrder.h"
@@ -2170,35 +2171,24 @@ private:
     // dtype-specific constant from the input's dtype (``x.dtype()``), never from
     // a captured ``Dtype`` (the compile overload needs a function-pointer-
     // convertible lambda).  The compiled function is a function-local static, so
-    // it is built once per distinct ``Fn`` type and reused thereafter.
+    // it is built once per distinct ``Fn`` type and reused thereafter.  An empty
+    // operand runs ``fn`` eagerly, never the shapeless trace (ShapelessFused.h).
     template <class Fn>
-    Storage mlx_unary_fused(const Storage& a, Dtype dt, Fn) {
-        static const std::function<std::vector<::mlx::core::array>(
-            const std::vector<::mlx::core::array>&)>
-            compiled = ::mlx::core::compile(
-                [](const std::vector<::mlx::core::array>& ins) -> std::vector<::mlx::core::array> {
-                    return {Fn{}(ins[0])};
-                },
-                /*shapeless=*/true);
+    Storage mlx_unary_fused(const Storage& a, Dtype dt, Fn fn) {
         const auto& gs = std::get<GpuStorage>(a);
-        return Storage{gpu::wrap_mlx_array(std::move(compiled({*gs.arr})[0]), dt)};
+        return Storage{gpu::wrap_mlx_array(gpu::fused_unary(*gs.arr, fn), dt)};
     }
 
     // Binary counterpart of :meth:`mlx_unary_fused` — for two-input element-wise
     // composites (e.g. activation backward passes consuming the input and the
-    // incoming gradient).  Same caching, same capture-less requirement.
+    // incoming gradient).  Same caching, same capture-less requirement, same
+    // eager run for an empty operand — a shapeless trace broadcasts a 0 against a
+    // 1 to 1, so ``maximum`` of ``(0,)`` and ``(1,)`` came back one element long.
     template <class Fn>
-    Storage mlx_binary_fused(const Storage& a, const Storage& b, Dtype dt, Fn) {
-        static const std::function<std::vector<::mlx::core::array>(
-            const std::vector<::mlx::core::array>&)>
-            compiled = ::mlx::core::compile(
-                [](const std::vector<::mlx::core::array>& ins) -> std::vector<::mlx::core::array> {
-                    return {Fn{}(ins[0], ins[1])};
-                },
-                /*shapeless=*/true);
+    Storage mlx_binary_fused(const Storage& a, const Storage& b, Dtype dt, Fn fn) {
         const auto& ga = std::get<GpuStorage>(a);
         const auto& gb = std::get<GpuStorage>(b);
-        return Storage{gpu::wrap_mlx_array(std::move(compiled({*ga.arr, *gb.arr})[0]), dt)};
+        return Storage{gpu::wrap_mlx_array(gpu::fused_binary(*ga.arr, *gb.arr, fn), dt)};
     }
 
     // Applies a binary MLX operation fn to two GpuStorage arrays.  Shape is

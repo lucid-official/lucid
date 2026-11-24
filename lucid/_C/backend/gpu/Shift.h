@@ -16,8 +16,9 @@
 #include <vector>
 
 #include <mlx/array.h>
-#include <mlx/compile.h>
 #include <mlx/ops.h>
+
+#include "ShapelessFused.h"
 
 namespace lucid::backend {
 
@@ -40,9 +41,8 @@ std::vector<::mlx::core::array> shift_steps(const std::vector<::mlx::core::array
 // One fused kernel per call, not a pass per step.
 inline ::mlx::core::array
 gpu_shift(const ::mlx::core::array& x, const ::mlx::core::array& y, bool left) {
-    namespace mx = ::mlx::core;
-    static const auto shift_left = mx::compile(&shift_steps<true>, /*shapeless=*/true);
-    static const auto shift_right = mx::compile(&shift_steps<false>, /*shapeless=*/true);
+    static const gpu::ShapelessFused shift_left(&shift_steps<true>);
+    static const gpu::ShapelessFused shift_right(&shift_steps<false>);
     return (left ? shift_left : shift_right)({x, y})[0];
 }
 
