@@ -138,6 +138,29 @@ PAIR_CASES: tuple[PairCase, ...] = (
             ),
         ),
     ),
+    # The bicubic and the 5-D paths are composites of Python's: the pair is judged by the owner.
+    PairCase(
+        "grid_sample",
+        lambda fw, a, b: fw.nn.functional.grid_sample(a, b, mode="bicubic", align_corners=False),
+        (
+            Layout(
+                "bicubic-image-grid",
+                [[[[1.0, 2.0], [3.0, 4.0]]]],
+                [[[[0.0, 0.0], [0.5, 0.5]], [[-0.5, 0.0], [0.0, 0.0]]]],
+            ),
+        ),
+    ),
+    PairCase(
+        "grid_sample",
+        lambda fw, a, b: fw.nn.functional.grid_sample(a, b, align_corners=False),
+        (
+            Layout(
+                "volume-grid",
+                [[[[[1.0, 2.0], [3.0, 4.0]], [[5.0, 6.0], [7.0, 8.0]]]]],
+                [[[[[0.0, 0.0, 0.0], [0.5, 0.5, 0.5]]]]],
+            ),
+        ),
+    ),
     PairCase("heaviside", lambda fw, a, b: fw.heaviside(a, b), _BROADCAST),
     PairCase("complex", lambda fw, a, b: fw.complex(a, b), _BROADCAST),
 )
@@ -297,38 +320,73 @@ def test_a_pair_is_declared_once() -> None:
 
 _INDEX_DTYPES = ("bool", "int8", "int16", "int32", "int64")
 
-#: ``name -> (call, the index dtypes the reference answers)``.  ``take_along_dim`` reads int64 beside
-#: a dim and is a ``gather`` (int32 and int64) flattened; ``take`` reads int64.
-_INDEX_CALLS: dict[str, tuple[Callable[[ModuleType, object, object], object], frozenset[str]]] = {
-    "take_along_dim": (lambda fw, x, i: fw.take_along_dim(x, i, 1), frozenset({"int64"})),
-    "take_along_dim-flat": (
-        lambda fw, x, i: fw.take_along_dim(x, i),
-        frozenset({"int32", "int64"}),
+
+@dataclass(frozen=True)
+class IndexCall:
+    """A call that reads an index tensor, and the index dtypes the reference answers."""
+
+    call: Callable[[ModuleType, object, object], object]
+    #: The dtypes of an index with elements.
+    answered: frozenset[str]
+    #: The dtypes of an index with none: ``gather`` reads no element of it, so answers any.
+    answered_empty: frozenset[str]
+    #: Whether the index is read flat (1-d) rather than shaped like the result.
+    flat: bool
+
+
+_ALL = frozenset(_INDEX_DTYPES)
+_INT64 = frozenset({"int64"})
+
+#: ``take_along_dim`` reads int64 beside a dim and is a ``gather`` (int32 and int64) flattened;
+#: ``take`` reads int64.
+_INDEX_CALLS: dict[str, IndexCall] = {
+    "take_along_dim": IndexCall(lambda fw, x, i: fw.take_along_dim(x, i, 1), _INT64, _INT64, False),
+    "take_along_dim-flat": IndexCall(
+        lambda fw, x, i: fw.take_along_dim(x, i), frozenset({"int32", "int64"}), _ALL, True
     ),
-    "take": (lambda fw, x, i: fw.take(x, i), frozenset({"int64"})),
-    "gather": (lambda fw, x, i: fw.gather(x, 1, i), frozenset({"int32", "int64"})),
+    "take": IndexCall(lambda fw, x, i: fw.take(x, i), _INT64, _INT64, True),
+    "gather": IndexCall(
+        lambda fw, x, i: fw.gather(x, 1, i), frozenset({"int32", "int64"}), _ALL, False
+    ),
 }
+
+#: The empty cells the reference answers and Lucid's engine still refuses: a bool index is an engine
+#: error whether or not it has elements.
+_EMPTY_OPEN = frozenset({("gather", "bool"), ("take_along_dim-flat", "bool")})
+_EMPTY_OPEN_REASON = "the engine's gather refuses an empty bool index, as it refuses a full one"
 
 _X = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]
 _I = [[0, 2], [1, 0]]
 
 
-def _index_cells() -> list[ParameterSet]:
+def _index_cells(*, empty: bool) -> list[ParameterSet]:
     return [
-        pytest.param(name, dtype, id=f"{name}-{dtype}")
+        pytest.param(
+            name,
+            dtype,
+            id=f"{name}-{dtype}",
+            marks=(
+                [pytest.mark.xfail(strict=True, reason=_EMPTY_OPEN_REASON)]
+                if empty and (name, dtype) in _EMPTY_OPEN
+                else []
+            ),
+        )
         for name in _INDEX_CALLS
         for dtype in _INDEX_DTYPES
     ]
 
 
-def _index_verdict(fw: ModuleType, name: str, dtype: str, device: str) -> str:
-    call, _ = _INDEX_CALLS[name]
+def _index_verdict(fw: ModuleType, name: str, dtype: str, device: str, *, empty: bool) -> str:
+    entry = _INDEX_CALLS[name]
     x = _tensor(fw, _X, "float32", device)
-    index = _I if name != "take" else [0, 2, 1]
-    if name == "take_along_dim-flat":
-        index = [0, 2, 1]
+    if empty:
+        index = _tensor(fw, [], dtype, device)
+        if not entry.flat:
+            index = index.reshape(2, 0)
+    else:
+        index = _tensor(fw, [0, 2, 1] if entry.flat else _I, dtype, device)
     try:
-        call(fw, x, _tensor(fw, index, dtype, device))
+        entry.call(fw, x, index)
     except RuntimeError:
         return "refuses"
     except IndexError:
@@ -336,23 +394,37 @@ def _index_verdict(fw: ModuleType, name: str, dtype: str, device: str) -> str:
     return "answers"
 
 
-@pytest.mark.parametrize(("name", "dtype"), _index_cells())
+def _index_want(name: str, dtype: str, *, empty: bool) -> str:
+    entry = _INDEX_CALLS[name]
+    return "answers" if dtype in (entry.answered_empty if empty else entry.answered) else "refuses"
+
+
+@pytest.mark.parametrize(("name", "dtype"), _index_cells(empty=False))
 def test_lucid_reads_the_index_dtypes_the_reference_reads(
     device: str, name: str, dtype: str
 ) -> None:
-    _, answered = _INDEX_CALLS[name]
-    want = "answers" if dtype in answered else "refuses"
-    assert _index_verdict(lucid, name, dtype, device) == want
+    got = _index_verdict(lucid, name, dtype, device, empty=False)
+    assert got == _index_want(name, dtype, empty=False)
+
+
+@pytest.mark.parametrize(("name", "dtype"), _index_cells(empty=True))
+def test_lucid_reads_the_dtype_of_an_empty_index_as_the_reference_does(
+    device: str, name: str, dtype: str
+) -> None:
+    """``gather`` of an index with no element is an empty result whatever its dtype; ``take`` and
+    ``take_along_dim`` beside a dim still want int64."""
+    got = _index_verdict(lucid, name, dtype, device, empty=True)
+    assert got == _index_want(name, dtype, empty=True)
 
 
 @pytest.mark.parity
+@pytest.mark.parametrize("empty", [False, True], ids=["full", "empty"])
 @pytest.mark.parametrize(("name", "dtype"), [(n, d) for n in _INDEX_CALLS for d in _INDEX_DTYPES])
 def test_the_reference_reads_the_index_dtypes_the_table_says(
-    ref: ModuleType, name: str, dtype: str
+    ref: ModuleType, name: str, dtype: str, empty: bool
 ) -> None:
-    _, answered = _INDEX_CALLS[name]
-    want = "answers" if dtype in answered else "refuses"
-    assert _index_verdict(ref, name, dtype, "cpu") == want
+    got = _index_verdict(ref, name, dtype, "cpu", empty=empty)
+    assert got == _index_want(name, dtype, empty=empty)
 
 
 @pytest.mark.parametrize("dtype", ["bool", "int8", "int16", "int32"])
@@ -365,6 +437,22 @@ def test_take_along_dim_beside_a_dim_refuses_as_a_dtype_guard(device: str, dtype
         lucid.take_along_dim(x, index, 1)
     with pytest.raises(_C_engine.DtypeMismatch, match="int64"):
         x.take_along_dim(index, 1)
+
+
+@pytest.mark.parametrize("dtype", ["int8", "int16"])
+def test_an_empty_narrow_gather_index_is_an_empty_result(device: str, dtype: str) -> None:
+    src = lucid.ones(3, 2, device=device)
+    empty = lucid.zeros(0, 2, dtype=getattr(lucid, dtype), device=device)
+    assert tuple(lucid.gather(src, 0, empty).shape) == (0, 2)
+    assert tuple(src.gather(0, empty).shape) == (0, 2)
+    assert tuple(lucid.take_along_dim(src.reshape(-1), empty.reshape(-1)).shape) == (0,)
+
+
+def test_a_narrow_gather_index_with_elements_is_still_refused(device: str) -> None:
+    src = lucid.ones(3, 2, device=device)
+    index = lucid.zeros(1, 2, dtype=lucid.int8, device=device)
+    with pytest.raises(_C_engine.DtypeMismatch, match=r"gather does not accept an int8 index"):
+        lucid.gather(src, 0, index)
 
 
 # ── the exponent of ldexp ───────────────────────────────────────────────────────────────────────
@@ -438,36 +526,90 @@ _TRAPEZOIDS = ("trapezoid", "cumulative_trapezoid")
 _Y_SHAPES = [(0,), (1,), (2,), (3,), (2, 3), (2, 1), (2, 2), (3, 2), (0, 2), (2, 0)]
 
 
-def _integral(fw: ModuleType, name: str, shape: tuple[int, ...], dim: int, device: str) -> object:
+#: The ``(y, x)`` dtypes tried: the 0-d ``x`` ranks as a dimensioned operand, so a wider one gives
+#: its dtype to the answer (a float64 ``x`` beside a float32 ``y`` is float64) and a narrower one
+#: leaves ``y``'s.
+_TRAPEZOID_DTYPES = [
+    ("float32", "float32"),
+    ("float32", "float64"),
+    ("float64", "float32"),
+    ("float16", "float32"),
+    ("float32", "float16"),
+    ("bfloat16", "float32"),
+]
+
+
+def _integral(
+    fw: ModuleType,
+    name: str,
+    shape: tuple[int, ...],
+    dim: int,
+    device: str,
+    dtypes: tuple[str, str],
+) -> object:
     n = 1
     for extent in shape:
         n *= extent
-    y = _tensor(fw, [float(k + 1) for k in range(n)], "float32", device).reshape(*shape)
-    x = _tensor(fw, 2.0, "float32", device)
+    y = _tensor(fw, [float(k + 1) for k in range(n)], dtypes[0], device).reshape(*shape)
+    x = _tensor(fw, 2.0, dtypes[1], device)
     return getattr(fw, name)(y, x, dim=dim)
 
 
 def _outcome(
-    fw: ModuleType, name: str, shape: tuple[int, ...], dim: int, device: str
-) -> tuple[str, tuple[int, ...], list[object]]:
+    fw: ModuleType,
+    name: str,
+    shape: tuple[int, ...],
+    dim: int,
+    device: str,
+    dtypes: tuple[str, str] = ("float32", "float32"),
+) -> tuple[str, tuple[int, ...], str, list[object]]:
     try:
-        out = _integral(fw, name, shape, dim, device)
+        out = _integral(fw, name, shape, dim, device, dtypes)
     except RuntimeError:
-        return ("refuses", (), [])
-    return ("answers", tuple(out.shape), out.to("cpu").tolist() if fw is lucid else out.tolist())
+        return ("refuses", (), "", [])
+    values = out.to("cpu").tolist() if fw is lucid else out.tolist()
+    return ("answers", tuple(out.shape), str(out.dtype).rsplit(".", 1)[-1], values)
 
 
 @pytest.mark.parity
+@pytest.mark.parametrize("dtypes", _TRAPEZOID_DTYPES, ids="-".join)
 @pytest.mark.parametrize("dim", [-1, 0])
 @pytest.mark.parametrize("shape", _Y_SHAPES, ids=str)
 @pytest.mark.parametrize("name", _TRAPEZOIDS)
 def test_a_zero_d_x_is_one_coordinate_along_dim(
-    ref: ModuleType, device: str, name: str, shape: tuple[int, ...], dim: int
+    ref: ModuleType,
+    device: str,
+    name: str,
+    shape: tuple[int, ...],
+    dim: int,
+    dtypes: tuple[str, str],
 ) -> None:
     """``y`` of ``n`` samples has ``n - 1`` areas and the one coordinate no spacing: they meet where
-    ``n - 1`` is 0 or 1 (an empty or all-zero answer) and are a shape mismatch beyond it."""
-    want = _outcome(ref, name, shape, dim, "cpu")
-    assert _outcome(lucid, name, shape, dim, device) == want
+    ``n - 1`` is 0 or 1 (an empty or all-zero answer) and are a shape mismatch beyond it.  The
+    answer's dtype is the pair's, the 0-d ``x`` ranked as the dimensioned operand it is viewed as."""
+    if not _supported(device, *dtypes):
+        pytest.skip(f"{device} cannot hold {dtypes}")
+    want = _outcome(ref, name, shape, dim, "cpu", dtypes)
+    assert _outcome(lucid, name, shape, dim, device, dtypes) == want
+
+
+@pytest.mark.parity
+@pytest.mark.parametrize("x_shape", [(), (0,)], ids=["0d", "vector"])
+@pytest.mark.parametrize("name", _TRAPEZOIDS)
+def test_zero_samples_keep_the_dtype_of_y_in_trapezoid_only(
+    ref: ModuleType, device: str, name: str, x_shape: tuple[int, ...]
+) -> None:
+    """The reference answers a ``y`` with no sample before it ranks ``y`` with ``x``; the running
+    integral ranks them as it does for any other length."""
+    if not _supported(device, "float64"):
+        pytest.skip(f"{device} cannot hold float64")
+    x = 1.0 if not x_shape else []
+    got = getattr(lucid, name)(
+        _tensor(lucid, [], "float32", device), _tensor(lucid, x, "float64", device)
+    )
+    want = getattr(ref, name)(_tensor(ref, [], "float32", "cpu"), _tensor(ref, x, "float64", "cpu"))
+    assert str(got.dtype).rsplit(".", 1)[-1] == str(want.dtype).rsplit(".", 1)[-1]
+    assert tuple(got.shape) == tuple(want.shape)
 
 
 @pytest.mark.parametrize("name", _TRAPEZOIDS)
