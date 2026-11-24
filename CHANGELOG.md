@@ -442,9 +442,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `linalg.solve_triangular` refuses a non-square A, a B whose rows (columns with `left=False`) do not fit A, and batches that do not broadcast with the reference's class, message and order of checks (LCD-1083).
 
-- half addmm, addcmul, lerp... compute in float32, round once
+- On float16 / bfloat16 tensors, `addmm`, `addbmm`, `baddbmm`, `addcmul`, `addcdiv` and `lerp` (free functions, `Tensor` methods and in-place twins) compute in float32 and round once, as the reference does. Before, they rounded the scalar, each product and each sum to the half type: `addmm(bfloat16, alpha=300.7)` is now 604 (was 600), and `lerp(float16, weight=70000)` is now 1.0 (was NaN). Gradients still reach each operand in its own dtype. float32 and float64 are unchanged (LCD-1087).
 
-- half lerp tests its dtype before the wasted sub (LCD-1087)
 
 ### Added
 
@@ -664,6 +663,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - every engine forward checks that its result's storage holds its shape's bytes before handing it back; a short result is an error rather than a silent out-of-bounds read. Engine shape messages now spell a shape as `[2, 3]` (LCD-1072).
 - **Behaviour change:** `linalg.solve_triangular`, `linalg.lu_solve` and `linalg.ldl_solve` need a right-hand side `B` of at least two dimensions, as the reference does. A 1-D (or 0-d) `B` was solved as a vector and now raises: `ShapeMismatch` (a `RuntimeError` and a `ValueError`) reading `linalg.solve_triangular: The input tensor B must have at least 2 dimensions.` (`lu_solve` alike; `ldl_solve` raises the reference's `IndexError`). To migrate, pass one column: `lu_solve(LU, pivots, b.unsqueeze(-1))`, then `.squeeze(-1)` the answer. `linalg.solve`, `solve_ex` and `lstsq` still read a vector `B` (LCD-1083).
 
+- Half-precision `addmm`, `addbmm` and `baddbmm` multiply in float32, so a half GEMM becomes a float32 GEMM. That costs more memory and lower Metal throughput, and buys the reference's single rounding. `addbmm` rounds once, where the reference's CPU kernel rounds after each batch: 1-2 half ulp apart (LCD-1087).
 ---
 
 ## [3.16.4] — 2026-11-07
