@@ -440,6 +440,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `pow` of a complex64 tensor on Metal answers `std::pow`'s special values at a zero base, as the CPU and the reference do. `0 ** 0` is `nan+nanj` and `0 ** -1` is `inf+nanj`, where MLX gave 0 for every exponent. This covers the tensor, scalar-exponent and scalar-base forms and the zero-base gradient, which had been a finite 0 where the reference is NaN. The patch costs one extra pass over `mx::power` (about 1.5-1.7x the bare op); lanes with a non-zero base are unchanged (LCD-1082).
 
+- refuse a 1-D rhs in solve_triangular, lu_solve, ldl_solve
 
 ### Added
 

@@ -16,8 +16,9 @@ from lucid._ops._reduce import _reduction_axes, _require_normable, _truth_mask
 from lucid._promotion import try_unwrap as _try_unwrap
 from lucid._tensor._indexing import broadcast_shapes as _broadcast_batch
 from lucid._tensor.tensor import Tensor
-from lucid.linalg._dtype_guard import _check_ldl_factor, _require_same_dtype
+from lucid.linalg._dtype_guard import _require_same_dtype
 from lucid.linalg._norm_scale import _scaled, _scaled_p_norm
+from lucid.linalg._operand_guard import _check_ldl_solve_operands, _require_triangular_system
 
 _la = _C_engine.linalg
 
@@ -1756,7 +1757,8 @@ def solve_triangular(
         Triangular coefficient matrix of shape ``(*, n, n)``.  Only
         the relevant triangle is read; the other half is ignored.
     B : Tensor
-        Right-hand side ``(*, n, k)`` or ``(n,)``; batch dims broadcast with ``input``.
+        Right-hand side ``(*, n, k)`` (``(*, k, n)`` if ``left=False``); batch dims broadcast
+        with ``input``.  A vector is refused: ``b.unsqueeze(-1)`` gives it a column.
     upper : bool, keyword-only
         If ``True`` :math:`A` is upper-triangular; if ``False``
         lower-triangular.
@@ -1771,7 +1773,13 @@ def solve_triangular(
     Returns
     -------
     Tensor
-        Solution :math:`X` — the broadcast batch, then ``(n, k)`` (or ``(n,)``).
+        Solution :math:`X` — the broadcast batch, then ``(n, k)``.
+
+    Raises
+    ------
+    ShapeMismatch
+        An operand under two dimensions, a non-square ``input``, or shapes that do not
+        fit or broadcast: a ``RuntimeError`` with the reference's message.
 
     Notes
     -----
@@ -1795,8 +1803,9 @@ def solve_triangular(
     >>> solve_triangular(A, b, upper=True)
     tensor([[1.], [3.]])
     """
-    # The engine owns the right-hand-side contract (batch broadcast, vector
-    # right-hand side) and the gradient in both operands.
+    # The engine's right-hand-side contract also reads a vector (``solve`` needs it); this
+    # op's reference does not, so its rules are applied here, before ``.mT`` or the engine.
+    _require_triangular_system("linalg.solve_triangular", input, B, left=left)
     B = B.to(dtype=input.dtype)  # the reference answers in ``input``'s dtype
     if not left:
         # X A = B  ⟺  Aᵀ Xᵀ = Bᵀ — solve the transposed system, transpose result.
@@ -2314,7 +2323,7 @@ def lu_solve(
         Pivot indices of shape ``(*, n)`` from :func:`lu_factor`
         (1-based, LAPACK convention).
     B : Tensor
-        Right-hand side ``(*, n, k)`` or ``(n,)``, broadcast against ``LU``.
+        Right-hand side ``(*, n, k)``, broadcast against ``LU``; a vector is refused.
     left : bool, keyword-only, optional
         If ``True`` (default), solve :math:`A X = B`; ``False`` solves
         :math:`X A = B`.
@@ -2325,7 +2334,7 @@ def lu_solve(
     Returns
     -------
     Tensor
-        Solution :math:`X`: broadcast batch, then ``(n, k)``, or ``(n,)`` for 1-D ``B``.
+        Solution :math:`X`: broadcast batch, then ``(n, k)``.
 
     Notes
     -----
@@ -2528,8 +2537,8 @@ def ldl_solve(LD: Tensor, pivots: Tensor, B: Tensor, *, hermitian: bool = False)
         (1-based, LAPACK convention).  Both :math:`1 \times 1` and
         :math:`2 \times 2` Bunch-Kaufman blocks are supported.
     B : Tensor
-        Right-hand side of shape ``(*, n, k)`` (or ``(n,)``).  Its batch
-        dimensions broadcast with those of ``LD``.
+        Right-hand side of shape ``(*, n, k)``.  Its batch dimensions broadcast
+        with those of ``LD``; a vector is refused.
     hermitian : bool, keyword-only, optional
         If ``True``, treat ``LD`` as a Hermitian :math:`L D L^H`
         factorisation.  For real inputs this is identical to ``False``.
@@ -2548,6 +2557,8 @@ def ldl_solve(LD: Tensor, pivots: Tensor, B: Tensor, *, hermitian: bool = False)
         is not one ``sytrf`` could have written.
     TypeError
         If ``pivots`` is not an integer tensor.
+    IndexError
+        If ``B`` has fewer than two dimensions, with the reference's message.
 
     Notes
     -----
@@ -2579,41 +2590,14 @@ def ldl_solve(LD: Tensor, pivots: Tensor, B: Tensor, *, hermitian: bool = False)
     tensor([[1.], [1.]])
     """
     del hermitian
-    _check_ldl_factor(LD)
-    if pivots.dtype not in (lucid.int8, lucid.int16, lucid.int32, lucid.int64):
-        raise TypeError(
-            f"ldl_solve: pivots must be an integer tensor, got {pivots.dtype}; "
-            f"pass the vector returned by ldl_factor"
-        )
+    batch = _check_ldl_solve_operands(LD, pivots, B)
     n = int(LD.shape[-1])
-    if tuple(pivots.shape) != tuple(LD.shape[:-1]):
-        raise ValueError(
-            f"ldl_solve: pivots must have shape {tuple(LD.shape[:-1])} to match "
-            f"LD of shape {tuple(LD.shape)}, got {tuple(pivots.shape)}"
-        )
-    vector = B.ndim == 1
-    rhs = B.unsqueeze(-1) if vector else B
-    if rhs.ndim < 2 or int(rhs.shape[-2]) != n:
-        raise ValueError(
-            f"ldl_solve: B must have {n} rows to match LD of shape "
-            f"{tuple(LD.shape)}, got shape {tuple(B.shape)}"
-        )
-    try:
-        batch = _broadcast_batch(
-            tuple(int(s) for s in LD.shape[:-2]), tuple(int(s) for s in rhs.shape[:-2])
-        )
-    except ValueError:
-        raise ValueError(
-            f"ldl_solve: the batch dimensions of LD {tuple(LD.shape)} and B "
-            f"{tuple(B.shape)} do not broadcast"
-        ) from None
-    k = int(rhs.shape[-1])
+    k = int(B.shape[-1])
     if n == 0 or k == 0 or 0 in batch:
-        empty = lucid.zeros(*batch, n, k, dtype=rhs.dtype, device=rhs.device)
-        return empty.squeeze(-1) if vector else empty
+        return lucid.zeros(*batch, n, k, dtype=B.dtype, device=B.device)
 
     LD = lucid.broadcast_to(lucid.tril(LD), (*batch, n, n))
-    rhs = lucid.broadcast_to(rhs, (*batch, n, k))
+    B = lucid.broadcast_to(B, (*batch, n, k))
     piv_rows = cast(
         list[list[int]], lucid.broadcast_to(pivots, (*batch, n)).reshape(-1, n).tolist()
     )
@@ -2671,12 +2655,11 @@ def ldl_solve(LD: Tensor, pivots: Tensor, B: Tensor, *, hermitian: bool = False)
     order_index = lucid.tensor(orders, dtype=lucid.int64, device=device)
     order_index = order_index.reshape(*batch, n, 1)
     inverse_index = lucid.argsort(order_index, dim=-2)
-    Y = lucid.gather(rhs, -2, lucid.broadcast_to(order_index, (*batch, n, k)))
+    Y = lucid.gather(B, -2, lucid.broadcast_to(order_index, (*batch, n, k)))
     Y = solve_triangular(L, Y, upper=False, unitriangular=True)
     Y = _solve_bunch_kaufman_d(LD, offdiag, partner_col, paired, Y)
     Y = solve_triangular(L.mT, Y, upper=True, unitriangular=True)
-    X = lucid.gather(Y, -2, lucid.broadcast_to(inverse_index, (*batch, n, k)))
-    return X.squeeze(-1) if vector else X
+    return lucid.gather(Y, -2, lucid.broadcast_to(inverse_index, (*batch, n, k)))
 
 
 def _solve_bunch_kaufman_d(

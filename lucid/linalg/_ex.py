@@ -37,6 +37,7 @@ from lucid.linalg import (
 )
 from lucid.linalg._dtype_guard import _require_same_dtype
 from lucid.linalg._lu import _lu_factor_packed
+from lucid.linalg._operand_guard import _require_matrix
 
 
 class _EighResult(NamedTuple):
@@ -1091,13 +1092,10 @@ def _lu_solve_general(
 ) -> Tensor:
     """``lu_solve(LU, pivots, B, left=..., adjoint=...)`` across all flags."""
     piv = _check_pivots(pivots, LU, "lu_solve")
+    _require_matrix("linalg.lu_solve", "B", B)
     if left and not adjoint:
         return _wrap(_la.lu_solve(_unwrap(LU), _unwrap(piv), _unwrap(B)))
     if not left:
-        if B.ndim < 2:
-            raise _C_engine.ShapeMismatch(
-                "linalg.lu_solve: The input tensor B must have at least 2 dimensions."
-            )
         return _lu_solve_general(LU, piv, B.mT, left=True, adjoint=not adjoint).mT
     lu_sh = tuple(int(s) for s in LU.shape)
     b_sh = tuple(int(s) for s in B.shape)
@@ -1106,7 +1104,7 @@ def _lu_solve_general(
             f"lu_solve: LU must be a square matrix or batch of them, got {lu_sh}"
         )
     n = lu_sh[-1]
-    if len(b_sh) < 2 or b_sh[-2] != n:
+    if b_sh[-2] != n:
         raise _C_engine.ShapeMismatch(f"lu_solve: B must have shape (*, {n}, k), got {b_sh}")
     batch = _broadcast_batch(lu_sh[:-2], b_sh[:-2])
     k = b_sh[-1]
