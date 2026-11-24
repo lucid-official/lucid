@@ -76,6 +76,10 @@
     },
     {
       "kind": "module",
+      "module": "lucid._ops._products"
+    },
+    {
+      "kind": "module",
       "module": "lucid._ops._reduce"
     },
     {
@@ -97,6 +101,10 @@
     {
       "kind": "module",
       "module": "lucid._ops.composite._expm1"
+    },
+    {
+      "kind": "module",
+      "module": "lucid._ops.composite._opmath"
     },
     {
       "kind": "module",
@@ -145,6 +153,10 @@
     {
       "kind": "module",
       "module": "lucid._promotion"
+    },
+    {
+      "kind": "module",
+      "module": "lucid._scalar_cast"
     },
     {
       "kind": "module",
@@ -404,10 +416,6 @@
     },
     {
       "kind": "module",
-      "module": "lucid.linalg._dtype_guard"
-    },
-    {
-      "kind": "module",
       "module": "lucid.linalg._ex"
     },
     {
@@ -424,7 +432,15 @@
     },
     {
       "kind": "module",
+      "module": "lucid.linalg._operand_guard"
+    },
+    {
+      "kind": "module",
       "module": "lucid.linalg._slogdet"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.linalg._vecdot"
     },
     {
       "kind": "module",
@@ -2710,6 +2726,12 @@
     }
   ],
   "lucid.linalg._slogdet.slogdet": [
+    {
+      "kind": "module",
+      "module": "lucid.linalg"
+    }
+  ],
+  "lucid.linalg._vecdot.vecdot": [
     {
       "kind": "module",
       "module": "lucid.linalg"
