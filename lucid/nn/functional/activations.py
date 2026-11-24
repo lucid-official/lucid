@@ -12,7 +12,11 @@ import lucid as _l
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _float_operand, _unwrap, _wrap
 from lucid._ops._autocast import _autocast_entry, _autocast_suspended
-from lucid._ops._bool_refusal import refuse, refuse_bool, refuse_mixed
+from lucid._ops._bool_refusal import (
+    refuse as _refuse,
+    refuse_bool as _refuse_bool,
+    refuse_mixed as _refuse_mixed,
+)
 from lucid._ops._dims import _dim_size, _wrap_dim
 from lucid._types import GeluApproximate
 from lucid.nn.functional._distance import (
@@ -734,7 +738,7 @@ def glu(input: Tensor, dim: int = -1) -> Tensor:
     size = _dim_size(impl.shape, dim)
     if size % 2:  # unequal halves broadcast into a silently wrong product
         raise _C_engine.InvalidArgument(f"glu: dim {dim} must have an even size, got {size}")
-    refuse("glu", impl)
+    _refuse("glu", impl)
     first, second = _C_engine.split_at(impl, [size // 2], dim)
     return _wrap(_C_engine.mul(first, _C_engine.sigmoid(second)))
 
@@ -784,7 +788,7 @@ def prelu(input: Tensor, weight: Tensor) -> Tensor:
     # The reference's class for a bool or integer prelu is the kernel's, and a dtype
     # guard's beside a weight of another dtype; the engine's relu below would raise the
     # guard's for both.
-    refuse_mixed("prelu", input, weight)
+    _refuse_mixed("prelu", input, weight)
     with _autocast_entry("prelu", _unwrap(input), _unwrap(weight)) as (xi, wi):
         dtype = xi.dtype
         # A per-channel ``(C,)`` slope belongs to dim 1 of an ``(N, C, *)`` input.
@@ -842,7 +846,7 @@ def celu(input: Tensor, alpha: float = 1.0, inplace: bool = False) -> Tensor:
     """
     if alpha == 0.0:
         raise _C_engine.InvalidArgument("ZeroDivisionError: alpha cannot be 0 for CELU")
-    refuse("celu", input)
+    _refuse("celu", input)
     if inplace:
         return _in_place(input, "celu_", lambda t: celu(t, alpha))
     xi = _unwrap(input)
@@ -905,7 +909,7 @@ def hardtanh(
     """
     if min_val > max_val:
         raise ValueError("min_val cannot be greater than max_val")
-    refuse_bool("hardtanh", input)
+    _refuse_bool("hardtanh", input)
     if inplace:
         return _in_place(input, "hardtanh_", lambda t: hardtanh(t, min_val, max_val))
     inside = _unwrap((input > min_val) & (input < max_val))
@@ -1058,7 +1062,7 @@ def _threshold(x: Tensor, threshold: float, value: float) -> Tensor:
     # a 0 at the first threshold and the loss went finite with nothing to
     # show for it.  The reference is the first.  (The public function's
     # ``threshold`` argument shadows its own name, hence this helper.)
-    refuse_bool("threshold", x)
+    _refuse_bool("threshold", x)
     replaced = x <= threshold
     replacement = _l.full_like(x, float(value))
     return _keep_in_graph(_l.where(replaced, replacement, x), x)
@@ -1128,7 +1132,7 @@ def rrelu(
             f"rrelu: lower bound must be less than or equal to the upper bound, "
             f"got lower={lower}, upper={upper}"
         )
-    refuse("rrelu", input)
+    _refuse("rrelu", input)
     if inplace:
         return _in_place(input, "rrelu_", lambda t: rrelu(t, lower, upper, training))
     if not training:

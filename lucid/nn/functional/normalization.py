@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _unwrap, _wrap
 from lucid._ops._autocast import _autocast_entry, _autocast_suspended
-from lucid._ops._bool_refusal import refuse, refuse_declared
+from lucid._ops._bool_refusal import refuse as _refuse, refuse_declared as _refuse_declared
 from lucid._ops._dims import _to_axes
 from lucid._ops._reduce import _require_normable
 from lucid._types import DimLike, DTypeLike
@@ -397,8 +397,8 @@ def rms_norm(
 
     # A bool is the entry's to refuse, an integer the engine schema's: asked here, before any
     # work (the engine op is reached last, after the shape checks and the default weight).
-    refuse("rms_norm", input)
-    refuse_declared("rms_norm", input)
+    _refuse("rms_norm", input)
+    _refuse_declared("rms_norm", input)
     if eps is None:
         from lucid._dtype import finfo
 
@@ -591,7 +591,7 @@ def instance_norm(
     >>> y.shape
     (4, 3, 64, 64)
     """
-    refuse("instance_norm", input)
+    _refuse("instance_norm", input)
     _check_instance_norm_input(input, use_input_stats, running_mean, running_var, weight, bias)
     amp_was_active = _C_engine.amp_is_active(_unwrap(input).device)
     with _autocast_entry("instance_norm", _unwrap(input)) as (xi,):
@@ -693,7 +693,7 @@ def local_response_norm(
         raise RuntimeError(
             f"local_response_norm: kernel size should be greater than zero, but got size={size}"
         )
-    refuse("local_response_norm", input)
+    _refuse("local_response_norm", input)
     # The row applies once, here: its parts (a FP32 ``sum`` and a KEEP
     # ``div``) would otherwise meet in two dtypes under Metal autocast.
     with _autocast_entry("local_response_norm", _lrn_operand(xi)) as (xi,):

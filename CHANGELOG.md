@@ -407,6 +407,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - cross refuses operands of two dtypes (LCD-1060)
 
+- import the refusal helpers under private names
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

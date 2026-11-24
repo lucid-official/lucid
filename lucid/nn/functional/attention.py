@@ -5,7 +5,7 @@ nn.functional attention operations.
 from typing import TYPE_CHECKING
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _unwrap, _wrap
-from lucid._ops._bool_refusal import refuse
+from lucid._ops._bool_refusal import refuse as _refuse
 from lucid.nn.functional.dropout import _check_probability
 
 if TYPE_CHECKING:
@@ -187,7 +187,7 @@ def _attention_operands(
     truth value or an additive bias, so an integer one is refused here as well (the engine
     checks the queries, keys and values).
     """
-    refuse("scaled_dot_product_attention", attn_mask, "attn_mask")
+    _refuse("scaled_dot_product_attention", attn_mask, "attn_mask")
     _check_probability(dropout_p)
     if min(query.ndim, key.ndim, value.ndim) < 2:
         raise _C_engine.InvalidArgument(

@@ -9,7 +9,7 @@ import lucid as _lucid
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _unwrap, _wrap
 from lucid._ops._autocast import _autocast_entry
-from lucid._ops._bool_refusal import refuse, refuse_declared
+from lucid._ops._bool_refusal import refuse as _refuse, refuse_declared as _refuse_declared
 from lucid._ops._reduce import _require_floating
 from lucid.nn.functional._inplace import _keep_in_graph
 from lucid.nn.functional._grid_sampling import (
@@ -218,8 +218,8 @@ def grid_sample(
     _check_options(input, mode, padding_mode)
     # The image is the engine schema's to refuse (the entry reaches the engine on some paths only);
     # the grid is the entry's own, a dtype guard where the image is a kernel's.
-    refuse_declared("grid_sample", input)
-    refuse("grid_sample", grid, "grid")
+    _refuse_declared("grid_sample", input)
+    _refuse("grid_sample", grid, "grid")
     ac = align_corners if align_corners is not None else False
     # The row applies once, here, for every path: the reflection that runs
     # before the kernel computed its coordinates at the grid's half
@@ -318,7 +318,7 @@ def affine_grid(
     >>> g.shape
     (1, 4, 4, 2)
     """
-    refuse("affine_grid", theta)
+    _refuse("affine_grid", theta)
     ac = align_corners if align_corners is not None else False
     sz = [int(s) for s in size]
     if len(sz) not in (4, 5):
@@ -588,8 +588,8 @@ def embedding_bag(
     # The table holds embeddings, which are real numbers.  The engine op refuses an
     # integer one (its schema), but the weighted and the gradient-scaled paths below do
     # not reach it, and ``max_norm`` rewrites the table before it does: judge it here.
-    refuse(op, weight)
-    refuse_declared(op, weight)
+    _refuse(op, weight)
+    _refuse_declared(op, weight)
     padding_idx = _padding_index(padding_idx, weight, op)
     pad_idx = -1 if padding_idx is None else padding_idx
     _check_table(input, weight, op)

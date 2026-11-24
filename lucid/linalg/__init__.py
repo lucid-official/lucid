@@ -11,7 +11,7 @@ from lucid._dispatch import _unwrap, _wrap
 from lucid._dtype import _ENGINE_TO_DTYPE, to_engine_dtype
 from lucid._ops._adapters import _outer_adapter
 from lucid._ops._autocast import _autocast_entry
-from lucid._ops._bool_refusal import refuse, refuse_bool
+from lucid._ops._bool_refusal import refuse as _refuse, refuse_bool as _refuse_bool
 from lucid._ops._reduce import _reduction_axes, _require_normable, _truth_mask
 from lucid._promotion import try_unwrap as _try_unwrap
 from lucid._tensor._indexing import broadcast_shapes as _broadcast_batch
@@ -1862,7 +1862,7 @@ def vander(x: Tensor, *, N: int | None = None, increasing: bool = True) -> Tenso
     >>> vander(lucid.tensor([1.0, 2.0, 3.0]))
     tensor([[1., 1., 1.], [1., 2., 4.], [1., 3., 9.]])
     """
-    refuse_bool("vander", x)
+    _refuse_bool("vander", x)
     vec = x.unsqueeze(-1) if x.ndim == 0 else x
     shape = tuple(vec.shape)
     cols = shape[-1] if N is None else int(N)
@@ -2051,8 +2051,8 @@ def vecdot(x: Tensor, y: Tensor, *, dim: int = -1) -> Tensor:
     >>> vecdot(lucid.tensor([1 + 2j, 3 - 1j]), lucid.tensor([2 - 1j, 1 + 1j]))
     tensor((2.-1.j), dtype=lucid.complex64)
     """
-    refuse("vecdot", x)
-    refuse("vecdot", y)
+    _refuse("vecdot", x)
+    _refuse("vecdot", y)
     with _autocast_entry("vecdot", _unwrap(x), _unwrap(y)) as (xi, yi):
         xi = _C_engine.conj(xi) if xi.dtype in (_C_engine.C64, _C_engine.C128) else xi
         return _wrap(_C_engine.sum(_C_engine.mul(xi, yi), [dim], False))
