@@ -6,8 +6,11 @@ against a ``1`` as ``1``, so ``maximum`` of a ``(0,)`` and a ``(1,)`` tensor cam
 ``(0,)`` over a one-element buffer: ``storage_nbytes()`` was 4 where ``nbytes()`` was 0, a
 shift's in-place form failed ``copy_from`` with ``nbytes mismatch (GPU)``, and the other ops
 carried the wrong buffer without a word (``maximum_`` left its receiver on it).  A call with an
-empty operand now runs the steps eagerly (``backend/gpu/ShapelessFused.h``), and a kernel family
-refuses a GPU result whose byte count disagrees with its shape (``core/ResultExtent.h``).
+empty operand now runs the steps eagerly (``backend/gpu/ShapelessFused.h``), and ``helpers::fresh``
+— the function every forward builds its result through, kernel families and hand-built ops alike
+(LCD-1072) — refuses a GPU result whose byte count disagrees with its shape
+(``core/ResultExtent.h``).  ``test_forward_result_extent.py`` holds the same count over the ops that
+build by hand.
 
 What is held here is the class, not the ops it was found in: every binary op the engine
 dispatches, out of place and in place, over the broadcasts that come out empty, on whichever
@@ -37,6 +40,10 @@ EMPTY_BROADCASTS = [
     ((0,), (), (0,)),
     ((0,), (0,), (0,)),
 ]
+
+#: The cases an in-place op can take: it writes the result into a receiver of its own shape, so
+#: the receiver has to be the side that broadcasts to the result.  Generated, not skipped.
+IN_PLACE_BROADCASTS = [case for case in EMPTY_BROADCASTS if case[0] == case[2]]
 
 _FLOATS = (lucid.float32, lucid.float16, lucid.bfloat16)
 _INTS = (lucid.int32, lucid.int64, lucid.int16, lucid.int8)
@@ -121,7 +128,7 @@ def test_an_empty_broadcast_result_has_matching_storage(
     _consistent(out)
 
 
-@pytest.mark.parametrize(("a_shape", "b_shape", "want"), EMPTY_BROADCASTS, ids=str)
+@pytest.mark.parametrize(("a_shape", "b_shape", "want"), IN_PLACE_BROADCASTS, ids=str)
 @pytest.mark.parametrize(("op", "dtype"), _in_place_params())
 def test_an_in_place_op_over_an_empty_broadcast_completes(
     device: str,
@@ -131,8 +138,6 @@ def test_an_in_place_op_over_an_empty_broadcast_completes(
     b_shape: tuple[int, ...],
     want: tuple[int, ...],
 ) -> None:
-    if a_shape != want:
-        pytest.skip("an in-place op writes the result into a receiver of its own shape")
     recv = _ones(a_shape, dtype, device)
     getattr(recv, f"{op}_")(_ones(b_shape, dtype, device))
     assert tuple(recv.shape) == want
