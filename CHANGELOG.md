@@ -529,11 +529,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - refuse a GPU result whose bytes disagree with its shape
 
-- add complex GEMM and TRSM wrappers (LCD-1070)
+- `outer`, `ger`, `addr`, `matmul`, `mm`, `bmm`, `mv`, `addmm`, `baddbmm`, `einsum`, `cov` and `corrcoef` run on complex tensors on the CPU, through Accelerate's complex GEMM (LCD-1070).
 
-- complex where, pow, log, matmul and masked_fill (LCD-1070)
+- On the CPU, these run on complex tensors and no longer raise `NotImplementedError` (LCD-1070):
+  - `pow` with complex operands, and its gradient;
+  - `log` of a complex tensor;
+  - `masked_fill` on a complex tensor;
+  - `where` on complex128;
+  - the gradients of `where` and `masked_fill`;
+  - `inner` and `tensordot` on complex128.
 
-- complex solve_triangular on both devices (LCD-1070)
+- `linalg.solve_triangular` accepts complex64 and complex128 on both devices, with the conjugate-transpose gradients (LCD-1070).
 
 ### Performance
 
@@ -637,7 +643,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `addcmul` and `addcdiv` with a complex `value` that has no imaginary part keep a real tensor real; they used to promote the result to complex (LCD-1076).
 - `rsub` scales through the same `alpha` rule as `sub`: a float, complex or bool `alpha` on an integer tensor is refused as `sub` refuses it, where it used to be promoted or accepted. Its default `alpha` is `1`, not `1.0` (LCD-1076).
 - every engine forward checks that its result's storage holds its shape's bytes before handing it back; a short result is an error rather than a silent out-of-bounds read. Engine shape messages now spell a shape as `[2, 3]` (LCD-1072).
-- complex log calls the existing vlog overloads (LCD-1070)
 
 ---
 
