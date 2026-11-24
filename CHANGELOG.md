@@ -452,11 +452,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `reset_classifier(n)` on the zoo's classification models builds the new head with the old head's dtype and device, and updates `config.num_classes`. Before, a float16 or Metal model got a float32 CPU head, and the config still named the old class count. GoogLeNet's and Inception v3's auxiliary heads are resized with the main head. SENet, I-JEPA, V-JEPA, V-JEPA 2 and InceptionNeXt gain a working `reset_classifier`; before, it raised or left the head unchanged (LCD-1106).
 
-- read a 0-d tensor scale factor as the number it holds
-
-- add and sub read a 0-d tensor alpha as the number it holds
-
-- decorate index_add_ in tensor.py, drop the injector hook
+- A 0-d tensor passed as a scale factor (`alpha`, `beta`, `value`) is read as the number it holds, through the same rules as a Python number. This matches the reference for `add`, `sub`, `rsub`, `subtract`, `addmm`, `addmv`, `addbmm`, `baddbmm`, `addr`, `addcmul`, `addcdiv`, `index_add` and a non-tensor `lerp` weight, and for their method and in-place forms. Before, it was treated as an operand: a float64 0-d `alpha` could promote the result, and some ops raised. A tensor `lerp` weight is still an operand. The refusal message names the spelling used (`addcmul_()`, `index_add_()`), except `subtract`, which says `sub()` (LCD-1088).
 
 ### Added
 
@@ -685,7 +681,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `linalg.vecdot` (a 0-d operand beside a vector included), `linalg.solve` and `linalg.householder_product` take the same pair rule from the same owner: two dtypes raise `DtypeMismatch`. Before, `vecdot(x_float16, 0-d float32)` answered in float16. `householder_product` checks its shapes before the dtypes, as the reference does, and judges the pair after the autocast cast. So a float32 input beside a float16 tau is accepted under CPU autocast and answers float32. `vecdot` moves to `lucid/linalg/_vecdot.py` and is re-exported from `lucid.linalg` (LCD-1075).
 - `take_along_dim(x, indices, dim)` and `take` read int64 positions only, as the reference does; a bool, int8, int16 or int32 index raises `DtypeMismatch`. `gather` reads int32 or int64. A bool, int8 or int16 index raises `DtypeMismatch`, and so does a flat `take_along_dim(x, indices)` with one. `gather` answers an index with no element whatever its dtype, as the reference does (LCD-1075).
 - `ldexp(input, other)` refuses a bool `other` beside a real floating `input` with `NotImplementedError`, as the reference does. An integer, bool or complex `input` still answers (LCD-1075).
-- read scale factors in one decorator, name the twins
+- **Behaviour change:** a scale factor that is a tensor with a dimension, a tensor that requires grad, or a value that is not a number (a str, None or a list) raises `TypeError: <op>(): argument '<name>' must be Number, not <type>`, as the reference does. Before, such values were accepted or gave `expected Tensor or Number`. To migrate a learnable 0-d scale, multiply by it explicitly (`x + alpha * y`) (LCD-1088).
 
 ---
 
