@@ -448,6 +448,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - an empty gather index is answered; refusals test one code set
 
+- trapezoid ranks a 0-d x as the dimensioned operand it is
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

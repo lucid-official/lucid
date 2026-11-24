@@ -640,13 +640,17 @@ def renorm(input: Tensor, p: float, dim: int, maxnorm: float) -> Tensor:
 def _align_trapezoid_x(name: str, yw: Tensor, x: Tensor, d: int) -> tuple[Tensor, Tensor]:
     if x.dtype == lucid.bool:
         raise RuntimeError(f"{name}: received a bool input for `x`, but bool is not supported")
+    zero_d = x.ndim == 0
+    if zero_d:
+        # One coordinate along ``dim``, as the reference views it before it ranks the dtypes:
+        # the spacings are an empty extent, which meets ``y``'s ``n - 1`` areas only where that
+        # is 0 or 1.  Viewed first, it is a dimensioned operand, not a weak 0-d one.
+        x = x.reshape([1] * yw.ndim)
     target_dt = lucid.result_type(yw, x)
     yw = yw.to(target_dt) if yw.dtype != target_dt else yw
     xw = x.to(target_dt) if x.dtype != target_dt else x
-    if xw.ndim == 0:
-        # One coordinate along ``dim``, as the reference views it: the spacings are an
-        # empty extent, which meets ``y``'s ``n - 1`` areas only where that is 0 or 1.
-        return yw, xw.reshape([1] * yw.ndim)
+    if zero_d:
+        return yw, xw
     if xw.ndim == 1 and xw.shape[0] == yw.shape[d]:
         shape = [int(xw.shape[0]) if i == d else 1 for i in range(yw.ndim)]
         return yw, xw.reshape(shape)
@@ -677,8 +681,11 @@ def _trapezoid_operands(
     yw = y if is_inexact else y.to(lucid.get_default_dtype())
     if x is None:
         return yw, None, d
-    yw, xw = _align_trapezoid_x(name, yw, x, d)
-    return yw, xw, d
+    aligned, xw = _align_trapezoid_x(name, yw, x, d)
+    if name == "trapezoid" and int(yw.shape[d]) == 0:
+        # The reference answers zero samples before it ranks ``y`` with ``x``: ``y``'s own dtype.
+        return yw, xw, d
+    return aligned, xw, d
 
 
 def _trapezoid_areas(
