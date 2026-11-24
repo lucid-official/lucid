@@ -91,6 +91,36 @@ TEST(IntGemm, MatchesATripleLoopAtEveryWidthAndThroughTheParallelPath) {
     expect_matches_the_triple_loop<std::int64_t>(1024, 16, 16, 9);
 }
 
+TEST(IntGemm, ATransposeFlagOnAUnitExtentReadsTheOperandAsStored) {
+    // A ``[K, M]`` operand with ``M == 1`` or ``K == 1``, and a ``[N, K]`` one with
+    // ``N == 1`` or ``K == 1``, hold the same flat sequence as the matrix they
+    // transpose to, so the kernel copies nothing and the flag must change nothing.
+    struct Extents {
+        std::size_t M, N, K;
+    };
+    for (const Extents e : {Extents{4, 5, 1}, Extents{1, 1, 7}, Extents{1, 1, 1}, Extents{3, 1, 1},
+                            Extents{1, 5, 1}, Extents{1, 4, 6}, Extents{5, 1, 6}}) {
+        for (std::size_t batch : {1, 2}) {
+            const auto a = cases::filled<std::int32_t>(batch * e.M * e.K, 51 + e.M);
+            const auto b = cases::filled<std::int32_t>(batch * e.K * e.N, 52 + e.N);
+            const auto want = cases::reference(a, b, batch, e.M, e.N, e.K);
+            for (bool trans_a : {false, true}) {
+                for (bool trans_b : {false, true}) {
+                    // A flag is only a no-op where its operand has a unit extent.
+                    if ((trans_a && e.M != 1 && e.K != 1) || (trans_b && e.N != 1 && e.K != 1))
+                        continue;
+                    std::vector<std::int32_t> got(batch * e.M * e.N);
+                    cpu::int_gemm<std::int32_t>(trans_a, trans_b, batch, e.M, e.N, e.K, a.data(),
+                                                b.data(), got.data());
+                    EXPECT_EQ(got, want)
+                        << "M=" << e.M << " N=" << e.N << " K=" << e.K << " batch=" << batch
+                        << " trans_a=" << trans_a << " trans_b=" << trans_b;
+                }
+            }
+        }
+    }
+}
+
 TEST(IntGemm, VectorShapesNeedNoTransposedCopy) {
     // A column of B (N == 1) and a row of A (M == 1) read the same flat sequence
     // as their transposes: the matrix-vector and vector-matrix products.
