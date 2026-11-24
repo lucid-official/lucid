@@ -239,3 +239,85 @@ def test_a_vector_rhs_is_one_column_away_from_a_legal_call() -> None:
     np.testing.assert_allclose(x.numpy(), np.linalg.solve(np.triu(a.numpy()), b.numpy()))
     with pytest.raises(RuntimeError, match="at least 2 dimensions"):
         LA.solve_triangular(a, b, upper=True)
+
+
+# Refusals past the right-hand side's rank that keep Lucid's own class for now: the
+# reference raises ``RuntimeError`` where ``ldl_solve`` raises ``ValueError`` (LCD-1096),
+# and ``lu_solve`` words a row mismatch its own way (LCD-1097).  Held here so the one
+# owner of each check stays exercised until those land.
+_OWN_REFUSALS = [
+    pytest.param(
+        "ldl_solve",
+        lambda d, n: LA.ldl_solve(
+            _tensor(lucid, (N, N), n, d), _pivots(lucid, (2,), d), _tensor(lucid, (N, 2), n, d)
+        ),
+        ValueError,
+        "pivots must have shape",
+        id="ldl_solve-pivots-shape",
+    ),
+    pytest.param(
+        "ldl_solve",
+        lambda d, n: LA.ldl_solve(
+            _tensor(lucid, (N, N), n, d), _pivots(lucid, (), d), _tensor(lucid, (N + 1, 2), n, d)
+        ),
+        ValueError,
+        f"B must have {N} rows",
+        id="ldl_solve-rows",
+    ),
+    pytest.param(
+        "ldl_solve",
+        lambda d, n: LA.ldl_solve(
+            _tensor(lucid, (2, N, N), n, d),
+            _pivots(lucid, (2,), d),
+            _tensor(lucid, (5, N, 2), n, d),
+        ),
+        ValueError,
+        "do not broadcast",
+        id="ldl_solve-batch",
+    ),
+    pytest.param(
+        "lu_solve",
+        lambda d, n: LA.lu_solve(
+            _tensor(lucid, (N, N), n, d),
+            _pivots(lucid, (), d),
+            _tensor(lucid, (N + 1, 2), n, d),
+            adjoint=True,
+        ),
+        RuntimeError,
+        f"B must have shape (*, {N}, k)",
+        id="lu_solve-rows-adjoint",
+    ),
+]
+
+
+@pytest.mark.parametrize(("device", "dtype"), _REAL_PLACEMENTS)
+@pytest.mark.parametrize(("op", "call", "exc", "text"), _OWN_REFUSALS)
+def test_shape_refusals_past_the_rhs_rank(
+    op: str,
+    call: Callable[[str, str], Any],
+    exc: type[Exception],
+    text: str,
+    device: str,
+    dtype: lucid.dtype,
+) -> None:
+    with pytest.raises(exc) as got:
+        call(device, str(dtype).removeprefix("lucid."))
+    assert text in str(got.value), op
+
+
+@pytest.mark.parametrize(("device", "dtype"), _REAL_PLACEMENTS)
+@pytest.mark.parametrize(
+    ("ld", "b", "want"),
+    [((N, N), (N, 0), (N, 0)), ((0, N, N), (N, 2), (0, N, 2))],
+    ids=["no-columns", "empty-batch"],
+)
+def test_ldl_solve_answers_an_empty_system(
+    ld: tuple[int, ...], b: tuple[int, ...], want: tuple[int, ...], device: str, dtype: lucid.dtype
+) -> None:
+    name = str(dtype).removeprefix("lucid.")
+    out = LA.ldl_solve(
+        _tensor(lucid, ld, name, device),
+        _pivots(lucid, ld[:-2], device),
+        _tensor(lucid, b, name, device),
+    )
+    assert tuple(out.shape) == want and out.dtype == dtype
