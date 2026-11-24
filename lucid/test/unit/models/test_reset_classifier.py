@@ -112,6 +112,11 @@ _TINY: dict[str, Tiny] = {
         (2, 3, 64, 64),
     ),
     "inception": ("inception_v3_cls", {}, (2, 3, 96, 96)),
+    "inception_next": (
+        "inception_next_tiny_cls",
+        dict(depths=(1, 1, 1, 1), dims=(8, 16, 32, 64)),
+        (2, 3, 32, 32),
+    ),
     "inception_resnet": ("inception_resnet_v2_cls", {}, (2, 3, 96, 96)),
     "inception_v4": ("inception_v4_cls", {}, (2, 3, 96, 96)),
     "lenet": ("lenet_5_cls", {}, (1, 1, 32, 32)),
@@ -278,18 +283,33 @@ def test_the_table_names_every_family_that_can_swap_a_head() -> None:
         assert _REGISTRY[factory].family == family
 
 
-@pytest.mark.parametrize("family", sorted(_TINY))
-def test_reset_gives_what_a_model_built_at_the_new_width_has(family: str) -> None:
+# Class-sized Linear layers a family has at its default config, where that is more than one:
+# CrossViT's two branch heads, EfficientFormer's head and head_dist, GoogLeNet's two
+# auxiliary classifiers beside the main head.
+_HEADS = {"crossvit": 2, "efficientformer": 2, "googlenet": 3}
+
+# (family, config overrides, class-sized Linear count): every family at its defaults, plus the
+# config that switches on a head the defaults leave off -- Inception v3's auxiliary classifier.
+_SHADOW_RUNS = [pytest.param(f, {}, _HEADS.get(f, 1), id=f) for f in sorted(_TINY)] + [
+    pytest.param("inception", {"aux_logits": True}, 2, id="inception-aux_logits")
+]
+
+
+@pytest.mark.parametrize(("family", "overrides", "heads"), _SHADOW_RUNS)
+def test_reset_gives_what_a_model_built_at_the_new_width_has(
+    family: str, overrides: dict[str, object], heads: int
+) -> None:
     """Saved weights load back only if the config and every class-sized head moved together."""
     factory = _TINY[family][0]
     with shadow_alloc():
-        model = create_model(factory)
+        model = create_model(factory, **overrides)
         old = model.config.num_classes
-        assert _linears(model, old), "no head found at the default width: the check is vacuous"
+        assert len(_linears(model, old)) == heads
         model.reset_classifier(old + 3)
         rebuilt = type(model)(model.config)
         assert _shapes(model) == _shapes(rebuilt)
         assert not _linears(model, old)
+        assert len(_linears(model, old + 3)) == heads
     assert model.config.num_classes == old + 3
 
 

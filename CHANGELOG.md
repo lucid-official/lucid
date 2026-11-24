@@ -452,6 +452,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - reset_classifier builds the head where the old one lived
 
+- give InceptionNeXt reset_classifier; guard aux heads
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

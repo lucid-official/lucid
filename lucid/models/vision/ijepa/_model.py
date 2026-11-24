@@ -608,6 +608,8 @@ class IJEPAForImageClassification(ImageClassificationModel, ClassificationHeadMi
         """Build the probe. See the class docstring for parameters."""
         super().__init__(config)
         self.config: IJEPAConfig = config
+        # The trunk keeps the config it was built with; it never reads
+        # ``num_classes``, so ``reset_classifier`` leaving its copy stale is harmless.
         self.ijepa = IJEPAModel(config)
         self.head = nn.Linear(config.dim, config.num_classes)
 

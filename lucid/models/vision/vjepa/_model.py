@@ -701,6 +701,8 @@ class VJEPAForVideoClassification(ImageClassificationModel, ClassificationHeadMi
         """Build the probe. See the class docstring for parameters."""
         super().__init__(config)
         self.config: VJEPAConfig = config
+        # The trunk keeps the config it was built with; it never reads
+        # ``num_classes``, so ``reset_classifier`` leaving its copy stale is harmless.
         self.vjepa = VJEPAModel(config)
         self.pooler = _AttentivePooler(
             config.dim, config.num_heads, config.mlp_ratio, config.layer_norm_eps

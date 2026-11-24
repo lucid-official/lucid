@@ -1172,6 +1172,8 @@ class VJEPA2ForVideoClassification(ImageClassificationModel, ClassificationHeadM
     def __init__(self, config: VJEPA2Config) -> None:
         super().__init__(config)
         self.config: VJEPA2Config = config
+        # The trunk keeps the config it was built with; it never reads
+        # ``num_classes``, so ``reset_classifier`` leaving its copy stale is harmless.
         self.vjepa2 = VJEPA2Model(config)
         self.pooler = _AttentivePooler(config)
         self.head = nn.Linear(config.dim, config.num_classes)
