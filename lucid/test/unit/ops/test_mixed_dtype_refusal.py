@@ -1,4 +1,4 @@
-"""Operands of two dtypes, and positions of the wrong one: refused as the reference refuses them (LCD-1075).
+"""Operands of two dtypes and indices of the wrong one, refused as the reference does (LCD-1075).
 
 Three classes of refusal share one owner, ``lucid._ops._bool_refusal``:
 
@@ -25,6 +25,7 @@ import pytest
 import lucid
 from lucid._C import engine as _C_engine
 from lucid._ops import _bool_refusal as _table
+from lucid.amp import autocast
 from lucid.test._fixtures.devices import device_supports
 
 if TYPE_CHECKING:
@@ -74,8 +75,8 @@ _BROADCAST = (
 
 PAIR_CASES: tuple[PairCase, ...] = (
     PairCase("polar", lambda fw, a, b: fw.polar(a, b), _BROADCAST),
-    # The engine's ``mul`` reads a wide 0-d beside a half operand as a scalar and answers in the half
-    # dtype; the reference refuses the pair, so the 0-d layouts are the ones that matter here.
+    # The engine's ``mul`` reads a wide 0-d beside a half operand as a scalar and answers in the
+    # half dtype; the reference refuses the pair, so the 0-d layouts are the ones that matter.
     PairCase("linalg.vecdot", lambda fw, a, b: fw.linalg.vecdot(a, b), _BROADCAST),
     PairCase(
         "cdist",
@@ -177,8 +178,8 @@ def test_lucid_refuses_operands_of_two_dtypes(
 ) -> None:
     if not _supported(device, first, second):
         pytest.skip(f"{device} cannot hold {first} / {second}")
-    # A pair of floats is the pair guard's; an integer beside a float may meet its op's own refusal of
-    # the integer first (a kernel the op has no instantiation of), which is as much a refusal.
+    # A pair of floats is the pair guard's; an integer beside a float may meet its op's own refusal
+    # of the integer first (a kernel the op has no instantiation of), which is as much a refusal.
     allowed = ("guard", "kernel") if "int32" in (first, second) else ("guard",)
     assert _verdict(lucid, case, layout, first, second, device) in allowed
 
@@ -233,7 +234,7 @@ def test_the_message_names_both_operands_and_both_dtypes() -> None:
 
 
 def test_a_pair_error_is_a_runtime_and_a_type_error() -> None:
-    """The reference's class is a ``RuntimeError``; the engine's dtype guard is a ``TypeError`` too."""
+    """The reference's class is a ``RuntimeError``; the engine's dtype guard is a ``TypeError``."""
     x = lucid.tensor([1.0], dtype=lucid.float32)
     y = lucid.tensor([1.0], dtype=lucid.float16)
     with pytest.raises(RuntimeError):
@@ -312,7 +313,9 @@ _INDEX_CALLS: dict[str, IndexCall] = {
 #: The empty cells the reference answers and Lucid's engine still refuses: a bool index is an engine
 #: error whether or not it has elements.
 _EMPTY_OPEN = frozenset({("gather", "bool"), ("take_along_dim-flat", "bool")})
-_EMPTY_OPEN_REASON = "the engine's gather refuses an empty bool index, as it refuses a full one"
+_EMPTY_OPEN_REASON = (
+    "LCD-1100: the engine's gather refuses an empty bool index, as it refuses a full one"
+)
 
 _X = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]
 _I = [[0, 2], [1, 0]]
@@ -414,6 +417,154 @@ def test_a_narrow_gather_index_with_elements_is_still_refused(device: str) -> No
         lucid.gather(src, 0, index)
 
 
+# ── which error comes first ────────────────────────────────────────────────────────────────────
+#
+# A call can be wrong in its dtypes and in its shapes at once, and the reference reports one of the
+# two.  ``solve`` and ``vecdot`` judge the dtypes before any shape; ``householder_product`` judges
+# its shapes first.  Every cell pairs a float32 operand with a float16 one (Metal holds both).
+
+_ORDER_DTYPES = ("float32", "float16")
+
+
+@dataclass(frozen=True)
+class OrderCell:
+    """A call with a dtype mismatch and a shape error, and the error the reference reports."""
+
+    op: str
+    name: str
+    call: Call
+    first: tuple[int, ...]
+    second: tuple[int, ...]
+    #: A fragment of the message the reference raises, whichever error that is.
+    fragment: str
+    #: Whether the shape error is reported before the dtype mismatch.
+    shape_first: bool
+
+
+def _ones(fw: ModuleType, shape: tuple[int, ...], dtype: str, device: str) -> object:
+    if not shape:
+        return _tensor(fw, 1.0, dtype, device)
+    if fw is lucid:
+        return lucid.ones(*shape, dtype=getattr(lucid, dtype), device=device)
+    return fw.ones(*shape, dtype=getattr(fw, dtype))
+
+
+def _householder(fw: ModuleType, a: object, b: object) -> object:
+    return fw.linalg.householder_product(a, b)
+
+
+def _solve(fw: ModuleType, a: object, b: object) -> object:
+    return fw.linalg.solve(a, b)
+
+
+def _vecdot(fw: ModuleType, a: object, b: object) -> object:
+    return fw.linalg.vecdot(a, b)
+
+
+_SAME_DTYPE = "same dtype"
+ORDER_CELLS: tuple[OrderCell, ...] = (
+    OrderCell(
+        "householder_product",
+        "wide input",
+        _householder,
+        (2, 3),
+        (2,),
+        "must be greater than or equal",
+        True,
+    ),
+    OrderCell(
+        "householder_product",
+        "tau longer than n",
+        _householder,
+        (3, 2),
+        (3,),
+        "must be greater than or equal",
+        True,
+    ),
+    OrderCell(
+        "householder_product",
+        "tau.ndim wrong",
+        _householder,
+        (3, 2),
+        (2, 2),
+        "one dimension less than input",
+        True,
+    ),
+    OrderCell(
+        "householder_product", "1-D H", _householder, (3,), (2,), "at least 2 dimensions", True
+    ),
+    OrderCell(
+        "householder_product",
+        "batch mismatch",
+        _householder,
+        (2, 3, 2),
+        (3, 2),
+        "batch dimensions of tau",
+        True,
+    ),
+    OrderCell(
+        "householder_product",
+        "valid shapes",
+        _householder,
+        (3, 2),
+        (2,),
+        "does not match input dtype",
+        False,
+    ),
+    OrderCell("solve", "non-square A", _solve, (2, 3), (2,), _SAME_DTYPE, False),
+    OrderCell("solve", "wrong rhs rows", _solve, (2, 2), (3, 1), _SAME_DTYPE, False),
+    OrderCell("solve", "0-d A", _solve, (), (2,), _SAME_DTYPE, False),
+    OrderCell("solve", "1-D A", _solve, (2,), (2,), _SAME_DTYPE, False),
+    OrderCell("vecdot", "lengths 3 and 2", _vecdot, (3,), (2,), _SAME_DTYPE, False),
+)
+
+
+def _order_operands(fw: ModuleType, cell: OrderCell, device: str) -> tuple[object, object]:
+    return (
+        _ones(fw, cell.first, _ORDER_DTYPES[0], device),
+        _ones(fw, cell.second, _ORDER_DTYPES[1], device),
+    )
+
+
+@pytest.mark.parity
+@pytest.mark.parametrize("cell", ORDER_CELLS, ids=lambda c: f"{c.op}-{c.name}")
+def test_the_reference_reports_the_error_the_table_says_first(
+    ref: ModuleType, cell: OrderCell
+) -> None:
+    a, b = _order_operands(ref, cell, "cpu")
+    with pytest.raises(RuntimeError, match=cell.fragment):
+        cell.call(ref, a, b)
+
+
+@pytest.mark.parametrize("cell", ORDER_CELLS, ids=lambda c: f"{c.op}-{c.name}")
+def test_lucid_reports_the_same_error_first(device: str, cell: OrderCell) -> None:
+    a, b = _order_operands(lucid, cell, device)
+    with pytest.raises(RuntimeError if not cell.shape_first else ValueError) as caught:
+        cell.call(lucid, a, b)
+    assert isinstance(caught.value, _C_engine.DtypeMismatch) is not cell.shape_first
+
+
+@pytest.mark.parity
+def test_householder_product_under_cpu_autocast_takes_the_pair_the_policy_casts(
+    ref: ModuleType,
+) -> None:
+    """The reference answers a float32 input beside a float16 tau under CPU autocast, in float32:
+    the pair is judged after the entry's cast, as ``vecdot`` and ``cdist`` judge theirs."""
+    with ref.autocast("cpu", dtype=ref.bfloat16):
+        want = ref.linalg.householder_product(
+            ref.ones(3, 2, dtype=ref.float32), ref.ones(2, dtype=ref.float16)
+        )
+    with autocast(device_type="cpu", dtype=lucid.bfloat16):
+        got = lucid.linalg.householder_product(
+            lucid.ones(3, 2, dtype=lucid.float32), lucid.ones(2, dtype=lucid.float16)
+        )
+    assert str(got.dtype).rsplit(".", 1)[-1] == str(want.dtype).rsplit(".", 1)[-1]
+    with pytest.raises(_C_engine.DtypeMismatch):
+        lucid.linalg.householder_product(
+            lucid.ones(3, 2, dtype=lucid.float32), lucid.ones(2, dtype=lucid.float16)
+        )
+
+
 # ── the exponent of ldexp ───────────────────────────────────────────────────────────────────────
 
 _LDEXP_BASES = (
@@ -446,7 +597,7 @@ def _ldexp_verdict(fw: ModuleType, base: str, exponent: str, device: str) -> str
 
 
 def _ldexp_want(base: str, exponent: str) -> str:
-    """The reference has no kernel for a bool exponent beside a real float; every other cell answers."""
+    """The reference has no kernel for a bool exponent beside a real float; the rest answers."""
     return "kernel" if exponent == "bool" and base in _REAL_FLOATS else "answers"
 
 
@@ -545,7 +696,8 @@ def test_a_zero_d_x_is_one_coordinate_along_dim(
 ) -> None:
     """``y`` of ``n`` samples has ``n - 1`` areas and the one coordinate no spacing: they meet where
     ``n - 1`` is 0 or 1 (an empty or all-zero answer) and are a shape mismatch beyond it.  The
-    answer's dtype is the pair's, the 0-d ``x`` ranked as the dimensioned operand it is viewed as."""
+    answer's dtype is the pair's, the 0-d ``x`` ranked as the dimensioned operand it is viewed as.
+    """
     if not _supported(device, *dtypes):
         pytest.skip(f"{device} cannot hold {dtypes}")
     want = _outcome(ref, name, shape, dim, "cpu", dtypes)
