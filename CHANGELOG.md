@@ -531,6 +531,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - add complex GEMM and TRSM wrappers (LCD-1070)
 
+- complex where, pow, log, matmul and masked_fill (LCD-1070)
+
 ### Performance
 
 - pool the MAE sets without rank-6 views

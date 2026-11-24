@@ -14,6 +14,20 @@ Storage CpuBackend::exp(const Storage& a, const Shape& shape, Dtype dt) {
 }
 
 Storage CpuBackend::log(const Storage& a, const Shape& shape, Dtype dt) {
+    if (is_complex(dt)) {
+        // vForce is real-only, so ``unary_op`` has no complex branch.
+        const auto& cs = std::get<CpuStorage>(a);
+        const std::size_t n = shape_numel(shape);
+        const std::size_t nb = n * dtype_size(dt);
+        auto ptr = allocate_aligned_bytes(nb, Device::CPU);
+        if (dt == Dtype::C128)
+            cpu::vzlog(reinterpret_cast<const double*>(cs.ptr.get()),
+                       reinterpret_cast<double*>(ptr.get()), n);
+        else
+            cpu::vzlog(reinterpret_cast<const float*>(cs.ptr.get()),
+                       reinterpret_cast<float*>(ptr.get()), n);
+        return Storage{CpuStorage{ptr, nb, dt}};
+    }
     return unary_op(a, shape, dt, cpu::vlog_f32, cpu::vlog_f64,
                     [](const std::int32_t* ip, std::int32_t* op, std::size_t n) {
                         for (std::size_t i = 0; i < n; ++i)

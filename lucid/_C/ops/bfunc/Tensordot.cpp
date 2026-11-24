@@ -195,6 +195,9 @@ void run_cpu_tensordot_gemm(CpuStorage& out_cpu,
     case Dtype::C64:
         gemm_loop<std::complex<float>>(out_cpu, a_cpu, b_cpu, M, K, N);
         break;
+    case Dtype::C128:
+        gemm_loop<std::complex<double>>(out_cpu, a_cpu, b_cpu, M, K, N);
+        break;
     default:
         // The integer dtypes wrap at their own width.  The scalar loop above
         // multiplies and adds in the signed type, where an overflow is undefined

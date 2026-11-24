@@ -54,12 +54,9 @@ Storage CpuBackend::matmul(const Storage& a, const Storage& b, const MatmulOpts&
                            cp + bi * M * N, N);
             }
         }
-    } else if (!cpu::int_gemm_by_dtype(dt, opts.transA, opts.transB, batch,
-                                       static_cast<std::size_t>(M), static_cast<std::size_t>(N),
-                                       static_cast<std::size_t>(K), ca.ptr.get(), cb.ptr.get(),
-                                       ptr.get())) {
-        // The integer dtypes have no BLAS, so Lucid's own wrapping kernel
-        // (cpu/IntGemm.h) answers them; bool, and anything else, is refused.
+    } else if (!cpu::gemm_by_dtype(dt, opts, ca.ptr.get(), cb.ptr.get(), ptr.get())) {
+        // Complex goes to cgemm / zgemm and the integer dtypes to Lucid's own
+        // wrapping kernel (cpu/IntGemm.h); bool, and anything else, is refused.
         ErrorBuilder("cpu_backend::matmul").not_implemented("dtype not supported");
     }
     Shape out_shape;
@@ -369,6 +366,10 @@ Storage CpuBackend::inner(const Storage& a,
         run(reinterpret_cast<std::complex<float>*>(ptr.get()),
             reinterpret_cast<const std::complex<float>*>(ca.ptr.get()),
             reinterpret_cast<const std::complex<float>*>(cb.ptr.get()));
+    else if (dt == Dtype::C128)
+        run(reinterpret_cast<std::complex<double>*>(ptr.get()),
+            reinterpret_cast<const std::complex<double>*>(ca.ptr.get()),
+            reinterpret_cast<const std::complex<double>*>(cb.ptr.get()));
     else
         ErrorBuilder("cpu_backend::inner").not_implemented("dtype not supported");
     return Storage{CpuStorage{ptr, nb, dt}};

@@ -112,6 +112,10 @@ Storage CpuBackend::div(const Storage& a, const Storage& b, const Shape& shape, 
 }
 
 Storage CpuBackend::pow(const Storage& a, const Storage& b, const Shape& shape, Dtype dt) {
+    if (dt == Dtype::C128)
+        return complex_binary<double>(a, b, shape, cpu::vzpow<double>);
+    if (dt == Dtype::C64)
+        return complex_binary<float>(a, b, shape, cpu::vzpow<float>);
     return binary_op(
         a, b, shape, dt,
         // vForce's pow is ~8 ns an element: split it across cores, an L1
@@ -346,29 +350,39 @@ Storage CpuBackend::where_branch(
         return detail::back_to_f16(where_branch(detail::as_f32(grad), detail::as_f32(cond), shape,
                                                 Dtype::F32, true_branch),
                                    dt);
+    // A gradient exists for the floating and complex dtypes only.
+    if (dt != Dtype::F32 && dt != Dtype::F64 && !is_complex(dt))
+        ErrorBuilder("cpu_backend::where_branch").not_implemented("dtype not supported");
     const auto& g = std::get<CpuStorage>(grad);
     const auto& c = std::get<CpuStorage>(cond);
     auto out = zeros(shape, dt);
     const std::size_t n = shape_numel(shape);
     const auto* cp = reinterpret_cast<const std::uint8_t*>(c.ptr.get());
     // Loaded, then selected — a branch around the load mispredicted on
-    // every mask that is not sorted (see relu_backward).
-    if (dt == Dtype::F32) {
-        const float* __restrict gp = reinterpret_cast<const float*>(g.ptr.get());
-        float* __restrict dst = reinterpret_cast<float*>(std::get<CpuStorage>(out).ptr.get());
+    // every mask that is not sorted (see relu_backward).  The selection copies
+    // bits, so it runs on the element's width: a zero bit pattern is the zero
+    // of every one of these dtypes, and complex64 / complex128 need no case
+    // of their own.
+    auto run = [&](auto tag) {
+        using T = decltype(tag);
+        const T* __restrict gp = reinterpret_cast<const T*>(g.ptr.get());
+        T* __restrict dst = reinterpret_cast<T*>(std::get<CpuStorage>(out).ptr.get());
+        const T zero{};
         for (std::size_t i = 0; i < n; ++i) {
-            const float v = gp[i];
-            dst[i] = ((cp[i] != 0) == true_branch) ? v : 0.0f;
+            const T v = gp[i];
+            dst[i] = ((cp[i] != 0) == true_branch) ? v : zero;
         }
-    } else if (dt == Dtype::F64) {
-        const double* __restrict gp = reinterpret_cast<const double*>(g.ptr.get());
-        double* __restrict dst = reinterpret_cast<double*>(std::get<CpuStorage>(out).ptr.get());
-        for (std::size_t i = 0; i < n; ++i) {
-            const double v = gp[i];
-            dst[i] = ((cp[i] != 0) == true_branch) ? v : 0.0;
-        }
-    } else {
-        ErrorBuilder("cpu_backend::where_branch").not_implemented("dtype not supported");
+    };
+    switch (dtype_size(dt)) {
+    case 4:
+        run(std::uint32_t{});
+        break;
+    case 8:
+        run(std::uint64_t{});
+        break;
+    default:
+        run(cpu::Word128{});
+        break;
     }
     return out;
 }
@@ -394,6 +408,14 @@ Storage CpuBackend::masked_fill(
     } else if (dt == Dtype::F64) {
         detail::select_fill(reinterpret_cast<const double*>(as.ptr.get()), mp, value,
                             reinterpret_cast<double*>(ptr.get()), n);
+    } else if (dt == Dtype::C64) {
+        detail::select_fill(reinterpret_cast<const std::complex<float>*>(as.ptr.get()), mp,
+                            std::complex<float>(static_cast<float>(value)),
+                            reinterpret_cast<std::complex<float>*>(ptr.get()), n);
+    } else if (dt == Dtype::C128) {
+        detail::select_fill(reinterpret_cast<const std::complex<double>*>(as.ptr.get()), mp,
+                            std::complex<double>(value),
+                            reinterpret_cast<std::complex<double>*>(ptr.get()), n);
     } else if (detail::is_int_like(dt)) {
         // Structural, not arithmetic: it selects between an element and
         // a constant.  Integers keep their dtype in the reference
@@ -788,6 +810,12 @@ Storage CpuBackend::add_scalar(const Storage& a, const Shape& shape, Dtype dt, d
     else if (dt == Dtype::F64)
         cpu::vsadd_f64(reinterpret_cast<const double*>(ca.ptr.get()), scalar,
                        reinterpret_cast<double*>(ptr.get()), n);
+    else if (dt == Dtype::C64)
+        cpu::vzsadd(reinterpret_cast<const float*>(ca.ptr.get()), static_cast<float>(scalar),
+                    reinterpret_cast<float*>(ptr.get()), n);
+    else if (dt == Dtype::C128)
+        cpu::vzsadd(reinterpret_cast<const double*>(ca.ptr.get()), scalar,
+                    reinterpret_cast<double*>(ptr.get()), n);
     else
         ErrorBuilder("cpu_backend::add_scalar").not_implemented("dtype not supported");
     return Storage{CpuStorage{ptr, nb, dt}};
@@ -950,8 +978,8 @@ Storage CpuBackend::where_op(
     };
     // Selection copies bits; it never reads them as numbers.  Dispatching
     // on element width rather than dtype therefore covers every type —
-    // bool, the integers and both float widths — with four branches and
-    // no per-type code.  The float-only version this replaces was why a
+    // bool, the integers, both float widths and both complex ones — with
+    // five branches and no per-type code.  The float-only version this replaces was why a
     // masked integer index had to be written as a clamp elsewhere.
     switch (dtype_size(dt)) {
     case 1:
@@ -973,6 +1001,11 @@ Storage CpuBackend::where_op(
         run(reinterpret_cast<std::uint64_t*>(ptr.get()),
             reinterpret_cast<const std::uint64_t*>(cx.ptr.get()),
             reinterpret_cast<const std::uint64_t*>(cy.ptr.get()));
+        break;
+    case 16:
+        run(reinterpret_cast<cpu::Word128*>(ptr.get()),
+            reinterpret_cast<const cpu::Word128*>(cx.ptr.get()),
+            reinterpret_cast<const cpu::Word128*>(cy.ptr.get()));
         break;
     default:
         ErrorBuilder("cpu_backend::where_op").not_implemented("dtype not supported");
