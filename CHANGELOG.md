@@ -723,6 +723,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `ldexp(input, other)` refuses a bool `other` beside a real floating `input` with `NotImplementedError`, as the reference does. An integer, bool or complex `input` still answers (LCD-1075).
 - **Behaviour change:** a scale factor that is a tensor with a dimension, a tensor that requires grad, or a value that is not a number (a str, None or a list) raises `TypeError: <op>(): argument '<name>' must be Number, not <type>`, as the reference does. Before, such values were accepted or gave `expected Tensor or Number`. To migrate a learnable 0-d scale, multiply by it explicitly (`x + alpha * y`) (LCD-1088).
 - **Behaviour change:** `linalg.householder_product` (batched, fewer reflectors, or zero reflectors), `linalg.inv` (empty square integral/bool matrix), and `linalg.cross` (bool pair) now refuse bool/integral operands rather than computing a result, matching the reference; `linalg.solve`, `linalg.inv`, `linalg.pinv(..., hermitian=True)`, `linalg.matrix_rank(..., hermitian=True)`, and `linalg.lstsq(..., rcond=...)` match the reference's refusal class (`DtypeMismatch` vs `NotImplementedError`) and check order (LCD-1105).
+- is_model is asked about any object
 
 ---
 

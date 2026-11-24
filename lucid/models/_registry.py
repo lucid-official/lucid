@@ -373,12 +373,12 @@ def list_models(*, task: str | None = None, family: str | None = None) -> list[s
     return sorted(out)
 
 
-def is_model(name: str) -> bool:
+def is_model(name: object) -> bool:
     r"""Return whether ``name`` is registered (case / separator insensitive).
 
     Parameters
     ----------
-    name : str
+    name : object
         Candidate model name.  Anything that is not a ``str`` (an ``int``, a
         :class:`pathlib.Path`) names no registered model, so it answers
         ``False`` rather than raising -- a predicate has no wrong-argument case.
