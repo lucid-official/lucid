@@ -425,9 +425,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - check the extent of every result built by fresh (LCD-1072)
 
-- max and min of two tensors are the elementwise op (LCD-1073)
+- `max(a, b)` and `min(a, b)`, and the methods `Tensor.max(other)` and `Tensor.min(other)`, with a tensor second argument (positional or `other=`), failed with "item() can only be called on a tensor with one element". They now return the elementwise maximum or minimum, exactly `maximum(a, b)` / `minimum(a, b)`: same promotion, broadcasting, NaN propagation and gradient (LCD-1073).
 
-- max and min keep a 0-d integer tensor as dim (LCD-1073)
 
 ### Added
 
@@ -618,6 +617,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - block_diag ranks its operands as given, as the reference does: a 0-d int16 beside an int8 vector now answers int8, not int16 (LCD-1060).
 - drop the unused mlx compile include (LCD-1072)
 - build the input dtype cast through fresh (LCD-1072)
+- `max` / `min` tell the tensor-second-argument form apart from the `dim` overloads by type, as the reference does. These raise TypeError:
+  - `other` combined with `dim` or `keepdim`;
+  - a `dim=` tensor other than a 0-d integer one;
+  - any tensor as `keepdim`;
+  - an `other=` that is not a tensor;
+  - a number as `input` (this was an AttributeError) (LCD-1073).
+- A lone tensor in the second position of `max` / `min`, including a 0-d integer tensor, is now the `other` operand. A 0-d integer tensor there used to be an axis through `__index__`. It is still an axis as `dim=`, or in the second place when `keepdim` follows: `max(x, dim=tensor(0))`, `max(x, tensor(0), True)` (LCD-1073).
 - every engine forward checks that its result's storage holds its shape's bytes before handing it back; a short result is an error rather than a silent out-of-bounds read. Engine shape messages now spell a shape as `[2, 3]` (LCD-1072).
 
 ---
