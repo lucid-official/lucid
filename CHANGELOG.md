@@ -415,6 +415,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - dot takes 1-D only, inner of a 0-d operand is a product
 
+- lerp and addr rank a 0-d operand as the reference does
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

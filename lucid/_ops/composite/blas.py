@@ -5,13 +5,15 @@ from typing import TYPE_CHECKING
 import lucid
 from lucid import _contraction, _promotion
 from lucid._C import engine as _C_engine
-from lucid._dispatch import _unwrap, _wrap
+from lucid._dispatch import _promote_impls, _unwrap, _wrap
 from lucid._ops._adapters import _scale_by_alpha
 from lucid._ops._autocast import _amp_op, _autocast_entry, _autocast_suspended
 import lucid.linalg as _la
 
 if TYPE_CHECKING:
     from lucid._tensor.tensor import Tensor
+
+_COMPLEX = (_C_engine.C64, _C_engine.C128)
 
 
 def _scaled(tensor: Tensor, factor: float, name: str) -> Tensor:
@@ -341,7 +343,20 @@ def addr(input: Tensor, vec1: Tensor, vec2: Tensor, *, beta: float = 1, alpha: f
     >>> lucid.addr(M, u, v)
     tensor([[3., 4., 5.], [6., 8., 10.]])
     """
-    return _scaled_add(input, beta, lucid.linalg.outer(vec1, vec2), alpha, cast_scalars=False)
+    # The reference expands ``input`` to the product's shape and computes in the
+    # dtype all three promote to, so ``input`` never ranks below the vectors
+    # (``Tiers.DIMENSIONED``) and the product is formed at that dtype: an ``int16``
+    # ``input`` with ``int8`` vectors multiplies in ``int16`` instead of wrapping.
+    impls = [_unwrap(input), _unwrap(vec1), _unwrap(vec2)]
+    real_vectors = impls[1].dtype not in _COMPLEX and impls[2].dtype not in _COMPLEX
+    input_impl, vec1_impl, vec2_impl = _promote_impls(impls, tiers=_promotion.Tiers.DIMENSIONED)
+    if real_vectors and input_impl.dtype in _COMPLEX:
+        # Their product is real, and the engine's ``outer`` has no complex kernel: form
+        # it at the real dtype of the accumulator's parts and let the sum lift it.
+        part = _C_engine.F64 if input_impl.dtype == _C_engine.C128 else _C_engine.F32
+        vec1_impl, vec2_impl = _C_engine.astype(vec1_impl, part), _C_engine.astype(vec2_impl, part)
+    prod = lucid.linalg.outer(_wrap(vec1_impl), _wrap(vec2_impl))
+    return _scaled_add(_wrap(input_impl), beta, prod, alpha, cast_scalars=False)
 
 
 def _can_mix_devices(a: Tensor, b: Tensor) -> bool:
@@ -365,7 +380,13 @@ def _check_ternary_devices(op: str, input: Tensor, tensor1: Tensor, tensor2: Ten
 
 
 def _lerp(input: Tensor, end: Tensor, weight: float | Tensor) -> Tensor:
-    """Linearly interpolate ``input`` and ``end`` by ``weight``."""
+    """Linearly interpolate ``input`` and ``end`` by ``weight``.
+
+    ``input`` and ``end`` are floating and share a dtype, and so does a ``weight``
+    tensor with a dimension.  A 0-d ``weight`` ranks below them as in
+    ``input * weight``: it may differ, and the three compute at the dtype they
+    promote to (``lerp(f16[2], f16[2], f32_0d)`` is float16).
+    """
     if not (input.is_floating_point() and end.is_floating_point()):
         raise _C_engine.NotImplementedError(
             f"lerp expects floating-point tensors, got {input.dtype} and "
@@ -379,25 +400,29 @@ def _lerp(input: Tensor, end: Tensor, weight: float | Tensor) -> Tensor:
         raise _C_engine.DeviceMismatch(
             f"DeviceMismatch (lerp: input/end): expected {input.device.type}, got {end.device.type}"
         )
-    diff = _wrap(_C_engine.sub(_unwrap(end), _unwrap(input)))
+    input_impl, end_impl = _unwrap(input), _unwrap(end)
     if isinstance(weight, lucid.Tensor):
-        if weight.dtype != input.dtype:
+        weight_impl = _unwrap(weight)
+        if weight_impl.shape and weight.dtype != input.dtype:
             raise _C_engine.DtypeMismatch(
                 f"DtypeMismatch (lerp: input/weight): "
                 f"expected {input.dtype._name}, got {weight.dtype._name}"
             )
-        if not _can_mix_devices(diff, weight):
+        input_impl, end_impl, weight_impl = _promote_impls([input_impl, end_impl, weight_impl])
+        diff = _C_engine.sub(end_impl, input_impl)
+        shown = _wrap(diff)
+        if not _can_mix_devices(shown, weight):
             raise _C_engine.DeviceMismatch(
                 f"DeviceMismatch (lerp: input/weight): "
-                f"expected {diff.device.type}, got {weight.device.type}"
+                f"expected {shown.device.type}, got {weight.device.type}"
             )
-        scaled = _wrap(_C_engine.mul(_unwrap(weight), _unwrap(diff)))
+        scaled = _C_engine.mul(weight_impl, diff)
     else:
-        w_impl = _C_engine.full(
-            list(_unwrap(diff).shape), float(weight), _unwrap(diff).dtype, _unwrap(diff).device
+        diff = _C_engine.sub(end_impl, input_impl)
+        scaled = _C_engine.mul(
+            _C_engine.full(list(diff.shape), float(weight), diff.dtype, diff.device), diff
         )
-        scaled = _wrap(_C_engine.mul(w_impl, _unwrap(diff)))
-    return _wrap(_C_engine.add(_unwrap(input), _unwrap(scaled)))
+    return _wrap(_C_engine.add(input_impl, scaled))
 
 
 def addcmul(input: Tensor, tensor1: Tensor, tensor2: Tensor, *, value: float = 1) -> Tensor:
