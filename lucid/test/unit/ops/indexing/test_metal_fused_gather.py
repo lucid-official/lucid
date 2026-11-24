@@ -25,12 +25,15 @@ _INDEX_DTYPES = [lucid.int8, lucid.int16, lucid.int32, lucid.int64]
 
 
 def _kernel_gather(src: lucid.Tensor, dim: int, idx: lucid.Tensor) -> lucid.Tensor:
-    """The engine's gather, which reads every index width.
+    """``lucid.gather``, or the engine's gather where that refuses the index.
 
     ``lucid.gather`` refuses an int8 or int16 index, as the reference does (LCD-1075); the kernel
-    keeps reading them, and these tests are about the kernel.
+    keeps reading them, and these tests are about the kernel.  int32 and int64 go through the
+    public op.
     """
-    return _wrap(_C_engine.gather(_unwrap(src), _unwrap(idx), dim))
+    if idx.dtype in (lucid.int8, lucid.int16):
+        return _wrap(_C_engine.gather(_unwrap(src), _unwrap(idx), dim))
+    return lucid.gather(src, dim, idx)
 
 
 @pytest.mark.parametrize("src_dtype", _FLOAT_DTYPES)

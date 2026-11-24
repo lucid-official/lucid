@@ -46,10 +46,12 @@ engine checks).  The bypass is the caller's: a pipeline that resamples a mask ca
 
 A third kind of refusal is not about one operand's dtype but about two operands that differ
 (``PAIRS``, :func:`refuse_unlike`).  The reference's ``heaviside``, ``complex``, ``polar``,
-``vecdot`` and the two-operand solvers have no type promotion at all: a pair that does not share
-a dtype is a ``RuntimeError``, a float16 beside a float32 included, where an ordinary binary op
-promotes it.  A 0-d tensor is no exception -- the reference does not rank the operands before it
-looks at the dtypes -- so one rule serves every shape.
+``cdist``, ``grid_sample`` and ``cross`` have no type promotion at all (``vecdot`` and the
+two-operand solvers ``solve`` and ``householder_product`` too, but those entries are still on
+their own helper until step 6 of LCD-1075 lands): a pair that does not share a dtype is a
+``RuntimeError``, a float16 beside a float32 included, where an ordinary binary op promotes it.
+A 0-d tensor is no exception -- the reference does not rank the operands before it looks at the
+dtypes -- so one rule serves every shape.
 
 Neither list is a census of the ops that refuse.  The refusal sweeps
 (``lucid/test/unit/ops/test_bool_refusal_sweep.py`` and its integer twin) derive
@@ -95,6 +97,9 @@ BOOL_CODE: int = _C_engine.Bool.value
 _INTEGRAL = sorted(
     (d for d in _ENGINE_TO_DTYPE if _promotion.is_integral(d)), key=lambda d: d.value
 )
+
+#: The engine's tensor type, for the check that an operand needs no unwrapping.
+_IMPL = _C_engine.TensorImpl
 
 #: The codes of int8 and int16, the widths ``Row.on_short`` covers.
 _SHORT_CODES = frozenset({_C_engine.I8.value, _C_engine.I16.value})
@@ -183,6 +188,9 @@ class Row:
     #: The rule for a complex operand, read by :func:`refuse_complex` and
     #: :func:`refuse_unless_bool`.
     on_complex: Rule | None = None
+    #: An operand with no element is answered whatever its dtype: the reference reads none of it
+    #: (``gather`` of an empty int8 index is an empty result), so :func:`refuse` lets it pass.
+    answers_empty: bool = False
 
     def __post_init__(self) -> None:
         """Refuse a row that sets both integer slots."""
@@ -207,6 +215,10 @@ class Row:
             else:
                 slots[dtype.value] = self.on_ints or self.on_narrow
         return tuple(slots)
+
+    def refused_codes(self) -> frozenset[int]:
+        """The engine codes of the integral dtypes this row turns away."""
+        return frozenset(code for code, rule in enumerate(self.by_code()) if rule is not None)
 
 
 def _row(
@@ -315,7 +327,13 @@ _DECLARED: tuple[Row, ...] = (
     # narrower, and ``gather``'s index as int32 or int64 (a flat ``take_along_dim`` is a ``gather``).
     _row("take_along_dim", "indices", bool=GUARD_INT64, narrow=GUARD_INT64),
     _row("take", "index", bool=GUARD_INT64, narrow=GUARD_INT64),
-    Row("gather", "index", on_bool=GUARD_INT32_OR_64, on_short=GUARD_INT32_OR_64),
+    Row(
+        "gather",
+        "index",
+        on_bool=GUARD_INT32_OR_64,
+        on_short=GUARD_INT32_OR_64,
+        answers_empty=True,
+    ),
     # ``ldexp`` of a real float refuses a bool exponent (an integer or complex base answers).
     _row("ldexp", "exponent", bool=KERNEL_NUMBER),
     _row("masked_select", "mask", ints=GUARD_BOOL, floats=GUARD_BOOL, complexes=GUARD_BOOL),
@@ -419,6 +437,13 @@ _BY_CODE: Mapping[tuple[str, str], tuple[Rule | None, ...]] = MappingProxyType(
     {key: (*row.by_code(), row.on_float, row.on_complex) for key, row in ROWS.items()}
 )
 
+#: The integral dtype codes each ``(op, role)`` row turns away: what a call asks first, so that a
+#: dtype the row answers costs one membership test.  An in-place twin or a role with no row of its
+#: own is added the first time it is asked (:func:`_refused_codes`).
+_REFUSED: dict[tuple[str, str], frozenset[int]] = {
+    key: row.refused_codes() for key, row in ROWS.items()
+}
+
 #: Which slot of a compiled row a dtype code reads: its own for bool and the integers, then
 #: the float slot, then the complex one.
 _COMPLEX_CODES = frozenset({_C_engine.C64.value, _C_engine.C128.value})
@@ -502,6 +527,25 @@ def _rule(op: str, role: str, code: int) -> Rule | None:
     if rules is None:
         raise KeyError(f"{op} has no refusal row; add one to lucid._ops._bool_refusal")
     return rules[_SLOT[code]]
+
+
+def _refused_codes(op: str, role: str) -> frozenset[int]:
+    """The integral dtype codes ``op``'s ``role`` row turns away, which a call may repeat for free."""
+    try:
+        return _REFUSED[(op, role)]
+    except KeyError:
+        base = op.removesuffix("_")
+        row = ROWS.get((base, role)) or ROWS.get((base, ""))
+        if row is None:
+            raise KeyError(f"{op} has no refusal row; add one to lucid._ops._bool_refusal") from None
+        return _REFUSED.setdefault((op, role), row.refused_codes())
+
+
+def _answers_empty(op: str, role: str) -> bool:
+    """Whether ``op``'s ``role`` row lets an operand with no element through."""
+    base = op.removesuffix("_")
+    row = ROWS.get((base, role)) or ROWS.get((base, ""))
+    return row is not None and row.answers_empty
 
 
 def _error(
@@ -620,7 +664,9 @@ def refuse(op: str, operand: object, role: str = "") -> None:
     """Raise ``op``'s refusal when ``operand`` is a bool or integer tensor its row turns away.
 
     A float or complex tensor, a number, ``None`` and a non-tensor pass at once: the
-    only dtype read is the tensor's, and no row is looked up for any of them.
+    only dtype read is the tensor's, and no row is looked up for any of them.  A bool or
+    integer one the row answers costs one membership test of its code.  A row that
+    ``answers_empty`` lets an operand with no element through, whatever its dtype.
 
     Parameters
     ----------
@@ -636,11 +682,13 @@ def refuse(op: str, operand: object, role: str = "") -> None:
     RuntimeError
         The class :func:`refusal` builds for ``op``.
     """
-    impl = _promotion.try_unwrap(operand)
+    impl = operand if isinstance(operand, _IMPL) else _promotion.try_unwrap(operand)
     if impl is None:
         return
     code = impl.dtype.value
-    if code <= LAST_INTEGRAL_CODE:
+    if code <= LAST_INTEGRAL_CODE and code in _refused_codes(op, role):
+        if impl.numel() == 0 and _answers_empty(op, role):
+            return
         _check(op, code, role)
 
 
@@ -827,9 +875,11 @@ def refuse_common(op: str, *operands: object) -> None:
 def refuse_unlike(op: str, first: object, second: object) -> None:
     """Raise ``op``'s refusal when two tensor operands do not share a dtype.
 
-    The reference's ``heaviside``, ``polar``, ``vecdot`` and the two-operand solvers do not
-    promote: a pair of dtypes that differ is a ``RuntimeError``, whatever the dtypes (a
-    ``float16`` beside a ``float32``) and whatever the shapes (a 0-d operand beside a vector).
+    The reference's ``heaviside``, ``complex``, ``polar``, ``cdist``, ``grid_sample`` and
+    ``cross`` do not promote (nor do ``vecdot``, ``solve`` and ``householder_product``, which
+    are still on the linalg helper until step 6 of LCD-1075 moves them here): a pair of dtypes
+    that differ is a ``RuntimeError``, whatever the dtypes (a ``float16`` beside a
+    ``float32``) and whatever the shapes (a 0-d operand beside a vector).
     A number, ``None`` and anything else that is not a tensor passes: it takes the other
     operand's dtype, and no dtype is read from it.
 
@@ -849,7 +899,8 @@ def refuse_unlike(op: str, first: object, second: object) -> None:
     KeyError
         ``op`` has no pair; add one to ``PAIRS``.
     """
-    impl_first, impl_second = _promotion.try_unwrap(first), _promotion.try_unwrap(second)
+    impl_first = first if isinstance(first, _IMPL) else _promotion.try_unwrap(first)
+    impl_second = second if isinstance(second, _IMPL) else _promotion.try_unwrap(second)
     if impl_first is None or impl_second is None:
         return
     code_first, code_second = impl_first.dtype.value, impl_second.dtype.value

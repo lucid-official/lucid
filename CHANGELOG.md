@@ -446,6 +446,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - a 0-d x of trapezoid is one coordinate along dim (LCD-1075)
 
+- an empty gather index is answered; refusals test one code set
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

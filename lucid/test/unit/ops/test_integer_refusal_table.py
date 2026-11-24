@@ -216,6 +216,8 @@ def test_a_row_sets_one_integer_slot() -> None:
         _table.Row("x", on_ints=rule, on_narrow=rule)
     with pytest.raises(ValueError, match="one of on_ints, on_narrow and on_short"):
         _table.Row("x", on_narrow=rule, on_short=rule)
+    with pytest.raises(ValueError, match="one of on_ints, on_narrow and on_short"):
+        _table.Row("x", on_ints=rule, on_short=rule)
 
 
 def test_a_dtype_is_refused_by_its_width() -> None:
@@ -275,6 +277,38 @@ def test_a_float_pays_for_no_lookup(monkeypatch: pytest.MonkeyPatch) -> None:
     _table.refuse_declared("embedding_bag", x)
     _table.refuse_complex("histogram", x)
     _table.refuse_bool("cov", x)
+
+
+def test_a_dtype_the_row_answers_pays_for_one_membership_test(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # An int64 ``take`` index, an int32 ``gather`` index and an empty int8 one all pass without the
+    # rule being read: the row's refused codes answer, and only a refusal builds the rule.
+    def boom(*args: object) -> None:
+        raise AssertionError("an answered dtype reached the rule")
+
+    monkeypatch.setattr(_table, "_rule", boom)
+    _table.refuse("take", lucid.tensor([0, 1]), "index")
+    _table.refuse("gather", lucid.tensor([0, 1], dtype=lucid.int32), "index")
+    _table.refuse("gather", lucid.zeros(0, dtype=lucid.int8), "index")
+
+
+def test_a_row_that_answers_an_empty_operand_lets_it_through_whatever_its_dtype() -> None:
+    assert ROWS[("gather", "index")].answers_empty
+    assert not ROWS[("take", "index")].answers_empty
+    for dtype in (lucid.bool_, lucid.int8, lucid.int16):
+        _table.refuse("gather", lucid.zeros(0, 2, dtype=dtype), "index")
+        with pytest.raises(RuntimeError):
+            _table.refuse("gather", lucid.zeros(1, 2, dtype=dtype), "index")
+    with pytest.raises(RuntimeError):
+        _table.refuse("take", lucid.zeros(0, dtype=lucid.int8), "index")
+
+
+def test_a_row_names_the_codes_it_refuses() -> None:
+    assert ROWS[("gather", "index")].refused_codes() == {0, 1, 2}
+    assert ROWS[("take", "index")].refused_codes() == {0, 1, 2, 3}
+    assert ROWS[("local_response_norm", "")].refused_codes() == {0, 1, 2, 3}
+    assert ROWS[("quantile", "")].refused_codes() == {0, 1, 2, 3, 4}
 
 
 def test_what_the_reference_answers_is_not_refused() -> None:

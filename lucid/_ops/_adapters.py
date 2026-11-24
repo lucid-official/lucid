@@ -303,13 +303,13 @@ def _gather_adapter(input: _Impl, dim: int, index: Tensor, *, sparse_grad: bool 
     """gather(input, dim, index, *, sparse_grad=False).
 
     ``dim`` may be a 0-d integer tensor, as the reference reads one.  The index is int32 or
-    int64, as the reference reads it: an int8, an int16 or a bool one is refused.
+    int64, as the reference reads it: an int8, an int16 or a bool one is refused unless empty.
     """
     if sparse_grad:
         raise _C_engine.NotImplementedError("gather(): sparse_grad=True is not supported")
     require_tensor("gather", "index", index, 2)
-    refuse("gather", index, "index")
     index_impl = _unwrap(index)
+    refuse("gather", index_impl, "index")
     d = dim if type(dim) is int else _as_dim(dim)
     return _C_engine.gather(_unwrap(input), index_impl, d)
 
@@ -325,8 +325,8 @@ def _take_adapter(a_impl: _Impl, index: Tensor) -> _Impl:
     answers in the index's shape.  The index is int64, as the reference reads it: a narrower
     integer or a bool is refused.
     """
-    refuse("take", index, "index")
     idx = _unwrap(index)
+    refuse("take", idx, "index")
     shape = list(idx.shape)
     if len(shape) == 1:
         return _C_engine.take(a_impl, idx)
