@@ -46,7 +46,7 @@ import math
 import subprocess
 import sys
 from collections.abc import Callable, Mapping
-from typing import Any
+from typing import Any, Literal, get_origin
 
 import numpy as np
 
@@ -122,8 +122,17 @@ def _shrink_value(name: str, value: Any) -> Any:
 
 
 def shrink(cfg: Any) -> dict[str, Any]:
+    """The overrides that make ``cfg``'s model small, by field-name rule.
+
+    A ``Literal``-typed field names one of a few allowed values (UNet's
+    spatial rank ``dim``: 2 or 3), not a size, so the size rules skip it —
+    ``dim`` is also the transformers' hidden width, and shrinking it to 32
+    would hand UNet a rank its config refuses.
+    """
     overrides: dict[str, Any] = {}
     for f in dataclasses.fields(cfg):
+        if get_origin(f.type) is Literal:
+            continue
         new = _shrink_value(f.name, getattr(cfg, f.name))
         if new is not None and new != getattr(cfg, f.name):
             overrides[f.name] = new
