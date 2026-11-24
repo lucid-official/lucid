@@ -280,14 +280,14 @@ def t(input: Tensor) -> Tensor:
 def column_stack(tensors: Sequence[Tensor]) -> Tensor:
     r"""Stack tensors as columns of a 2-D matrix.
 
-    Each 1-D tensor is first promoted to a column vector of shape
-    ``(N, 1)``; tensors with rank ``>= 2`` are passed through unchanged.
-    The results are then concatenated along axis 1.
+    Each 0-D tensor is first lifted to shape ``(1, 1)`` and each 1-D tensor to
+    a column vector of shape ``(N, 1)``; tensors with rank ``>= 2`` are passed
+    through unchanged.  The results are then concatenated along axis 1.
 
     Parameters
     ----------
     tensors : Sequence[Tensor]
-        Tensors to stack. 1-D tensors are reshaped to column form;
+        Tensors to stack. 0-D and 1-D tensors are reshaped to column form;
         higher-rank tensors must already have matching first-axis size.
 
     Returns
@@ -315,8 +315,11 @@ def column_stack(tensors: Sequence[Tensor]) -> Tensor:
     >>> b = lucid.tensor([4., 5., 6.])
     >>> lucid.column_stack([a, b])
     tensor([[1., 4.], [2., 5.], [3., 6.]])
+    >>> lucid.column_stack([lucid.tensor(1.), lucid.tensor([2.])])
+    tensor([[1., 2.]])
     """
-    fixed = [t_i.unsqueeze(1) if t_i.ndim == 1 else t_i for t_i in tensors]
+    fixed = [t_i.reshape(1, 1) if t_i.ndim == 0 else t_i for t_i in tensors]
+    fixed = [t_i.unsqueeze(1) if t_i.ndim == 1 else t_i for t_i in fixed]
     return lucid.cat(fixed, 1)
 
 

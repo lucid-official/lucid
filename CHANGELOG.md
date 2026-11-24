@@ -417,6 +417,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - lerp and addr rank a 0-d operand as the reference does
 
+- column_stack lifts a 0-d input to a column
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call
