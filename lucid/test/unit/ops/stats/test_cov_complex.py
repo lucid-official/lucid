@@ -7,9 +7,8 @@ reference's: its diagonal was complex and ``cov([[1+2j, 2-1j, .5j], [3, 1-1j,
 2+2j]])[0, 0]`` was ``-1.25-1.5j`` where the variance is ``3.25`` (LCD-663).
 ``corrcoef`` divided by the square root of that complex diagonal.
 
-The CPU stream has no complex matmul kernel (LCD-667), so the complex cases run
-on Metal, and the CPU one is pinned as a strict expected failure to flip when
-that lands.
+The reference-parity cases run on Metal.  The CPU stream's complex matmul
+(LCD-1070) is pinned by ``test_complex_cov_on_cpu_is_hermitian``.
 """
 
 import cmath
@@ -98,7 +97,6 @@ def test_real_cov_is_the_plain_product(dtype: lucid.dtype) -> None:
     assert lucid.cov(x).tolist() == want.tolist()
 
 
-@pytest.mark.xfail(strict=True, reason="LCD-667: the CPU stream has no complex matmul kernel")
 def test_complex_cov_on_cpu_is_hermitian() -> None:
     c = lucid.cov(lucid.tensor(_X, dtype=lucid.complex64))
     assert cmath.isclose(c.tolist()[0][1], 0.25 + 3j, rel_tol=1e-5)

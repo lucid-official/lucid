@@ -71,19 +71,42 @@ _HOLOMORPHIC: dict[
 }
 
 
-def _placements(cpu_accepts: bool) -> list[object]:
-    cpu_marks = (
-        ()
-        if cpu_accepts
-        else pytest.mark.xfail(
+#: The holomorphic unaries above that have a CPU complex kernel (LCD-1070): ``log``,
+#: which the gradient of ``pow`` needs, and the two power forms, which a complex
+#: base sends through the general ``pow`` with the number as a 0-d operand.  The
+#: rest are LCD-667.
+_CPU_UNARY = frozenset({"log", "z**3", "2**z"})
+
+
+def _cpu_marks(cpu_accepts: bool) -> list[pytest.MarkDecorator]:
+    if cpu_accepts:
+        return []
+    return [
+        pytest.mark.xfail(
             strict=True,
             raises=NotImplementedError,
             reason="LCD-667: the CPU stream has no complex kernel for this op",
         )
-    )
+    ]
+
+
+def _placements(cpu_accepts: bool) -> list[object]:
     return [
-        pytest.param("cpu", id="cpu", marks=cpu_marks),
+        pytest.param("cpu", id="cpu", marks=_cpu_marks(cpu_accepts)),
         pytest.param("metal", id="metal", marks=_METAL),
+    ]
+
+
+def _unary_cells() -> list[object]:
+    return [
+        pytest.param(
+            name,
+            device,
+            id=f"{name}-{device}",
+            marks=_cpu_marks(name in _CPU_UNARY) if device == "cpu" else [_METAL],
+        )
+        for name in _HOLOMORPHIC
+        for device in ("cpu", "metal")
     ]
 
 
@@ -95,8 +118,7 @@ def _norm_sq(y: Tensor) -> Tensor:
     return lucid.real(y * lucid.conj(y)).sum()
 
 
-@pytest.mark.parametrize("device", _placements(cpu_accepts=False))
-@pytest.mark.parametrize("name", list(_HOLOMORPHIC))
+@pytest.mark.parametrize(("name", "device"), _unary_cells())
 def test_a_holomorphic_unary_conjugates_its_derivative(name: str, device: str) -> None:
     f, f_np, df_np = _HOLOMORPHIC[name]
     z = _leaf(_Z, device)
@@ -105,7 +127,7 @@ def test_a_holomorphic_unary_conjugates_its_derivative(name: str, device: str) -
     np.testing.assert_allclose(z.grad.numpy(), want, rtol=1e-4, atol=1e-5)
 
 
-@pytest.mark.parametrize("device", _placements(cpu_accepts=False))
+@pytest.mark.parametrize("device", _placements(cpu_accepts=True))
 def test_pow_conjugates_both_partial_derivatives(device: str) -> None:
     a, b = _leaf(_Z, device), _leaf(_W, device)
     _norm_sq(a**b).backward()
@@ -118,7 +140,7 @@ def test_pow_conjugates_both_partial_derivatives(device: str) -> None:
     )
 
 
-@pytest.mark.parametrize("device", _placements(cpu_accepts=False))
+@pytest.mark.parametrize("device", _placements(cpu_accepts=True))
 def test_matmul_takes_the_conjugate_transpose(device: str) -> None:
     a, b = _leaf(_A, device), _leaf(_B, device)
     _norm_sq(a @ b).backward()
@@ -136,7 +158,7 @@ def test_dot_conjugates_the_other_operand(device: str) -> None:
     np.testing.assert_allclose(b.grad.numpy(), 2 * w * _Z.conj(), rtol=1e-4, atol=1e-5)
 
 
-@pytest.mark.parametrize("device", _placements(cpu_accepts=False))
+@pytest.mark.parametrize("device", _placements(cpu_accepts=True))
 def test_outer_conjugates_the_other_operand(device: str) -> None:
     a, b = _leaf(_Z, device), _leaf(_W[:2], device)
     _norm_sq(a.outer(b)).backward()
