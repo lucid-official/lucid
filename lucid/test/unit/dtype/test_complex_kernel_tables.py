@@ -26,6 +26,9 @@ Three guards, over both devices and both widths:
   the conjugate one of ``autograd/ComplexGrad.h``;
 * the boundaries: empty operands, a broadcast condition, a transposed view.
 
+A 1-D ``B`` is not one of ``solve_triangular``'s spellings: the reference refuses it, and so
+does Lucid (``linalg/test_solver_operand_refusal.py``, LCD-1083).
+
 LCD-1082 adds the special values of ``pow`` at a zero base, the same on both
 devices: MLX's complex power answered 0 there whatever the exponent, where
 ``std::pow`` (the CPU stream, and the reference) answers NaN or ``inf + NaN j``.
@@ -109,8 +112,6 @@ class _Case:
     want: Callable[..., np.ndarray]
     #: Indices of the inputs a gradient is taken for; empty = forward only.
     grad: tuple[int, ...] = ()
-    #: False for a spelling the reference refuses: the closed form still holds Lucid to it.
-    ref: bool = True
 
 
 def _outer(lib: ModuleType, a: Any, b: Any) -> Any:
@@ -181,15 +182,6 @@ _CASES = [
         _solve(upper=True, left=False),
         lambda a, b: b @ np.linalg.inv(_tri(a, True, False)),
         grad=(0, 1),
-    ),
-    _Case(
-        "solve_triangular-vector",
-        (_A, _B[:, 0]),
-        _solve(upper=True),
-        lambda a, b: np.linalg.solve(_tri(a, True, False), b),
-        grad=(0, 1),
-        # The reference refuses a 1-D ``B``; Lucid answers it (LCD-1083).
-        ref=False,
     ),
     # The matmul family reaches the CPU's complex GEMM, which ``outer`` and the
     # gradient of ``solve_triangular`` need; its forward and gradient are held
@@ -281,12 +273,9 @@ def test_solve_triangular_gradient_is_the_conjugate_transpose_rule(
 # ── the reference ────────────────────────────────────────────────────────────
 
 
-_REF_CASES = [c for c in _CASES if c.ref]
-
-
 @pytest.mark.parity
 @pytest.mark.parametrize(("device", "dtype"), _PLACEMENTS)
-@pytest.mark.parametrize("case", _REF_CASES, ids=[c.name for c in _REF_CASES])
+@pytest.mark.parametrize("case", _CASES, ids=_IDS)
 def test_forward_matches_the_reference(
     ref: ModuleType, case: _Case, device: str, dtype: lucid.dtype
 ) -> None:
@@ -303,7 +292,7 @@ def _norm_sq(lib: ModuleType, y: Any) -> Any:
 
 @pytest.mark.parity
 @pytest.mark.parametrize(("device", "dtype"), _PLACEMENTS)
-@pytest.mark.parametrize("case", [c for c in _REF_CASES if c.grad], ids=lambda c: c.name)
+@pytest.mark.parametrize("case", [c for c in _CASES if c.grad], ids=lambda c: c.name)
 def test_gradient_matches_the_reference(
     ref: ModuleType, case: _Case, device: str, dtype: lucid.dtype
 ) -> None:
