@@ -34,7 +34,11 @@ from lucid.models._base import PretrainedModel
 from lucid.models._output import ModelOutput, Seq2SeqLMOutput
 from lucid.models._sampling import _SamplingParams
 from lucid.models._tasks import LanguageModelingModel
-from lucid.models._utils._text import extended_attention_mask, text_activation
+from lucid.models._utils._text import (
+    extended_attention_mask,
+    resolve_generation_length,
+    text_activation,
+)
 from lucid.models.text._common._seq2seq import seq2seq_generate
 from lucid.models.text.t5._config import T5Config
 from lucid.utils.cache import EncoderDecoderCache, StaticCache
@@ -863,6 +867,7 @@ class T5ForSeq2SeqLM(LanguageModelingModel):
         )
         eos = eos_token_id if eos_token_id is not None else config.eos_token_id
         pad = pad_token_id if pad_token_id is not None else config.pad_token_id
+        length_cap = resolve_generation_length(max_length, max_new_tokens, 1)
         dev = input_ids.device.type
         memory = self.t5.encode(input_ids, attention_mask)
 
@@ -887,7 +892,6 @@ class T5ForSeq2SeqLM(LanguageModelingModel):
         )  # fmt: skip
         return seq2seq_generate(
             next_logits, batch=int(input_ids.shape[0]), device=dev, start_token_id=start,
-            max_length=max_length, max_new_tokens=max_new_tokens, use_cache=use_cache,
-            sampling=sampling, cache_implementation=cache_implementation,
-            max_cache_len=max_cache_len,
+            max_length=length_cap, use_cache=use_cache, sampling=sampling,
+            cache_implementation=cache_implementation, max_cache_len=max_cache_len,
         )  # fmt: skip

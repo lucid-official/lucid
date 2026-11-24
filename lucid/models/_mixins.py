@@ -526,9 +526,9 @@ class _GenerationMask:
     pad columns have to stay masked for every step (one more kept column per
     generated token), and a row's positions have to count from its first real
     token rather than from the pad -- ``cumsum(mask) - 1``, so a padded row sees
-    the positions its prompt would have alone.  Positions are only produced for a
-    host whose ``forward`` takes ``position_ids``; any other host keeps its own
-    cache-offset positions.
+    the positions its prompt would have alone, and a masked slot is given 0 (the
+    reference's fill).  Positions are only produced for a host whose ``forward``
+    takes ``position_ids``; any other host keeps its own cache-offset positions.
 
     Parameters
     ----------
@@ -537,8 +537,9 @@ class _GenerationMask:
     input_ids : Tensor
         ``(B, T)`` prompt the mask belongs to.
     attention_mask : Tensor or None
-        ``(B, T)`` bool or integer mask, 1 for a real token and 0 for padding;
-        ``None`` for a batch with no padding.
+        ``(B, T)`` mask of any dtype, a value above 0.5 for a real token and
+        below it for padding -- as ``forward`` reads one; ``None`` for a batch
+        with no padding.
     compiled : bool, optional, keyword-only
         The generation runs the compiled decode step, whose one fixed input
         signature has no room for a mask that grows.
@@ -546,8 +547,7 @@ class _GenerationMask:
     Raises
     ------
     TypeError
-        ``attention_mask`` is floating point, or ``host.forward`` takes no
-        ``attention_mask`` to give it to.
+        ``host.forward`` takes no ``attention_mask`` to give it to.
     ValueError
         ``attention_mask`` is not ``(B, T)`` like ``input_ids``, or lives on
         another device.
@@ -580,11 +580,6 @@ class _GenerationMask:
                 f"generate(): attention_mask must have the shape of input_ids "
                 f"{tuple(input_ids.shape)}, got {tuple(attention_mask.shape)}"
             )
-        if attention_mask.is_floating_point():
-            raise TypeError(
-                f"generate(): attention_mask must be a bool or integer 0/1 mask, "
-                f"got {attention_mask.dtype}"
-            )
         if attention_mask.device.type != input_ids.device.type:
             raise ValueError(
                 f"generate(): attention_mask is on {attention_mask.device.type} but "
@@ -595,7 +590,7 @@ class _GenerationMask:
                 f"generate(): {type(host).__name__}.forward takes no attention_mask, "
                 f"so the padding cannot be masked"
             )
-        self._mask = attention_mask.long()
+        self._mask = (attention_mask.float() > 0.5).long()
         self._with_positions = _forward_takes(host.forward, "position_ids")
 
     def forward_kwargs(self, new_tokens: int | None = None) -> dict[str, Tensor]:
@@ -608,7 +603,7 @@ class _GenerationMask:
             return {}
         kwargs: dict[str, Tensor] = {"attention_mask": self._mask}
         if self._with_positions:
-            positions = (self._mask.cumsum(dim=-1) - 1).clamp(min=0)
+            positions = lucid.where(self._mask == 0, 0, self._mask.cumsum(dim=-1) - 1)
             kwargs["position_ids"] = positions if new_tokens is None else positions[:, -new_tokens:]
         return kwargs
 
@@ -813,11 +808,11 @@ class CausalLMMixin:
         input_ids : Tensor
             ``(B, T_prompt)`` int prompt tokens.
         attention_mask : Tensor or None, optional, keyword-only
-            ``(B, T_prompt)`` bool or integer mask, 1 for a real token and 0 for
-            padding, for a left-padded batch of unequal prompts.  Rows are
-            positioned from their first real token when ``forward`` takes
-            ``position_ids`` (see ``_GenerationMask``).  Not supported with
-            ``cache_implementation="compiled"``.
+            ``(B, T_prompt)`` mask, a value above 0.5 for a real token and below it
+            for padding, for a left-padded batch of unequal prompts.  It grows a kept
+            column per generated token; a host whose ``forward`` takes ``position_ids``
+            positions each row by ``cumsum(mask) - 1`` (a pad slot at 0).  Not
+            supported with ``cache_implementation="compiled"``.
         max_length : int, optional, keyword-only, default=20
             Total sequence length cap (prompt + generated).  Ignored when
             ``max_new_tokens`` is supplied.
@@ -881,7 +876,7 @@ class CausalLMMixin:
             If ``input_ids`` is not 2-D, ``attention_mask`` is not its shape or sits
             on another device, or ``max_new_tokens`` is negative.
         TypeError
-            If ``attention_mask`` is floating point or ``forward`` cannot take one.
+            If the host's ``forward`` takes no ``attention_mask``.
         NotImplementedError
             If ``attention_mask`` is given with ``cache_implementation="compiled"``.
 

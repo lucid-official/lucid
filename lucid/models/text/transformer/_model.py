@@ -45,6 +45,7 @@ from lucid.models._output import (
 from lucid.models.text._common._seq2seq import seq2seq_generate
 from lucid.models.text.transformer._config import TransformerConfig
 from lucid.models._sampling import _SamplingParams
+from lucid.models._utils._text import resolve_generation_length
 from lucid.utils.cache import EncoderDecoderCache, StaticCache
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -648,6 +649,7 @@ class TransformerForSeq2SeqLM(LanguageModelingModel):
         if pad is None:
             pad = 0
 
+        length_cap = resolve_generation_length(max_length, max_new_tokens, 1)
         dev = input_ids.device.type
         memory = self.transformer.encode(input_ids, attention_mask)
 
@@ -674,9 +676,8 @@ class TransformerForSeq2SeqLM(LanguageModelingModel):
         )  # fmt: skip
         return seq2seq_generate(
             next_logits, batch=int(input_ids.shape[0]), device=dev, start_token_id=bos,
-            max_length=max_length, max_new_tokens=max_new_tokens, use_cache=use_cache,
-            sampling=sampling, cache_implementation=cache_implementation,
-            max_cache_len=max_cache_len,
+            max_length=length_cap, use_cache=use_cache, sampling=sampling,
+            cache_implementation=cache_implementation, max_cache_len=max_cache_len,
         )  # fmt: skip
 
 

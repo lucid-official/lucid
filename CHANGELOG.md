@@ -454,6 +454,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - A 0-d tensor passed as a scale factor (`alpha`, `beta`, `value`) is read as the number it holds, through the same rules as a Python number. This matches the reference for `add`, `sub`, `rsub`, `subtract`, `addmm`, `addmv`, `addbmm`, `baddbmm`, `addr`, `addcmul`, `addcdiv`, `index_add` and a non-tensor `lerp` weight, and for their method and in-place forms. Before, it was treated as an operand: a float64 0-d `alpha` could promote the result, and some ops raised. A tensor `lerp` weight is still an operand. The refusal message names the spelling used (`addcmul_()`, `index_add_()`), except `subtract`, which says `sub()` (LCD-1088).
 
+- accept float masks in generate, validate length early
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

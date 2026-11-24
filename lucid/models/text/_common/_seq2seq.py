@@ -13,7 +13,6 @@ from collections.abc import Callable
 import lucid
 from lucid._tensor.tensor import Tensor
 from lucid.models._sampling import _SamplingParams, _select_next_ondevice
-from lucid.models._utils._text import resolve_generation_length
 from lucid.utils.cache import DynamicCache, EncoderDecoderCache, StaticCache
 
 __all__ = ["NextTokenLogits", "seq2seq_generate"]
@@ -33,11 +32,10 @@ def seq2seq_generate(
     max_length: int,
     use_cache: bool,
     sampling: _SamplingParams,
-    max_new_tokens: int | None = None,
     cache_implementation: str = "dynamic",
     max_cache_len: int | None = None,
 ) -> Tensor:
-    """Unroll a decoder from ``start_token_id`` until the length cap.
+    """Unroll a decoder from ``start_token_id`` until ``max_length`` tokens.
 
     Parameters
     ----------
@@ -50,17 +48,13 @@ def seq2seq_generate(
     start_token_id : int
         First target token of every row.
     max_length : int
-        Cap on the returned length, the start token included.  Ignored when
-        ``max_new_tokens`` is given.
+        Cap on the returned length, the start token included.
     use_cache : bool
         Decode one new token per step against an
         :class:`~lucid.utils.cache.EncoderDecoderCache` instead of
         re-reading the whole prefix.
     sampling : _SamplingParams
         Greedy or stochastic selection, end-of-sequence and padding ids.
-    max_new_tokens : int or None, optional, keyword-only
-        Cap on the tokens generated after the start token, so the output is at
-        most ``1 + max_new_tokens`` wide.  Takes precedence over ``max_length``.
     cache_implementation : str, optional, keyword-only, default="dynamic"
         ``"dynamic"`` uses :class:`~lucid.utils.cache.DynamicCache` for
         decoder self-attention; ``"static"`` uses a pre-allocated
@@ -70,24 +64,22 @@ def seq2seq_generate(
         each decode step runs through a single cached executable.
     max_cache_len : int or None, optional, keyword-only
         Self-attention buffer capacity for ``"static"`` or ``"compiled"``;
-        defaults to the length cap.
+        defaults to ``max_length``.
 
     Returns
     -------
     Tensor
-        ``(batch, T_out)`` int64 target tokens, ``T_out`` at most the length cap.
+        ``(batch, T_out)`` int64 target tokens, ``T_out <= max_length``.
         A row that emitted end-of-sequence is padded with
         ``sampling.pad_token_id`` while the others finish.
     """
-    # The start token is the whole "prompt" of a decoder, and not a generated token.
-    length_cap = resolve_generation_length(max_length, max_new_tokens, 1)
     finished = lucid.zeros((batch,), device=device).bool()
     out_tokens = [lucid.tensor([start_token_id] * batch, device=device).long()]
     cache: EncoderDecoderCache | None = None
     compiled_step = None
     if use_cache:
         self_cache = (
-            StaticCache(max_cache_len=(max_cache_len if max_cache_len is not None else length_cap))
+            StaticCache(max_cache_len=(max_cache_len if max_cache_len is not None else max_length))
             if cache_implementation in ("static", "compiled")
             else DynamicCache()
         )
@@ -98,7 +90,7 @@ def seq2seq_generate(
             compiled_step = compiled_decode_step(
                 lambda tok, cp: next_token_logits(tok, cache, cp), cache
             )
-    for pos in range(length_cap - 1):
+    for pos in range(max_length - 1):
         # The cache already holds every column but the newest.
         tokens = (
             out_tokens[-1].reshape(batch, 1)

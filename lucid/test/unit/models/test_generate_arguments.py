@@ -3,7 +3,10 @@
 * Decoder-only ``generate`` takes ``attention_mask``: a batch of prompts
   left-padded to one width decodes each row as that prompt would alone, with
   the pad masked at every step and the positions counted from the first real
-  token.  A host whose ``forward`` cannot take the mask is refused, not ignored.
+  token.  A mask is read as ``forward`` reads one (above 0.5 is a real token),
+  whatever its dtype.  A host whose ``forward`` cannot take the mask is refused
+  (``TypeError``; the reference raises ``ValueError`` -- a recorded deviation),
+  not ignored.
 * The encoder-decoder ``generate`` (T5, Transformer) takes ``max_new_tokens``,
   counted after the start token, and it wins over ``max_length``.
 
@@ -13,6 +16,7 @@ config overrides -- there is no ``_tiny`` factory to reach for (H11).
 
 import inspect
 from collections.abc import Callable
+from typing import Any
 
 import pytest
 
@@ -24,6 +28,7 @@ from lucid.models._mixins import CausalLMMixin
 from lucid.models.text.t5._model import T5ForSeq2SeqLM
 from lucid.models.text.transformer._model import TransformerForSeq2SeqLM
 from lucid.test._helpers.compare import assert_close
+from lucid.utils.cache import StaticCache
 
 # ``initializer_range`` is widened so the greedy tokens actually vary with the
 # context: at the default a tiny random model emits one token forever, and a
@@ -63,6 +68,9 @@ _SEQ2SEQ: dict[str, dict[str, object]] = {
     },
 }
 
+#: The attribute each encoder-decoder family keeps its ``encode`` trunk under.
+_SEQ2SEQ_TRUNK = {"t5_small_seq2seq": "t5", "transformer_base_seq2seq": "transformer"}
+
 _PROMPTS = [[3, 7, 1, 9, 2], [4, 5, 6], [8, 2]]
 _NEW_TOKENS = 6
 #: ``(use_cache, cache_implementation)`` -- the cached paths and the re-encoding one.
@@ -84,6 +92,18 @@ def _left_padded(
     ids = [[pad] * (width - len(p)) + p for p in prompts]
     mask = [[0] * (width - len(p)) + [1] * len(p) for p in prompts]
     return (lucid.tensor(ids, device=device).long(), lucid.tensor(mask, device=device).long())
+
+
+def _spy_static_cache(monkeypatch: pytest.MonkeyPatch, module: str) -> list[int]:
+    """Record the ``max_cache_len`` of every ``StaticCache`` that ``module`` builds."""
+    sizes: list[int] = []
+
+    def spy(*, max_cache_len: int) -> StaticCache:
+        sizes.append(max_cache_len)
+        return StaticCache(max_cache_len=max_cache_len)
+
+    monkeypatch.setattr(f"{module}.StaticCache", spy)
+    return sizes
 
 
 def _alone(model: nn.Module, prompt: list[int], device: str, **kwargs: object) -> list[int]:
@@ -150,12 +170,16 @@ class TestLeftPaddedBatch:
         wrong = model(ids, attention_mask=mask).logits
         assert float((wrong[1, 2:] - alone[0]).abs().max().item()) > 1e-3
 
-    def test_a_bool_mask_is_the_same_as_an_integer_one(self, name: str, device: str) -> None:
+    @pytest.mark.parametrize("dtype", [lucid.bool_, lucid.float32, lucid.float16])
+    def test_a_mask_of_any_dtype_is_the_same_as_an_integer_one(
+        self, name: str, device: str, dtype: lucid.dtype
+    ) -> None:
+        # ``forward`` and the reference both read a float 0/1 mask, so ``generate`` does.
         model = _decoder(name, device)
         ids, mask = _left_padded(_PROMPTS, device)
         as_int = model.generate(ids, attention_mask=mask, max_new_tokens=_NEW_TOKENS)
-        as_bool = model.generate(ids, attention_mask=mask.bool(), max_new_tokens=_NEW_TOKENS)
-        assert_close(as_bool, as_int, atol=0.0)
+        other = model.generate(ids, attention_mask=mask.to(dtype), max_new_tokens=_NEW_TOKENS)
+        assert_close(other, as_int, atol=0.0)
 
     def test_a_mask_of_ones_is_no_mask(self, name: str, device: str) -> None:
         model = _decoder(name, device)
@@ -257,7 +281,7 @@ class TestMaskReachesForward:
         assert [c["width"] for c in calls] == [4, 1]
         assert calls[0]["mask"] == _LEFT_PADDED_MASK
         assert calls[1]["mask"] == [[0, 0, 1, 1, 1], [1, 1, 1, 1, 1]]
-        # cumsum(mask) - 1, a pad slot clamped to 0 and a new token placed
+        # cumsum(mask) - 1, a pad slot at 0 and a new token placed
         # after the row's last real position, not after the pad.
         assert calls[0]["positions"] == [[0, 0, 0, 1], [0, 1, 2, 3]]
         assert calls[1]["positions"] == [[2], [4]]
@@ -274,6 +298,26 @@ class TestMaskReachesForward:
         assert [c["width"] for c in calls] == [4, 1]
         assert all(c["positions"] is None for c in calls)
         assert calls[1]["mask"] == [[0, 0, 1, 1, 1], [1, 1, 1, 1, 1]]
+
+    def test_a_float_mask_is_read_above_one_half(self) -> None:
+        host = _MaskAndPositionsLM()
+        ids = lucid.tensor(_LEFT_PADDED_IDS).long()
+        mask = lucid.tensor([[0.0, 0.2, 0.9, 1.0], [1.0, 1.0, 1.0, 1.0]])
+        host.generate(ids, attention_mask=mask, max_new_tokens=2)
+        assert host.calls[0]["mask"] == _LEFT_PADDED_MASK
+        assert host.calls[0]["positions"] == [[0, 0, 0, 1], [0, 1, 2, 3]]
+
+    def test_a_masked_slot_after_a_real_one_is_positioned_at_zero(self) -> None:
+        # Holes and right padding, which a left-padded batch never has: the
+        # reference fills every masked slot with 0, so ``cumsum - 1`` is not
+        # clamped there (a clamp would repeat the last real position instead).
+        host = _MaskAndPositionsLM()
+        ids = lucid.tensor([[3, 7, 0, 9], [3, 7, 0, 0]]).long()
+        mask = lucid.tensor([[1, 1, 0, 1], [1, 1, 0, 0]]).long()
+        host.generate(ids, attention_mask=mask, max_new_tokens=2)
+        assert host.calls[0]["positions"] == [[0, 1, 0, 2], [0, 1, 0, 0]]
+        # The generated token follows the row's real tokens, hole or not.
+        assert host.calls[1]["positions"] == [[3], [2]]
 
     def test_no_mask_hands_forward_neither(self) -> None:
         host = _MaskAndPositionsLM()
@@ -299,15 +343,10 @@ class TestMaskRefusals:
             host.generate(ids, attention_mask=lucid.ones(shape).long(), max_new_tokens=2)
         assert host.calls == []  # refused before any forward ran
 
-    @pytest.mark.parametrize("dtype", [lucid.float32, lucid.float16])
-    def test_a_floating_point_mask_is_a_type_error(self, dtype: lucid.dtype) -> None:
-        host, ids = self._host_and_ids()
-        with pytest.raises(TypeError, match="bool or integer"):
-            host.generate(ids, attention_mask=lucid.ones((2, 4), dtype=dtype), max_new_tokens=2)
-        assert host.calls == []
-
-    @pytest.mark.parametrize("dtype", [lucid.bool_, lucid.int32, lucid.int64])
-    def test_bool_and_integer_masks_are_taken(self, dtype: lucid.dtype) -> None:
+    @pytest.mark.parametrize(
+        "dtype", [lucid.bool_, lucid.int32, lucid.int64, lucid.float16, lucid.float32]
+    )
+    def test_masks_of_any_dtype_are_taken(self, dtype: lucid.dtype) -> None:
         host, ids = self._host_and_ids()
         mask = lucid.ones((2, 4), dtype=lucid.int64).to(dtype)
         host.generate(ids, attention_mask=mask, max_new_tokens=1)
@@ -376,6 +415,19 @@ class TestDecoderOnlyMaxNewTokens:
         with pytest.raises(ValueError, match="max_new_tokens must be >= 0"):
             model.generate(ids, max_new_tokens=-1)
 
+    def test_the_static_buffer_is_sized_by_it(
+        self, name: str, device: str, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # ``max_cache_len`` defaults to the length cap -- prompt plus new tokens
+        # here, not the (larger) ``max_length``.
+        sizes = _spy_static_cache(monkeypatch, "lucid.models._mixins")
+        model = _decoder(name, device)
+        ids = lucid.tensor([[3, 7, 1, 9]], device=device).long()
+        model.generate(ids, max_length=100, max_new_tokens=3, cache_implementation="static")
+        assert sizes == [4 + 3]
+        model.generate(ids, max_length=9, cache_implementation="static")
+        assert sizes == [7, 9]
+
 
 @pytest.mark.parametrize("name", list(_SEQ2SEQ))
 class TestSeq2SeqMaxNewTokens:
@@ -412,16 +464,40 @@ class TestSeq2SeqMaxNewTokens:
         with pytest.raises(ValueError, match="max_new_tokens must be >= 0"):
             model.generate(src, max_new_tokens=-1)
 
-    def test_the_static_buffer_is_sized_by_it(self, name: str, device: str) -> None:
+    def test_negative_is_refused_before_the_encoder_runs(
+        self, name: str, device: str, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        model = self._model(name, device)
+        trunk = getattr(model, _SEQ2SEQ_TRUNK[name])
+        encoded: list[int] = []
+        encode = trunk.encode
+
+        def counting_encode(*args: Any, **kwargs: Any) -> lucid.Tensor:
+            encoded.append(1)
+            result: lucid.Tensor = encode(*args, **kwargs)
+            return result
+
+        monkeypatch.setattr(trunk, "encode", counting_encode)
+        src = lucid.tensor([[3, 7, 1, 9, 2]], device=device).long()
+        with pytest.raises(ValueError, match="max_new_tokens must be >= 0"):
+            model.generate(src, max_new_tokens=-1)
+        assert encoded == []
+
+    def test_the_static_buffer_is_sized_by_it(
+        self, name: str, device: str, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         # ``max_cache_len`` defaults to the length cap; with ``max_new_tokens`` that
         # cap is 1 + N, not the (here larger) ``max_length``.
+        sizes = _spy_static_cache(monkeypatch, "lucid.models.text._common._seq2seq")
         model = self._model(name, device)
         src = lucid.tensor([[3, 7, 1, 9, 2]], device=device).long()
         static = model.generate(
             src, max_length=100, max_new_tokens=4, cache_implementation="static"
         )
-        dynamic = model.generate(src, max_new_tokens=4)
-        assert_close(static, dynamic, atol=0.0)
+        assert sizes == [1 + 4]
+        model.generate(src, max_length=9, cache_implementation="static")
+        assert sizes == [5, 9]
+        assert_close(static, model.generate(src, max_new_tokens=4), atol=0.0)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
