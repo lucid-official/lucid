@@ -12,8 +12,7 @@ Three classes of refusal share one owner, ``lucid._ops._bool_refusal``:
 * ``trapezoid`` and ``cumulative_trapezoid`` read a 0-d ``x`` as one coordinate along ``dim``.
 
 Each table below is the reference's answer first (``-m parity`` replays it on the reference) and
-Lucid's second, on every device.  A cell Lucid still answers where the reference refuses is a strict
-``xfail`` naming the card that closes it.
+Lucid's second, on every device.
 """
 
 from collections.abc import Callable
@@ -35,9 +34,6 @@ pytestmark = pytest.mark.filterwarnings("ignore")
 
 # ``fw`` is the framework under test, ``a`` and ``b`` are the two operands.
 Call = Callable[[ModuleType, object, object], object]
-
-#: Where a cell is still open: the entry lives in a file another card is landing.
-_OPEN = "LCD-1075: vecdot waits for LCD-1083 to land (lucid/linalg/__init__.py)"
 
 
 def _tensor(fw: ModuleType, data: object, dtype: str, device: str) -> object:
@@ -63,26 +59,6 @@ class PairCase:
     key: str
     call: Call
     layouts: tuple[Layout, ...]
-    #: Whether ``key`` is a row of ``PAIRS``.  ``solve`` and ``householder_product`` refuse through
-    #: the linalg helper still, and ``vecdot`` is not wired yet.
-    row: bool = True
-    #: Which unlike cells Lucid still answers where the reference refuses: each is a strict xfail,
-    #: so wiring the call flips it.
-    open_cell: Callable[[Layout, str, str], bool] | None = None
-
-
-_HALF = frozenset({"float16", "bfloat16"})
-_WIDE = frozenset({"float32", "float64"})
-
-
-def _half_beside_a_wide_zero_d(layout: Layout, first: str, second: str) -> bool:
-    """``vecdot``'s open cells: the engine's ``mul`` reads a wide 0-d beside a half operand as a
-    scalar and answers in the half dtype, where the reference refuses the pair."""
-    first_zero = isinstance(layout.first, float)
-    second_zero = isinstance(layout.second, float)
-    return (first in _HALF and second in _WIDE and second_zero) or (
-        second in _HALF and first in _WIDE and first_zero
-    )
 
 
 _VECTOR = [1.0, 2.0, 3.0]
@@ -98,13 +74,9 @@ _BROADCAST = (
 
 PAIR_CASES: tuple[PairCase, ...] = (
     PairCase("polar", lambda fw, a, b: fw.polar(a, b), _BROADCAST),
-    PairCase(
-        "linalg.vecdot",
-        lambda fw, a, b: fw.linalg.vecdot(a, b),
-        _BROADCAST,
-        row=False,
-        open_cell=_half_beside_a_wide_zero_d,
-    ),
+    # The engine's ``mul`` reads a wide 0-d beside a half operand as a scalar and answers in the half
+    # dtype; the reference refuses the pair, so the 0-d layouts are the ones that matter here.
+    PairCase("linalg.vecdot", lambda fw, a, b: fw.linalg.vecdot(a, b), _BROADCAST),
     PairCase(
         "cdist",
         lambda fw, a, b: fw.cdist(a, b),
@@ -114,7 +86,6 @@ PAIR_CASES: tuple[PairCase, ...] = (
         "linalg.solve",
         lambda fw, a, b: fw.linalg.solve(a, b),
         (Layout("matrix-column", [[2.0, 0.0], [0.0, 2.0]], [[1.0], [2.0]]),),
-        row=False,
     ),
     PairCase(
         "linalg.cross",
@@ -125,7 +96,6 @@ PAIR_CASES: tuple[PairCase, ...] = (
         "linalg.householder_product",
         lambda fw, a, b: fw.linalg.householder_product(a, b),
         (Layout("reflectors", [[1.0, 0.0], [0.5, 1.0], [0.25, 0.5]], [0.5, 0.5]),),
-        row=False,
     ),
     PairCase(
         "grid_sample",
@@ -172,21 +142,10 @@ _UNLIKE = [(a, b) for a in (*_FLOATS, "int32") for b in (*_FLOATS, "int32") if a
 _LIKE = [("float32", "float32"), ("float64", "float64")]
 
 
-def _cells(pairs: list[tuple[str, str]], *, unlike: bool) -> list[ParameterSet]:
+def _cells(pairs: list[tuple[str, str]]) -> list[ParameterSet]:
     """``(case, layout, first, second)`` for every case, layout and dtype pair."""
     return [
-        pytest.param(
-            case,
-            layout,
-            first,
-            second,
-            id=f"{case.key}-{layout.name}-{first}-{second}",
-            marks=(
-                [pytest.mark.xfail(strict=True, reason=_OPEN)]
-                if unlike and case.open_cell is not None and case.open_cell(layout, first, second)
-                else []
-            ),
-        )
+        pytest.param(case, layout, first, second, id=f"{case.key}-{layout.name}-{first}-{second}")
         for case in PAIR_CASES
         for layout in case.layouts
         for first, second in pairs
@@ -212,7 +171,7 @@ def _supported(device: str, *names: str) -> bool:
     return all(device_supports(device, getattr(lucid, name)) for name in names)
 
 
-@pytest.mark.parametrize(("case", "layout", "first", "second"), _cells(_UNLIKE, unlike=True))
+@pytest.mark.parametrize(("case", "layout", "first", "second"), _cells(_UNLIKE))
 def test_lucid_refuses_operands_of_two_dtypes(
     device: str, case: PairCase, layout: Layout, first: str, second: str
 ) -> None:
@@ -224,7 +183,7 @@ def test_lucid_refuses_operands_of_two_dtypes(
     assert _verdict(lucid, case, layout, first, second, device) in allowed
 
 
-@pytest.mark.parametrize(("case", "layout", "first", "second"), _cells(_LIKE, unlike=False))
+@pytest.mark.parametrize(("case", "layout", "first", "second"), _cells(_LIKE))
 def test_lucid_answers_operands_of_one_dtype(
     device: str, case: PairCase, layout: Layout, first: str, second: str
 ) -> None:
@@ -238,7 +197,7 @@ def test_lucid_answers_operands_of_one_dtype(
     ("case", "layout", "first", "second"),
     [
         pytest.param(c.values[0], c.values[1], c.values[2], c.values[3], id=c.id)
-        for c in _cells(_UNLIKE, unlike=True)
+        for c in _cells(_UNLIKE)
     ],
 )
 def test_the_reference_refuses_operands_of_two_dtypes(
@@ -253,7 +212,7 @@ def test_the_reference_refuses_operands_of_two_dtypes(
     ("case", "layout", "first", "second"),
     [
         pytest.param(c.values[0], c.values[1], c.values[2], c.values[3], id=c.id)
-        for c in _cells(_LIKE, unlike=False)
+        for c in _cells(_LIKE)
     ],
 )
 def test_the_reference_answers_operands_of_one_dtype(
@@ -306,8 +265,8 @@ def test_a_pair_the_table_does_not_hold_is_a_key_error_not_a_silent_pass() -> No
     _table.refuse_unlike("an_op_with_no_row", x, x)
 
 
-def test_every_pair_row_has_a_case_and_every_case_that_says_so_a_row() -> None:
-    cases = {case.key for case in PAIR_CASES if case.row}
+def test_every_pair_row_has_a_case_and_every_case_a_row() -> None:
+    cases = {case.key for case in PAIR_CASES}
     assert cases == set(_table.PAIRS), cases ^ set(_table.PAIRS)
 
 
