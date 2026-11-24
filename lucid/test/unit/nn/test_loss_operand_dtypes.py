@@ -43,7 +43,7 @@ import pytest
 import lucid
 import lucid.nn.functional as F
 from lucid.nn.functional import loss as _loss_module
-from lucid.nn.functional._loss_checks import _FLOATING_RESULT, _OPERAND_DTYPES
+from lucid.nn.functional._loss_checks import _FLOATING_RESULT, _OPERAND_DTYPES, _SAME_DTYPE
 from lucid.test._fixtures.devices import metal_available
 from lucid.test.unit.nn.test_loss_boundary_validation import losses_with
 
@@ -152,6 +152,9 @@ def _expected(name: str, sweep: str, dtype: str) -> bool:
     if name == "poisson_nll_loss":
         # Each operand takes a bool, but the loss subtracts the product of the two.
         ok = ok and not (x == "bool" and target == "bool")
+    if name in _SAME_DTYPE:
+        # The kernel reads input and target through one scalar type: another dtype is refused.
+        ok = ok and x == target
     return ok
 
 
@@ -268,21 +271,6 @@ _LENIENT: dict[tuple[str, str, str], str] = {
         for name in ("cross_entropy", "nll_loss", "multi_margin_loss", "multilabel_margin_loss")
         for width in ("int8", "int32")
     },
-    **{
-        ("binary_cross_entropy", sweep, "float16"): (
-            "the reference wants the target at the input's exact dtype; Lucid "
-            "computes the two in the input's"
-        )
-        for sweep in ("mixed", "target")
-    },
-}
-
-#: Cells both take, where the loss comes back at another dtype.
-_OTHER_DTYPE: dict[tuple[str, str, str], str] = {
-    ("binary_cross_entropy_with_logits", "target", "float16"): (
-        "the reference rounds the float32 loss to the target's float16; Lucid "
-        "keeps the float32 the two promote to"
-    )
 }
 
 
@@ -316,8 +304,7 @@ def test_the_rule_is_the_references(ref: ModuleType, name: str, sweep: str, dtyp
     if got is None:
         return
     assert isinstance(got, lucid.Tensor)
-    if cell not in _OTHER_DTYPE:
-        assert _name(got.dtype) == _name(want.dtype)
+    assert _name(got.dtype) == _name(want.dtype)
     assert _close(float(got.item()), float(want.item()), dtype)
 
 

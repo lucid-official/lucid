@@ -9,6 +9,7 @@ These pin the decorator's own contract.
 """
 
 import inspect
+from collections.abc import Mapping
 
 import pytest
 
@@ -233,3 +234,64 @@ def test_a_call_that_does_not_bind_raises_the_function_s_own_error(device: str, 
     assert str(inside.value) == str(outside.value)
     assert "cross_entropy()" in str(inside.value)
     assert "bogus" in str(unknown.value)
+
+
+# ── ``refuse``: a check of the caller's own arguments, outside autocast only ──
+
+#: The arguments ``_refusing`` was handed, by name, on its last check.
+_checked: list[dict[str, object]] = []
+
+
+def _refuse_a_target(arguments: Mapping[str, object]) -> None:
+    _checked.append(dict(arguments))
+    if arguments["input"] is not arguments["target"]:
+        raise ValueError("input and target are two tensors")
+
+
+@_amp_op("l1_loss", refuse=_refuse_a_target)
+def _refusing(input: lucid.Tensor, target: lucid.Tensor, scale: float = 2.0) -> lucid.Tensor:
+    return (input - target) * scale
+
+
+def test_refuse_sees_the_arguments_as_passed_by_name_outside_autocast() -> None:
+    _checked.clear()
+    x = lucid.randn(3)
+    _refusing(x, x)
+    _refusing(target=x, input=x, scale=3.0)
+    assert [set(c) for c in _checked] == [{"input", "target"}, {"input", "target", "scale"}]
+    assert _checked[0]["input"] is x
+    with pytest.raises(ValueError, match="two tensors"):
+        _refusing(x, lucid.randn(3))
+
+
+@pytest.mark.parametrize(("device", "half"), _SETTINGS)
+def test_refuse_does_not_run_inside_autocast(device: str, half: str) -> None:
+    """Inside autocast the row has chosen the operands' dtypes, so a pair that differs
+    is the policy's doing: the check is the caller's and does not run."""
+    dt = getattr(lucid, half)
+    x = lucid.randn(3, device=device).to(dt)
+    y = lucid.randn(3, device=device).to(dt)
+    _checked.clear()
+    with autocast(device_type=device, dtype=dt):
+        _refusing(x, y)
+    assert _checked == []
+    with pytest.raises(ValueError, match="two tensors"):
+        _refusing(x, y)
+
+
+@pytest.mark.skipif(not metal_available(), reason="Metal unavailable")
+def test_refuse_runs_for_a_device_whose_autocast_is_off() -> None:
+    """Autocast on the CPU says nothing about a Metal tensor's dtypes."""
+    x = lucid.randn(3, device="metal")
+    y = lucid.randn(3, device="metal")
+    with autocast(device_type="cpu", dtype=lucid.bfloat16):
+        with pytest.raises(ValueError, match="two tensors"):
+            _refusing(x, y)
+
+
+def test_a_call_that_does_not_bind_skips_refuse() -> None:
+    """The function's own ``TypeError`` is the answer, not ``refuse``'s."""
+    _checked.clear()
+    with pytest.raises(TypeError, match="_refusing"):
+        _refusing(lucid.randn(3))  # type: ignore[call-arg]
+    assert _checked == []
