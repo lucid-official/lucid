@@ -516,7 +516,7 @@ def test_a_mixed_pair_is_the_autocast_policy_s_not_a_refusal(device: str) -> Non
 @pytest.mark.xfail(
     strict=True,
     reason=(
-        "LCD-1074 FOUND: the reference raises IndexError for a 0-d input to "
+        "LCD-1085: the reference raises IndexError for a 0-d input to "
         "multilabel_soft_margin_loss (it takes the mean over dim -1); Lucid answers"
     ),
 )
@@ -528,7 +528,7 @@ def test_multilabel_soft_margin_loss_refuses_a_0d_input() -> None:
 @pytest.mark.xfail(
     strict=True,
     reason=(
-        "LCD-1074 FOUND: the reference casts an integer operand beside a floating one for "
+        "LCD-1084: the reference casts an integer operand beside a floating one for "
         "cosine_similarity (common dtype float32); Lucid refuses any integer operand"
     ),
 )
