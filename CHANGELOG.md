@@ -614,6 +614,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - block_diag ranks its operands as given, as the reference does: a 0-d int16 beside an int8 vector now answers int8, not int16 (LCD-1060).
 - drop the unused mlx compile include (LCD-1072)
 - build the input dtype cast through fresh (LCD-1072)
+- every engine forward checks that its result's storage holds its shape's bytes before handing it back; a short result is an error rather than a silent out-of-bounds read. Engine shape messages now spell a shape as `[2, 3]` (LCD-1072).
 
 ---
 
