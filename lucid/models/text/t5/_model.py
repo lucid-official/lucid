@@ -492,6 +492,8 @@ class T5Model(PretrainedModel):
 
     config_class: ClassVar[type[T5Config]] = T5Config
     base_model_prefix: ClassVar[str] = "t5"
+    _input_embeddings: ClassVar[str] = "shared"
+    _token_init_std: ClassVar[str] = "initializer_factor"
 
     def __init__(self, config: T5Config) -> None:
         """Initialise the trunk. See the class docstring for parameters."""
@@ -502,18 +504,6 @@ class T5Model(PretrainedModel):
         self.decoder = _T5Stack(config, is_decoder=True)
         nn.init.normal_(self.shared.weight, std=config.initializer_factor)
         _init_t5_weights(self, config)
-
-    @override
-    def get_input_embeddings(self) -> nn.Module:
-        return self.shared
-
-    @override
-    def set_input_embeddings(self, value: nn.Module) -> None:
-        if not isinstance(value, nn.Embedding):
-            raise TypeError(
-                f"T5Model input embeddings must be nn.Embedding, got {type(value).__name__}"
-            )
-        self.shared = value
 
     def get_encoder(self) -> nn.Module:
         """The encoder stack: ``forward(embeddings, attention_mask)`` to the encoder output."""
@@ -685,6 +675,7 @@ class T5ForSeq2SeqLM(LanguageModelingModel):
 
     config_class: ClassVar[type[T5Config]] = T5Config
     base_model_prefix: ClassVar[str] = "t5"
+    _output_embeddings: ClassVar[str] = "lm_head"
 
     def __init__(self, config: T5Config) -> None:
         """Initialise the model. See the class docstring for parameters."""

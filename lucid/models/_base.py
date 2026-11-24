@@ -10,6 +10,9 @@ from typing import ClassVar, Final, Self, override
 
 import lucid as _lucid
 import lucid.nn as nn
+from lucid.models._checkpoint import Checkpoint, load_registered, replaced_config
+from lucid.models._embeddings import VocabSized, resized_embedding, resized_projection
+from lucid.models._utils._text import init_text_module_weights
 
 #: Keys ``config.json`` holds beside the config's own fields: ``model_type`` names the family,
 #: ``architectures`` (as in the reference's ``config.json``) names the model class the weights
@@ -322,6 +325,19 @@ class PretrainedModel(nn.Module):
     #: own ``__dict__`` and ``lucid.peft`` leaves ``base_model_name_or_path`` unset.
     name_or_path: str = ""
 
+    #: Dotted path from this model to the ``nn.Embedding`` that looks token ids up, for a model
+    #: that owns one (``"embeddings.word_embeddings"``).  A task wrapper leaves it empty: its
+    #: trunk, found through ``base_model_prefix``, has the table.  Everything about the table
+    #: -- reading it, swapping it, resizing it, keeping the config in step -- hangs off this one
+    #: declaration, so a family does not repeat it.
+    _input_embeddings: ClassVar[str] = ""
+    #: Dotted path to the ``nn.Linear`` that scores the vocabulary, for a model that has such a
+    #: head (``"lm_head"``, ``"cls.predictions.decoder"``); empty for one that does not.
+    _output_embeddings: ClassVar[str] = ""
+    #: Name of the config field that is the standard deviation the family draws its token
+    #: tables from (``"initializer_range"``); empty for one that keeps the framework default.
+    _token_init_std: ClassVar[str] = ""
+
     config: ModelConfig
 
     def __init__(self, config: ModelConfig) -> None:
@@ -354,7 +370,14 @@ class PretrainedModel(nn.Module):
         self.config = config
 
     @classmethod
-    def from_pretrained(cls, name_or_path: str, *, strict: bool = True) -> Self:
+    def from_pretrained(
+        cls,
+        name_or_path: str,
+        *,
+        strict: bool = True,
+        ignore_mismatched_sizes: bool = False,
+        **config_overrides: object,
+    ) -> Self:
         r"""Load a model from a registered name or a local directory.
 
         Two modes are supported:
@@ -367,7 +390,7 @@ class PretrainedModel(nn.Module):
            silently returning the wrong family).
         2. **Local directory** containing ``config.json`` plus either
            ``model.safetensors`` (preferred) or ``weights.lucid``.  The
-           config is restored via ``cls.config_class.load`` and the
+           config is restored via ``cls.config_class.from_dict`` and the
            weights are loaded with :func:`lucid.load`.
 
         Parameters
@@ -375,7 +398,15 @@ class PretrainedModel(nn.Module):
         name_or_path : str
             Registered model name or filesystem directory path.
         strict : bool, optional, keyword-only, default=True
-            Forwarded to :meth:`load_state_dict`.
+            Whether a key the model has and the checkpoint lacks, or the reverse, is an
+            error.  A registered name given no ``config_overrides`` loads its own weights.
+        ignore_mismatched_sizes : bool, optional, keyword-only, default=False
+            ``True`` lets a weight of another shape keep its fresh initialisation (a
+            warning names it) instead of raising: how a checkpoint is loaded into a
+            model with another head, ``num_classes=10``.
+        **config_overrides : object
+            Config fields to change before the model is built.  A registered name is
+            built at the overridden config and takes every published weight that fits.
 
         Returns
         -------
@@ -391,7 +422,10 @@ class PretrainedModel(nn.Module):
         TypeError
             If the registered factory yields a non-subclass of ``cls``,
             or ``config_class`` is unset, or the weights file lacks a
-            state-dict.
+            state-dict, or ``config_overrides`` names a field the config lacks.
+        RuntimeError
+            If the checkpoint does not fit: the message counts each kind of mismatch
+            and names the first few weights, and the class the checkpoint was saved from.
 
         Notes
         -----
@@ -410,8 +444,13 @@ class PretrainedModel(nn.Module):
         from lucid.models._registry import is_model, model_entrypoint
 
         if is_model(name_or_path):
-            factory = model_entrypoint(name_or_path)
-            model = factory(pretrained=True)
+            model = load_registered(
+                model_entrypoint(name_or_path),
+                name_or_path,
+                config_overrides,
+                strict=strict,
+                ignore_mismatched_sizes=ignore_mismatched_sizes,
+            )
             if not isinstance(model, cls):
                 raise TypeError(
                     f"Factory {name_or_path!r} produced "
@@ -424,31 +463,12 @@ class PretrainedModel(nn.Module):
             raise ValueError(
                 f"{name_or_path!r} is neither a registered model name nor an existing directory"
             )
-        config_file = path / "config.json"
-        weights_st = path / "model.safetensors"
-        weights_lucid = path / "weights.lucid"
-        if not config_file.exists():
-            raise FileNotFoundError(f"config.json not found in {path}")
-        # Prefer SafeTensors when present; fall back to .lucid format.
-        if weights_st.exists():
-            weights_file = weights_st
-        elif weights_lucid.exists():
-            weights_file = weights_lucid
-        else:
-            raise FileNotFoundError(
-                f"No weights file found in {path}. Expected 'model.safetensors' or 'weights.lucid'."
-            )
-
-        if cls.config_class is None:
-            raise TypeError(f"{cls.__name__} must set config_class before calling from_pretrained")
-        config = cls.config_class.load(str(config_file))
-        model = cls(config)
-        sd = _lucid.load(str(weights_file), weights_only=True)
-        if not isinstance(sd, dict):
-            raise TypeError(f"Weights file did not contain a state_dict, got {type(sd).__name__}")
-        model.load_state_dict(sd, strict=strict)
-        model.name_or_path = str(path)
-        return model
+        return Checkpoint.open(path).load_into(
+            cls,
+            config_overrides,
+            strict=strict,
+            ignore_mismatched_sizes=ignore_mismatched_sizes,
+        )
 
     def save_pretrained(self, path: str, *, safe_serialization: bool = False) -> None:
         r"""Write ``config.json`` and weights to ``path``.
@@ -550,6 +570,13 @@ class PretrainedModel(nn.Module):
             return trunk
         return None
 
+    def _embedding_owner(self) -> PretrainedModel | None:
+        r"""The model that owns the token table: this one if it declares one, else its trunk's owner."""
+        if self._input_embeddings:
+            return self
+        trunk = self._embedding_trunk()
+        return trunk._embedding_owner() if trunk is not None else None
+
     def get_input_embeddings(self) -> nn.Module | None:
         r"""Return the input-embedding submodule, or ``None`` if not applicable.
 
@@ -557,16 +584,16 @@ class PretrainedModel(nn.Module):
         -------
         nn.Module or None
             The embedding layer for text / token-id models (BERT, GPT,
-            …); ``None`` for vision and other non-embedding models.
+            ...); ``None`` for vision and other non-embedding models.
 
         Notes
         -----
-        Trunks with an embedding table override this.  A task wrapper does
-        not need to: this implementation hands the call to the trunk stored
-        under :attr:`base_model_prefix`, so a wrapper reports the same table
-        as the trunk inside it.  Used by tools that need to resize / share /
-        introspect token embeddings without coupling to family-specific
-        attribute names.
+        A trunk with a token table declares where it is in ``_input_embeddings``.
+        A task wrapper declares nothing: this implementation hands the call to the
+        trunk stored under :attr:`base_model_prefix`, so a wrapper reports the same
+        table as the trunk inside it.  Used by tools that need to resize / share /
+        introspect token embeddings without coupling to family-specific attribute
+        names.
 
         Examples
         --------
@@ -577,8 +604,101 @@ class PretrainedModel(nn.Module):
         >>> lm.get_input_embeddings() is lm.transformer.tokens_embed
         True
         """
+        owner = self._embedding_owner()
+        return None if owner is None else owner.get_submodule(owner._input_embeddings)
+
+    def get_output_embeddings(self) -> nn.Module | None:
+        r"""Return the projection that scores the vocabulary, or ``None`` if there is none.
+
+        Returns
+        -------
+        nn.Module or None
+            The ``Linear`` an LM head decodes with (``lm_head``, BERT's
+            ``cls.predictions.decoder``); ``None`` for a trunk, a classifier, and any
+            model that does not predict tokens.
+
+        Notes
+        -----
+        With ``config.tie_word_embeddings`` the head's weight *is* the input table's,
+        so the two are one matrix.
+
+        Examples
+        --------
+        >>> from lucid.models import create_model
+        >>> small = dict(vocab_size=60, hidden_size=8, num_attention_heads=1,
+        ...              num_hidden_layers=1, intermediate_size=16,
+        ...              max_position_embeddings=4)
+        >>> lm = create_model("gpt_lm", **small)
+        >>> lm.get_output_embeddings() is lm.lm_head
+        True
+        >>> create_model("gpt", **small).get_output_embeddings() is None
+        True
+        """
+        if not self._output_embeddings:
+            return None
+        return self.get_submodule(self._output_embeddings)
+
+    def _input_vocab_fields(self, num_tokens: int) -> dict[str, int]:
+        r"""The config fields the input table's row count is, when it has ``num_tokens`` rows.
+
+        ``vocab_size`` for nearly every model.  A family whose config sizes one table
+        with more than one field overrides this, and is asked on the model that owns
+        the table, before it changes.
+        """
+        return {"vocab_size": num_tokens}
+
+    def _init_token_table(self, table: nn.Embedding | nn.Linear) -> None:
+        r"""Initialise a vocabulary-sized table just allocated, as this family initialises its own.
+
+        Called by :meth:`resize_token_embeddings` before the kept rows are copied in, so
+        a larger vocabulary starts from the family's distribution rather than the
+        framework default: ``N(0, std^2)`` for ``std = config.<_token_init_std>``, a
+        padding row zero.  A family with no ``_token_init_std`` keeps the default, and one
+        with another rule overrides this.
+        """
+        if self._token_init_std:
+            init_text_module_weights(table, float(getattr(self.config, self._token_init_std)))
+
+    def _output_vocab_follows_input(self) -> bool:
+        r"""Whether the output head scores the input table's vocabulary, so one resizes with the other.
+
+        ``False`` for a model whose head decodes into a vocabulary of its own
+        (a translation model with separate source and target tables), which a change to
+        the input table must leave alone.
+        """
+        return True
+
+    def _install_input_embeddings(self, table: nn.Embedding) -> None:
+        r"""Put ``table`` where the token table is.  The model that owns the table is the one asked."""
+        *parents, name = self._input_embeddings.split(".")
+        setattr(self.get_submodule(".".join(parents)), name, table)
+
+    def _config_chain(self) -> list[PretrainedModel]:
+        r"""This model and the trunks inside it whose config is of the same class as its own."""
+        chain = [self]
         trunk = self._embedding_trunk()
-        return trunk.get_input_embeddings() if trunk is not None else None
+        while trunk is not None:
+            if type(trunk.config) is type(self.config):
+                chain.append(trunk)
+            trunk = trunk._embedding_trunk()
+        return chain
+
+    def _planned_configs(self, **changes: object) -> list[tuple[PretrainedModel, ModelConfig]]:
+        r"""What the config of this model and of each trunk becomes under ``changes``, not yet applied.
+
+        A config is frozen, so a change is a new object, and a task wrapper's trunk
+        holds one of its own (the wrapper's, or one derived from it) that would go
+        on describing the model as it was.  Each is built with its other fields
+        kept, which runs its validation: one that refuses raises before anything
+        has changed.
+        """
+        return [(model, replaced_config(model.config, **changes)) for model in self._config_chain()]
+
+    @staticmethod
+    def _install_configs(plan: list[tuple[PretrainedModel, ModelConfig]]) -> None:
+        r"""Apply what :meth:`_planned_configs` built."""
+        for model, config in plan:
+            model.config = config
 
     def set_input_embeddings(self, value: nn.Module) -> None:
         r"""Replace the input-embedding submodule.
@@ -591,27 +711,29 @@ class PretrainedModel(nn.Module):
         Raises
         ------
         NotImplementedError
-            When the model has no embedding table to replace — neither an
-            override of its own nor a trunk under :attr:`base_model_prefix`.
+            When the model has no embedding table: no declaration of its own and
+            no trunk under :attr:`base_model_prefix`.
+        TypeError
+            When ``value`` is not an :class:`~lucid.nn.Embedding`.
+        ValueError
+            When the config refuses the new size; nothing is changed.
 
         Notes
         -----
-        Companion to :meth:`get_input_embeddings`.  Trunks with a table
-        override both; a task wrapper inherits this implementation, which
-        makes the swap on its trunk.
+        Companion to :meth:`get_input_embeddings`.  A task wrapper makes the swap
+        on its trunk.  A head tied to the table (``config.tie_word_embeddings``) is
+        re-bound to the new weight, with any vocabulary-sized bias fitted to it:
+        entries kept, new ones zero.  An untied head is left as it is.
 
-        When the wrapper ties an output head to the table
-        (``config.tie_word_embeddings``), the head is re-bound to the new
-        table's weight, so the two stay one matrix and the head scores the
-        new vocabulary.  A head bias sized to the vocabulary is resized with
-        it: existing entries are kept and new ones start at zero.  An untied
-        head is left as it is.  Either way ``config`` is frozen and keeps
-        its original ``vocab_size``.
+        ``config`` is frozen, so it is replaced: its ``vocab_size`` becomes the new
+        row count, on this model and on the trunk inside it, and ``save_pretrained``
+        then ``from_pretrained`` rebuilds the model at the new size.  To grow a
+        trained vocabulary and keep its rows, use :meth:`resize_token_embeddings`.
 
         Examples
         --------
         A text trunk hands its table over, so a larger one can be swapped
-        in — here to make room for twenty token ids the original 100-row
+        in -- here to make room for twenty token ids the original 100-row
         table could not look up.
 
         >>> import lucid
@@ -625,6 +747,8 @@ class PretrainedModel(nn.Module):
         >>> model.set_input_embeddings(bigger)
         >>> model.get_input_embeddings() is bigger
         True
+        >>> model.config.vocab_size
+        120
         >>> ids = lucid.tensor([[110, 3]], dtype=lucid.int64)
         >>> model(ids).last_hidden_state.shape
         (1, 2, 16)
@@ -640,6 +764,8 @@ class PretrainedModel(nn.Module):
         >>> lm.set_input_embeddings(nn.Embedding(120, 16))
         >>> lm.lm_head.weight is lm.get_input_embeddings().weight
         True
+        >>> lm.config.vocab_size, lm.transformer.config.vocab_size
+        (120, 120)
         >>> lm(ids).logits.shape
         (1, 2, 120)
 
@@ -654,14 +780,139 @@ class PretrainedModel(nn.Module):
             ...
         NotImplementedError: LeNet does not support set_input_embeddings
         """
-        trunk = self._embedding_trunk()
-        if trunk is None or trunk.get_input_embeddings() is None:
+        owner = self._embedding_owner()
+        if owner is None:
             raise NotImplementedError(
                 f"{type(self).__name__} does not support set_input_embeddings"
             )
-        trunk.set_input_embeddings(value)
+        if not isinstance(value, nn.Embedding):
+            raise TypeError(
+                f"{type(owner).__name__} input embeddings must be nn.Embedding, "
+                f"got {type(value).__name__}"
+            )
+        # Built first: a config that refuses the size leaves the model as it was.
+        plan = self._planned_configs(**owner._input_vocab_fields(value.num_embeddings))
+        owner._install_input_embeddings(value)
         if getattr(self.config, "tie_word_embeddings", False):
             self._tie_word_embeddings()
+        self._install_configs(plan)
+
+    def resize_token_embeddings(self, new_num_tokens: int) -> nn.Embedding:
+        r"""Grow or shrink the token table to ``new_num_tokens`` rows, keeping the rows it has.
+
+        Parameters
+        ----------
+        new_num_tokens : int
+            The new vocabulary size.
+
+        Returns
+        -------
+        nn.Embedding
+            The new input table (the old one, unchanged, when the size is already
+            ``new_num_tokens``).
+
+        Raises
+        ------
+        NotImplementedError
+            When the model has no token table.
+        TypeError
+            When ``new_num_tokens`` is not an ``int``.
+        ValueError
+            When ``new_num_tokens`` is below 1, or the config refuses it.  Nothing
+            is changed.
+
+        Notes
+        -----
+        The leading ``min(old, new)`` rows are copied, so the tokens a checkpoint
+        was trained on keep their vectors.  Rows past the old size start from the
+        family's own initialisation (the distribution it draws the rest of its
+        embeddings from), and the new table has the device, dtype, ``padding_idx``
+        and ``requires_grad`` of the old one.
+
+        What follows the table:
+
+        * A head tied to it (``config.tie_word_embeddings``) is re-bound to the new
+          weight, with any vocabulary-sized bias fitted to it, entries kept and new
+          ones zero.
+        * An untied head that scores the same vocabulary is resized the same way, its
+          rows kept and new ones drawn like the table's.
+        * ``config.vocab_size`` is replaced by ``new_num_tokens``, on this model and on
+          the trunk inside it, so ``save_pretrained`` then ``from_pretrained``
+          round-trips (see :meth:`set_input_embeddings`).
+
+        A model whose source and target vocabularies are separate tables (a translation
+        model built with ``share_embeddings=False``) resizes the source table only; the
+        target table and its head are a vocabulary of their own.
+
+        Examples
+        --------
+        >>> import lucid
+        >>> from lucid.models import create_model
+        >>> lm = create_model("gpt_lm", vocab_size=60, hidden_size=8,
+        ...                   num_attention_heads=1, num_hidden_layers=1,
+        ...                   intermediate_size=16, max_position_embeddings=4).eval()
+        >>> before = lm.get_input_embeddings().weight.tolist()
+        >>> table = lm.resize_token_embeddings(80)
+        >>> table.weight.shape, lm.lm_head.weight is table.weight, lm.config.vocab_size
+        ((80, 8), True, 80)
+        >>> table.weight[:60].tolist() == before
+        True
+        >>> lm(lucid.tensor([[70, 3]], dtype=lucid.int64)).logits.shape
+        (1, 2, 80)
+        """
+        owner = self._embedding_owner()
+        if owner is None:
+            raise NotImplementedError(
+                f"{type(self).__name__} does not support resize_token_embeddings"
+            )
+        if isinstance(new_num_tokens, bool) or not isinstance(new_num_tokens, int):
+            raise TypeError(
+                f"resize_token_embeddings: new_num_tokens must be an int, "
+                f"got {type(new_num_tokens).__name__}"
+            )
+        if new_num_tokens < 1:
+            raise ValueError(
+                f"resize_token_embeddings: new_num_tokens must be positive, got {new_num_tokens}"
+            )
+        old = self.get_input_embeddings()
+        if not isinstance(old, nn.Embedding):
+            raise TypeError(
+                f"{type(owner).__name__}'s input embeddings are "
+                f"{type(old).__name__}, not nn.Embedding, and cannot be resized"
+            )
+        if old.num_embeddings == new_num_tokens:
+            return old
+        head = self._untied_output_head()
+        # Both replacements are built before either is installed.
+        table = resized_embedding(old, new_num_tokens, owner._init_token_table)
+        new_head = (
+            None
+            if head is None
+            else resized_projection(head, new_num_tokens, owner._init_token_table)
+        )
+        self.set_input_embeddings(table)
+        if new_head is not None:
+            self._install_output_head(new_head)
+        return table
+
+    def _untied_output_head(self) -> nn.Linear | None:
+        r"""The output head, when it is a table of its own that scores the input vocabulary."""
+        if (
+            not self._output_embeddings
+            or getattr(self.config, "tie_word_embeddings", False)
+            or not self._output_vocab_follows_input()
+        ):
+            return None
+        head = self.get_output_embeddings()
+        return head if isinstance(head, nn.Linear) else None
+
+    def _install_output_head(self, head: nn.Linear) -> None:
+        r"""Put ``head`` where the output projection is, and fit any bias its holder keeps beside it."""
+        *parents, name = self._output_embeddings.split(".")
+        holder = self.get_submodule(".".join(parents))
+        setattr(holder, name, head)
+        if isinstance(holder, VocabSized):
+            holder.fit_vocab(head.out_features)
 
     def _tie_word_embeddings(self) -> None:
         r"""Bind an output head's weight to the input embedding table.

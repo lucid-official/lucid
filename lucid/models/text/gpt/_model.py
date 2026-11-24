@@ -249,6 +249,8 @@ class GPTModel(PretrainedModel):
 
     config_class: ClassVar[type[GPTConfig]] = GPTConfig
     base_model_prefix: ClassVar[str] = "transformer"
+    _input_embeddings: ClassVar[str] = "tokens_embed"
+    _token_init_std: ClassVar[str] = "initializer_range"
 
     position_ids: Tensor
 
@@ -264,18 +266,6 @@ class GPTModel(PretrainedModel):
         self.register_buffer("position_ids", pos, persistent=False)
 
         _init_weights(self, config.initializer_range)
-
-    @override
-    def get_input_embeddings(self) -> nn.Module:
-        return self.tokens_embed
-
-    @override
-    def set_input_embeddings(self, value: nn.Module) -> None:
-        if not isinstance(value, nn.Embedding):
-            raise TypeError(
-                "GPTModel input embeddings must be nn.Embedding, got " f"{type(value).__name__}"
-            )
-        self.tokens_embed = value
 
     @override
     def forward(
@@ -374,6 +364,7 @@ class GPTLMHeadModel(LanguageModelingModel, CausalLMMixin):
 
     config_class: ClassVar[type[GPTConfig]] = GPTConfig
     base_model_prefix: ClassVar[str] = "transformer"
+    _output_embeddings: ClassVar[str] = "lm_head"
 
     def __init__(self, config: GPTConfig) -> None:
         super().__init__(config)
@@ -661,6 +652,7 @@ class GPTDoubleHeadsModel(LanguageModelingModel):
 
     config_class: ClassVar[type[GPTConfig]] = GPTConfig
     base_model_prefix: ClassVar[str] = "transformer"
+    _output_embeddings: ClassVar[str] = "lm_head"
 
     def __init__(self, config: GPTConfig) -> None:
         super().__init__(config)

@@ -455,6 +455,11 @@ NAMES: dict[str, tuple[tuple[str, str, str | None], ...]] = {
         ("ModelConfig", "lucid.models._base", "ModelConfig"),
         ("PretrainedModel", "lucid.models._base", "PretrainedModel"),
     ),
+    "lucid.models._checkpoint": (
+        ("ModelConfig", "lucid.models._base", "ModelConfig"),
+        ("ModelFactory", "lucid.models._registry", "ModelFactory"),
+        ("PretrainedModel", "lucid.models._base", "PretrainedModel"),
+    ),
     "lucid.models._mixins": (
         ("DiffusionScheduler", "lucid.models.generative._common._schedulers", "DiffusionScheduler"),
         ("GenerationOutput", "lucid.models._output", "GenerationOutput"),

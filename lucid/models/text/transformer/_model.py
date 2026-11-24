@@ -228,6 +228,9 @@ class TransformerModel(PretrainedModel):
 
     config_class: ClassVar[type[TransformerConfig]] = TransformerConfig
     base_model_prefix: ClassVar[str] = "transformer"
+    _input_embeddings: ClassVar[str] = "src_tok_emb"
+
+    config: TransformerConfig
 
     def __init__(self, config: TransformerConfig) -> None:
         super().__init__(config)
@@ -277,27 +280,23 @@ class TransformerModel(PretrainedModel):
             )
 
     @override
-    def get_input_embeddings(self) -> nn.Module:
-        return self.src_tok_emb
-
-    @override
-    def set_input_embeddings(self, value: nn.Module) -> None:
-        if not isinstance(value, nn.Embedding):
-            raise TypeError(
-                "TransformerModel input embeddings must be nn.Embedding, got "
-                f"{type(value).__name__}"
-            )
+    def _install_input_embeddings(self, table: nn.Embedding) -> None:
         # With ``share_embeddings`` (or no decoder) the target side is the
         # source table under a second name.  Replacing only the source would
         # split them: the decoder would keep reading the old table, and the
         # checkpoint would carry it.
-        if self.tgt_tok_emb is self.src_tok_emb:
-            self.tgt_tok_emb = value
-        self.src_tok_emb = value
+        shared = self.tgt_tok_emb is self.src_tok_emb
+        super()._install_input_embeddings(table)
+        if shared:
+            self.tgt_tok_emb = table
 
-    def get_output_embeddings(self) -> nn.Module:
-        """Target-side embedding — used to tie an LM head against."""
-        return self.tgt_tok_emb
+    @override
+    def _input_vocab_fields(self, num_tokens: int) -> dict[str, int]:
+        fields = super()._input_vocab_fields(num_tokens)
+        # A shared table is the target vocabulary too, and the config insists the two agree.
+        if self.tgt_tok_emb is self.src_tok_emb and self.config.decoder_vocab_size is not None:
+            fields["decoder_vocab_size"] = num_tokens
+        return fields
 
     def _embed(
         self,
@@ -526,6 +525,9 @@ class TransformerForSeq2SeqLM(LanguageModelingModel):
 
     config_class: ClassVar[type[TransformerConfig]] = TransformerConfig
     base_model_prefix: ClassVar[str] = "transformer"
+    _output_embeddings: ClassVar[str] = "lm_head"
+
+    config: TransformerConfig
 
     def __init__(self, config: TransformerConfig) -> None:
         super().__init__(config)
@@ -534,6 +536,11 @@ class TransformerForSeq2SeqLM(LanguageModelingModel):
         self.lm_head = nn.Linear(config.hidden_size, tgt_vocab, bias=False)
         if config.tie_word_embeddings:
             self._tie_word_embeddings()
+
+    @override
+    def _output_vocab_follows_input(self) -> bool:
+        # A head over a vocabulary of its own is not the source table's to resize.
+        return self.config.share_embeddings
 
     @override
     def _tie_word_embeddings(self) -> None:

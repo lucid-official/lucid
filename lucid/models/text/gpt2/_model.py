@@ -276,6 +276,8 @@ class GPT2Model(PretrainedModel):
 
     config_class: ClassVar[type[GPT2Config]] = GPT2Config
     base_model_prefix: ClassVar[str] = "transformer"
+    _input_embeddings: ClassVar[str] = "wte"
+    _token_init_std: ClassVar[str] = "initializer_range"
 
     position_ids: Tensor
 
@@ -299,18 +301,6 @@ class GPT2Model(PretrainedModel):
         _init_weights(self, config.initializer_range)
         if config.scale_residual_init:
             _scale_residual_init(self, config.num_hidden_layers, config.initializer_range)
-
-    @override
-    def get_input_embeddings(self) -> nn.Module:
-        return self.wte
-
-    @override
-    def set_input_embeddings(self, value: nn.Module) -> None:
-        if not isinstance(value, nn.Embedding):
-            raise TypeError(
-                f"GPT2Model input embeddings must be nn.Embedding, got {type(value).__name__}"
-            )
-        self.wte = value
 
     @override
     def forward(
@@ -417,6 +407,7 @@ class GPT2LMHeadModel(LanguageModelingModel, CausalLMMixin):
 
     config_class: ClassVar[type[GPT2Config]] = GPT2Config
     base_model_prefix: ClassVar[str] = "transformer"
+    _output_embeddings: ClassVar[str] = "lm_head"
 
     def __init__(self, config: GPT2Config) -> None:
         super().__init__(config)
@@ -702,6 +693,7 @@ class GPT2DoubleHeadsModel(LanguageModelingModel):
 
     config_class: ClassVar[type[GPT2Config]] = GPT2Config
     base_model_prefix: ClassVar[str] = "transformer"
+    _output_embeddings: ClassVar[str] = "lm_head"
 
     def __init__(self, config: GPT2Config) -> None:
         super().__init__(config)

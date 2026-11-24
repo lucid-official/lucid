@@ -9,7 +9,7 @@ is contracted to provide.
 import inspect
 from abc import ABC, abstractmethod
 from collections.abc import Callable
-from dataclasses import dataclass, is_dataclass, replace
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar, cast
 
 import lucid
@@ -19,7 +19,7 @@ import lucid.nn.functional as F
 
 from lucid._tensor.tensor import Tensor
 from lucid.utils.cache import Cache, DynamicCache, StaticCache
-from lucid.models._base import ModelConfig, PretrainedModel
+from lucid.models._base import PretrainedModel
 from lucid.models._sampling import _SamplingParams, _select_next_ondevice
 from lucid.models._utils._text import resolve_generation_length
 
@@ -216,13 +216,6 @@ def _renewed_linear(old: nn.Linear, num_classes: int) -> nn.Linear:
     return new.train(old.training)
 
 
-def _with_num_classes(config: ModelConfig, num_classes: int) -> ModelConfig:
-    """``config`` with ``num_classes`` replaced, which re-runs its own validation."""
-    if not is_dataclass(config) or isinstance(config, type):
-        raise TypeError(f"{type(config).__name__} must be a dataclass instance")
-    return replace(config, num_classes=num_classes)
-
-
 def _reset_class_heads(model: PretrainedModel, paths: tuple[str, ...], num_classes: int) -> None:
     """Replace the ``Linear`` at each of ``paths`` and move ``model.config`` to ``num_classes``.
 
@@ -230,14 +223,14 @@ def _reset_class_heads(model: PretrainedModel, paths: tuple[str, ...], num_class
     a path that names nothing, or a config that refuses the width, leaves the
     model as it was.
     """
-    config = _with_num_classes(model.config, num_classes)
+    plan = model._planned_configs(num_classes=num_classes)
     swaps = []
     for path in paths:
         owner, name, old = _locate_class_head(model, path)
         swaps.append((owner, name, _renewed_linear(old, num_classes)))
     for owner, name, head in swaps:
         setattr(owner, name, head)
-    model.config = config
+    model._install_configs(plan)
 
 
 class ClassificationHeadMixin:

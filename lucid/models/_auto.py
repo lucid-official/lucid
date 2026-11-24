@@ -9,8 +9,11 @@ head built on it are *separate* registry entries under separate names, so
 is refused rather than coerced, and the refusal names the entry that fits.
 """
 
+from collections.abc import Mapping
 from pathlib import Path
 from typing import ClassVar, TYPE_CHECKING
+
+from lucid.models._checkpoint import Checkpoint, load_registered
 
 if TYPE_CHECKING:
     from lucid.models._base import ModelConfig, PretrainedModel
@@ -49,7 +52,14 @@ class _BaseAutoClass:
         )
 
     @classmethod
-    def from_pretrained(cls, name_or_path: str, *, strict: bool = True) -> PretrainedModel:
+    def from_pretrained(
+        cls,
+        name_or_path: str,
+        *,
+        strict: bool = True,
+        ignore_mismatched_sizes: bool = False,
+        **config_overrides: object,
+    ) -> PretrainedModel:
         r"""Resolve a name or local checkpoint directory and return a model.
 
         Two input modes are supported:
@@ -71,10 +81,17 @@ class _BaseAutoClass:
             ``_`` interchangeable) or a path to a directory written by
             :meth:`PretrainedModel.save_pretrained`.
         strict : bool, optional, keyword-only, default=True
-            Forwarded to :meth:`PretrainedModel.load_state_dict`.  When
-            ``False``, mismatched / missing keys are tolerated — useful
-            when fine-tuning a backbone whose head shape differs from the
-            checkpoint.
+            Whether a key the model has and the checkpoint lacks, or the reverse, is
+            an error; ``False`` tolerates both.  Has no effect on a registered name
+            given no ``config_overrides``, whose factory loads its own weights.
+        ignore_mismatched_sizes : bool, optional, keyword-only, default=False
+            A weight whose shape differs from the checkpoint's is an error; with
+            ``True`` it keeps the initialisation the model was built with instead, and
+            a warning names it -- a transfer head (``num_classes=10``) loads every
+            other weight and starts fresh.
+        **config_overrides : object
+            Config fields to change before the model is built.  Only fields of the
+            resolved model's config are accepted; an unknown one raises ``TypeError``.
 
         Returns
         -------
@@ -89,6 +106,11 @@ class _BaseAutoClass:
         FileNotFoundError
             If a local directory is supplied but ``config.json`` /
             ``weights`` files are absent.
+        RuntimeError
+            If the checkpoint does not fit the model; the message gives the count and
+            the first few weights of each kind of mismatch.
+        TypeError
+            If ``config_overrides`` names a field the config does not have.
 
         Notes
         -----
@@ -110,7 +132,13 @@ class _BaseAutoClass:
 
         path = Path(name_or_path)
         if path.is_dir():
-            return _load_from_directory(cls._task, path, strict=strict)
+            return _load_from_directory(
+                cls._task,
+                path,
+                strict=strict,
+                ignore_mismatched_sizes=ignore_mismatched_sizes,
+                config_overrides=config_overrides,
+            )
 
         if not is_model(name_or_path):
             from lucid.models._registry import _unknown_model_message, _REGISTRY
@@ -118,10 +146,23 @@ class _BaseAutoClass:
             raise ValueError(_unknown_model_message(name_or_path, list(_REGISTRY.keys())))
 
         entry = _registry_lookup(name_or_path, task=cls._task)
-        return entry.factory(pretrained=True)
+        return load_registered(
+            entry.factory,
+            name_or_path,
+            config_overrides,
+            strict=strict,
+            ignore_mismatched_sizes=ignore_mismatched_sizes,
+        )
 
 
-def _load_from_directory(task: str, path: Path, *, strict: bool) -> PretrainedModel:
+def _load_from_directory(
+    task: str,
+    path: Path,
+    *,
+    strict: bool,
+    ignore_mismatched_sizes: bool,
+    config_overrides: Mapping[str, object],
+) -> PretrainedModel:
     r"""Reconstruct a model from a ``config.json`` + weights directory.
 
     Two-step strategy:
@@ -147,7 +188,12 @@ def _load_from_directory(task: str, path: Path, *, strict: bool) -> PretrainedMo
     path : pathlib.Path
         Directory containing ``config.json`` and a weights file.
     strict : bool, keyword-only
-        Forwarded to :meth:`PretrainedModel.load_state_dict`.
+        Whether missing and unexpected keys are errors.
+    ignore_mismatched_sizes : bool, keyword-only
+        Keep the fresh initialisation of a weight whose shape differs from the
+        checkpoint's, instead of failing.
+    config_overrides : Mapping[str, object], keyword-only
+        Fields of the saved config to change before the model is built.
 
     Returns
     -------
@@ -172,69 +218,26 @@ def _load_from_directory(task: str, path: Path, *, strict: bool) -> PretrainedMo
     pickle-based ``weights.lucid`` is the fallback.  Both are loaded via
     :func:`lucid.load` with ``weights_only=True``.
     """
-    import json
-
-    import lucid as _lucid
     from lucid.models._registry import _registry_resolve_saved
 
-    cfg_file = path / "config.json"
-    weights_st = path / "model.safetensors"
-    weights_lucid = path / "weights.lucid"
-    if not cfg_file.exists():
-        raise FileNotFoundError(f"config.json not found in {path}")
-    if weights_st.exists():
-        weights_file = weights_st
-    elif weights_lucid.exists():
-        weights_file = weights_lucid
-    else:
-        raise FileNotFoundError(
-            f"No weights file found in {path}. " f"Expected 'model.safetensors' or 'weights.lucid'."
-        )
-
-    with open(cfg_file, "r", encoding="utf-8") as f:
-        cfg_dict = json.load(f)
-    if not isinstance(cfg_dict, dict):
-        raise TypeError(f"{cfg_file} did not contain a JSON object")
-    model_type = cfg_dict.get("model_type")
+    checkpoint = Checkpoint.open(path)
+    model_type = checkpoint.document.get("model_type")
     if not isinstance(model_type, str):
-        raise TypeError(f"{cfg_file} must declare 'model_type' (string)")
-
-    entry = _registry_resolve_saved(task, model_type, _saved_architectures(cfg_dict, cfg_file))
-
+        raise TypeError(f"{checkpoint.config_file} must declare 'model_type' (string)")
+    entry = _registry_resolve_saved(task, model_type, checkpoint.architectures)
     if entry.model_class is not None:
         # Fast path: instantiate directly — no factory call needed.
         model_cls = entry.model_class
-        if model_cls.config_class is None:
-            raise TypeError(f"{model_cls.__name__} must set config_class before loading")
-        config = model_cls.config_class.from_dict(cfg_dict)
-        model: PretrainedModel = model_cls(config)
     else:
         # Fallback: call factory once to discover the concrete class, then
         # rebuild with the saved config so dimensions match the checkpoint.
-        template = entry.factory(pretrained=False)
-        model_cls2 = type(template)
-        cc2 = model_cls2.config_class
-        if cc2 is None:
-            raise TypeError(f"{model_cls2.__name__} must set config_class before loading")
-        saved_config = cc2.from_dict(cfg_dict)
-        model = model_cls2(saved_config)
-
-    sd = _lucid.load(str(weights_file), weights_only=True)
-    if not isinstance(sd, dict):
-        raise TypeError(f"weights.lucid did not contain a state_dict, got {type(sd).__name__}")
-    model.load_state_dict(sd, strict=strict)
-    model.name_or_path = str(path)
-    return model
-
-
-def _saved_architectures(cfg_dict: dict[str, object], cfg_file: Path) -> list[str] | None:
-    r"""The ``architectures`` a ``config.json`` lists, or ``None`` if it has no such key."""
-    architectures = cfg_dict.get("architectures")
-    if architectures is None:
-        return None
-    if not isinstance(architectures, list) or not all(isinstance(a, str) for a in architectures):
-        raise TypeError(f"{cfg_file}: 'architectures' must be a list of class names")
-    return architectures
+        model_cls = type(entry.factory(pretrained=False))
+    return checkpoint.load_into(
+        model_cls,
+        config_overrides,
+        strict=strict,
+        ignore_mismatched_sizes=ignore_mismatched_sizes,
+    )
 
 
 class AutoConfig:

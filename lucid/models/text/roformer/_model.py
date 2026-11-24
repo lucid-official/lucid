@@ -19,6 +19,7 @@ import lucid.nn as nn
 import lucid.nn.functional as F
 from lucid._tensor.tensor import Tensor
 from lucid.models._base import ModelConfig, PretrainedModel
+from lucid.models._embeddings import fit_vocab_bias
 from lucid.models._tasks import (
     LanguageModelingModel,
     SequenceClassificationModel,
@@ -426,6 +427,8 @@ class _RoFormerTrunk(_RoFormerInitMixin, PretrainedModel):
 
     config_class: ClassVar[type[RoFormerConfig]] = RoFormerConfig
     base_model_prefix: ClassVar[str] = "roformer"
+    _input_embeddings: ClassVar[str] = "embeddings.word_embeddings"
+    _token_init_std: ClassVar[str] = "initializer_range"
 
     def __init__(self, config: RoFormerConfig) -> None:
         super().__init__(config)
@@ -444,18 +447,6 @@ class _RoFormerTrunk(_RoFormerInitMixin, PretrainedModel):
             base=config.rotary_base,
         )
         self.encoder = _RoFormerEncoder(config)
-
-    @override
-    def get_input_embeddings(self) -> nn.Module:
-        return self.embeddings.word_embeddings
-
-    @override
-    def set_input_embeddings(self, value: nn.Module) -> None:
-        if not isinstance(value, nn.Embedding):
-            raise TypeError(
-                f"RoFormerModel input embeddings must be nn.Embedding, got {type(value).__name__}"
-            )
-        self.embeddings.word_embeddings = value
 
     def _encode(
         self,
@@ -651,23 +642,20 @@ class _RoFormerLMPredictionHead(nn.Module):
         self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
         self.bias = nn.Parameter(lucid.zeros(config.vocab_size))
 
+    def fit_vocab(self, vocab: int) -> None:
+        """Fit the bias to ``vocab`` output tokens: surviving entries carry over, new ones are zero."""
+        self.bias = fit_vocab_bias(self.bias, vocab)
+
     def tie_to(self, weight: nn.Parameter) -> None:
         """Decode with ``weight`` (shared, not copied) and fit the bias to it.
 
         The bias holds one entry per output token, so a table with another
-        number of rows needs one of matching length: surviving entries carry
-        over and new tokens start at zero.
+        number of rows needs one of matching length.
         """
         self.decoder.weight = weight
         vocab = int(weight.shape[0])
         self.decoder.out_features = vocab
-        have = int(self.bias.shape[0])
-        if have != vocab:
-            kept = self.bias.detach()[: min(have, vocab)]
-            if vocab > have:
-                pad = lucid.zeros(vocab - have, dtype=kept.dtype, device=kept.device.type)
-                kept = lucid.cat([kept, pad])
-            self.bias = nn.Parameter(kept)
+        self.fit_vocab(vocab)
 
     @override
     def forward(self, x: Tensor) -> Tensor:
@@ -744,6 +732,7 @@ class RoFormerForMaskedLM(_RoFormerInitMixin, LanguageModelingModel, MaskedLMMix
 
     config_class: ClassVar[type[RoFormerConfig]] = RoFormerConfig
     base_model_prefix: ClassVar[str] = "roformer"
+    _output_embeddings: ClassVar[str] = "cls.predictions.decoder"
 
     def __init__(self, config: RoFormerConfig) -> None:
         super().__init__(config)

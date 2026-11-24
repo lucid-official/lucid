@@ -24,6 +24,7 @@ import lucid.nn.functional as F
 from lucid.nn.functional.attention import _masked_attention
 from lucid._tensor.tensor import Tensor
 from lucid.models._base import PretrainedModel
+from lucid.models._embeddings import fit_vocab_bias
 from lucid.models._tasks import (
     LanguageModelingModel,
     SequenceClassificationModel,
@@ -525,6 +526,8 @@ class BERTModel(PretrainedModel):
 
     config_class: ClassVar[type[BERTConfig]] = BERTConfig
     base_model_prefix: ClassVar[str] = "bert"
+    _input_embeddings: ClassVar[str] = "embeddings.word_embeddings"
+    _token_init_std: ClassVar[str] = "initializer_range"
 
     def __init__(self, config: BERTConfig) -> None:
         super().__init__(config)
@@ -532,18 +535,6 @@ class BERTModel(PretrainedModel):
         self.encoder = _BERTEncoder(config)
         self.pooler = _BERTPooler(config)
         _init_weights(self, config.initializer_range)
-
-    @override
-    def get_input_embeddings(self) -> nn.Module:
-        return self.embeddings.word_embeddings
-
-    @override
-    def set_input_embeddings(self, value: nn.Module) -> None:
-        if not isinstance(value, nn.Embedding):
-            raise TypeError(
-                f"BERTModel input embeddings must be nn.Embedding, got {type(value).__name__}"
-            )
-        self.embeddings.word_embeddings = value
 
     @override
     def forward(
@@ -652,23 +643,20 @@ class _BERTLMPredictionHead(nn.Module):
         # ``cls.predictions.decoder.weight``.
         self.bias = nn.Parameter(lucid.zeros(config.vocab_size))
 
+    def fit_vocab(self, vocab: int) -> None:
+        """Fit the bias to ``vocab`` output tokens: surviving entries carry over, new ones are zero."""
+        self.bias = fit_vocab_bias(self.bias, vocab)
+
     def tie_to(self, weight: nn.Parameter) -> None:
         """Decode with ``weight`` (shared, not copied) and fit the bias to it.
 
         The bias holds one entry per output token, so a table with another
-        number of rows needs one of matching length: surviving entries carry
-        over and new tokens start at zero.
+        number of rows needs one of matching length.
         """
         self.decoder.weight = weight
         vocab = int(weight.shape[0])
         self.decoder.out_features = vocab
-        have = int(self.bias.shape[0])
-        if have != vocab:
-            kept = self.bias.detach()[: min(have, vocab)]
-            if vocab > have:
-                pad = lucid.zeros(vocab - have, dtype=kept.dtype, device=kept.device.type)
-                kept = lucid.cat([kept, pad])
-            self.bias = nn.Parameter(kept)
+        self.fit_vocab(vocab)
 
     @override
     def forward(self, x: Tensor) -> Tensor:
@@ -750,6 +738,7 @@ class BERTForMaskedLM(LanguageModelingModel, MaskedLMMixin):
 
     config_class: ClassVar[type[BERTConfig]] = BERTConfig
     base_model_prefix: ClassVar[str] = "bert"
+    _output_embeddings: ClassVar[str] = "cls.predictions.decoder"
 
     def __init__(self, config: BERTConfig) -> None:
         super().__init__(config)
@@ -1190,6 +1179,7 @@ class BERTForPreTraining(SequenceClassificationModel, MaskedLMMixin):
 
     config_class: ClassVar[type[BERTConfig]] = BERTConfig
     base_model_prefix: ClassVar[str] = "bert"
+    _output_embeddings: ClassVar[str] = "cls.predictions.decoder"
 
     def __init__(self, config: BERTConfig) -> None:
         super().__init__(config)
@@ -1388,6 +1378,7 @@ class BERTForCausalLM(LanguageModelingModel):
 
     config_class: ClassVar[type[BERTConfig]] = BERTConfig
     base_model_prefix: ClassVar[str] = "bert"
+    _output_embeddings: ClassVar[str] = "cls.predictions.decoder"
 
     def __init__(self, config: BERTConfig) -> None:
         super().__init__(config)

@@ -597,6 +597,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `GPTModel`, `GPTLMHeadModel`, `GPT2Model` and `GPT2LMHeadModel` `forward` take `position_ids` (keyword-only), as the reference's do (LCD-1110).
 - `T5ForSeq2SeqLM.generate` and `TransformerForSeq2SeqLM.generate` take `max_new_tokens`, counting the tokens after the start token. It wins over `max_length`, as in decoder-only `generate` (LCD-1110).
 
+- resize_token_embeddings; from_pretrained takes options
+
 ### Performance
 
 - pool the MAE sets without rank-6 views
