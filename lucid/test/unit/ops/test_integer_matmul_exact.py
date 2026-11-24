@@ -69,6 +69,11 @@ def _mm(a: list[list[int]], b: list[list[int]]) -> list[list[int]]:
     return [[sum(x * y for x, y in zip(row, col, strict=True)) for col in cols] for row in a]
 
 
+def _dot(a: list[int], b: list[int]) -> int:
+    """The exact (unwrapped) inner product of two vectors; ``dot`` takes nothing else."""
+    return sum(x * y for x, y in zip(a, b, strict=True))
+
+
 def _bmm(a: list[list[list[int]]], b: list[list[list[int]]]) -> list[list[list[int]]]:
     return [_mm(x, y) for x, y in zip(a, b, strict=True)]
 
@@ -185,7 +190,8 @@ _CASES = [
         lambda c, a, b: lucid.addbmm(c, a, b),
         lambda c, a, b: _add(c, reduce(_add, _bmm(a, b))),
     ),
-    _Case("linalg_dot", ((3, 5), (5, 4)), lambda a, b: lucid.linalg.dot(a, b), _mm),
+    _Case("linalg_dot", ((5,), (5,)), lambda a, b: lucid.linalg.dot(a, b), _dot),
+    _Case("dot_method", ((5,), (5,)), lambda a, b: a.dot(b), _dot),
     _Case(
         "linalg_multi_dot",
         ((3, 5), (5, 4), (4, 2)),
@@ -274,7 +280,6 @@ _PINNED_OPS: dict[str, Callable[..., lucid.Tensor]] = {
     "matmul": lambda a, b: lucid.matmul(a, b),
     "bmm": lambda a, b: lucid.bmm(a[None], b[None])[0],
     "tensordot": lambda a, b: lucid.tensordot(a, b, dims=1),
-    "linalg_dot": lambda a, b: lucid.linalg.dot(a, b),
 }
 
 
@@ -288,6 +293,34 @@ def test_the_reported_products_have_the_reference_answer(
     )
     assert out.dtype == dtype
     assert out.tolist() == want
+
+
+_DOTS: dict[str, Callable[..., lucid.Tensor]] = {
+    "linalg_dot": lambda a, b: lucid.linalg.dot(a, b),
+    "dot_method": lambda a, b: a.dot(b),
+}
+
+
+@pytest.mark.parametrize("op", sorted(_DOTS))
+@pytest.mark.parametrize(("dtype", "a", "b", "want"), _PINNED)
+def test_the_reported_products_have_the_reference_answer_as_a_dot(
+    op: str, dtype: lucid.dtype, a: Nested, b: Nested, want: Nested, device: str
+) -> None:
+    """``dot`` takes two vectors, so each reported product is its first entry: row 0 . column 0.
+
+    That entry is the same sum of products, wrapped at the same width, and it reaches the
+    same exact-integer kernel; the matrix form is ``mm`` / ``matmul`` / ``bmm`` above.
+    """
+    assert isinstance(a, list) and isinstance(b, list) and isinstance(want, list)
+    row, column = a[0], [line[0] for line in b]
+    assert isinstance(row, list) and isinstance(want[0], list)
+    out = _DOTS[op](
+        lucid.tensor(row, dtype=dtype, device=device),
+        lucid.tensor(column, dtype=dtype, device=device),
+    )
+    assert out.dtype == dtype
+    assert out.shape == ()
+    assert out.item() == want[0][0]
 
 
 # A bool has no matrix product (``matmul`` refuses it, and so does each backend's integer GEMM),
