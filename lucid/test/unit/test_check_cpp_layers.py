@@ -3,10 +3,10 @@
 Verifies that:
 1. The current ``lucid/_C/`` tree passes with 0 new violations and 0 stale
    ``_ALLOWLIST`` entries.
-2. Injecting each of the 7 violation classes (upward ``#include``, unauthorized
+2. Injecting each of the 8 violation classes (upward ``#include``, unauthorized
    ``extern ... _op(``, ``cblas_`` outside ``Blas.cpp``, LAPACK symbol outside
-   ``Lapack.cpp``, ``cpu::lapack_`` in ``backend/gpu``, ``goto``, and a hand-built
-   wanted-gradient mask) into a
+   ``Lapack.cpp``, ``cpu::lapack_`` in ``backend/gpu``, ``goto``, a hand-built
+   wanted-gradient mask, and an MLX ``compile`` outside ``ShapelessFused.h``) into a
    tree causes ``check_cpp_layers`` to report the violation and return 1.
 3. Canonical owner files (``autograd/GraphOps.h``, ``backend/cpu/Blas.cpp``,
    ``backend/cpu/Lapack.cpp``) and downward ``#include``s are permitted.
@@ -131,6 +131,20 @@ def test_real_engine_tree_passes() -> None:
             "hand-grad-mask",
             "needs_input_grad{...}",
         ),
+        # 8. LCD-1072: MLX's compile outside gpu::ShapelessFused (every spelling is held in
+        # test_shapeless_compile_routing.py; these are the two LCD-1062's scan missed)
+        (
+            "backend/gpu/BadCompile.h",
+            "auto f = ::mlx::core::compile(g, true);\n",
+            "mlx-compile",
+            "mlx::core::compile",
+        ),
+        (
+            "ops/bfunc/BadCompile.cpp",
+            "using namespace mlx::core;\nauto f = compile(g, true);\n",
+            "mlx-compile",
+            "compile",
+        ),
     ],
 )
 def test_injected_violation_is_reported(
@@ -186,6 +200,19 @@ def test_canonical_owner_files_and_downward_includes_are_allowed(tmp_path: Path)
         "// std::array<bool, 3> grad_mask in a comment is ignored\n"
         "void f() { const std::array<bool, 2> saves{true, false}; }\n"
         "bool g(const Node& n) { return n.needs_input_grad(0) || n.needs_input_grad(1); }\n",
+    )
+    _write(
+        engine,
+        "backend/gpu/ShapelessFused.h",
+        "auto fused = ::mlx::core::compile(steps, /*shapeless=*/true);\n",
+    )
+    _write(
+        engine,
+        "compile/Tracer.cpp",
+        "namespace lucid::compile { struct Tracer; }\n"
+        "// mx::compile(f, true) in a comment is ignored\n"
+        'const char* doc = "mlx::core::compile(f, true)";\n'
+        "void f(lucid::compile::Tracer& t) { t.compile(1); }\n",
     )
     _write(engine, "nn/Linear.cpp", '#include "../ops/bfunc/Add.h"\n')
     _write(engine, "bindings/bind_ops.cpp", '#include "../nn/Linear.cpp"\n')

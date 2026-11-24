@@ -42,6 +42,18 @@ Enforces the C++ architecture invariants documented in ``obsidian/DEVELOPMENT.md
    built to be passed as one, is the second spelling of that decision; a node
    asks ``wanted_grads()`` instead.
 
+8. ``mlx-compile``:
+   MLX's shapeless ``compile`` gives an empty broadcast one element, so every
+   fused composite is compiled through ``gpu::ShapelessFused``, which runs its
+   steps eagerly when an operand is empty (LCD-1062).  A call to MLX's
+   ``compile`` — qualified (``mlx::core::compile``, ``mx::compile``), reached
+   through an alias or an unqualified name after a ``using``, with
+   ``shapeless=`` spelled out or passed as a bare ``true`` — is only permitted
+   in ``backend/gpu/ShapelessFused.h`` (LCD-1072).  Lucid's own ``compile``
+   subsystem has no function of that name, so any call is MLX's; a Lucid
+   function that is given the name (a declaration reads as a call too) goes on
+   ``_ALLOWLIST`` or takes another.
+
 Existing legacy violations are recorded in ``_ALLOWLIST`` with a date and issue
 citation. The allow-list is a strict ratchet: any new violation OR any stale
 allow-list entry whose violation has been resolved causes the check to fail.
@@ -82,6 +94,7 @@ LAYER_RANK: dict[str, int] = {
 GRAPH_OPS_HEADER = "autograd/GraphOps.h"
 BLAS_IMPL = "backend/cpu/Blas.cpp"
 LAPACK_IMPL = "backend/cpu/Lapack.cpp"
+SHAPELESS_OWNER = "backend/gpu/ShapelessFused.h"
 
 # Dated allow-list of legacy violations:
 #   (rel_path, rule, target) -> (date_added, issue_and_reason)
@@ -237,13 +250,17 @@ _LAPACK = re.compile(
 _GPU_CPU_LAPACK = re.compile(r"\b(?:cpu::\s*)?lapack_[A-Za-z0-9_]+\b")
 _GOTO = re.compile(r"\bgoto\b")
 # ``std::array<bool, N> <name containing mask>`` as a variable, member or parameter.
-_MASK_ARRAY = re.compile(
-    r"\bstd::array\s*<\s*bool\s*,[^;{}()]*>\s*&?\s*(?P<name>\w*[mM]ask\w*)\b"
-)
+_MASK_ARRAY = re.compile(r"\bstd::array\s*<\s*bool\s*,[^;{}()]*>\s*&?\s*(?P<name>\w*[mM]ask\w*)\b")
 # ``{needs_input_grad(0), needs_input_grad(1), ...}`` written out for one call.
 _NEEDS_GRAD_LIST = re.compile(
     r"\{[^{};]*\bneeds_input_grad\(\s*\d+\s*\)\s*,[^{};]*\bneeds_input_grad\(\s*\d+\s*\)"
 )
+# MLX's ``compile``: named through its namespace (``mlx::core::compile``, ``mx::compile``, a call
+# or a reference), or any other call of a function called ``compile`` that no object owns — an
+# alias (``m::compile(``) or a bare name after ``using namespace mlx::core``.  A member call
+# (``x.compile(``, ``p->compile(``) and ``lucid::compile::`` (a namespace, followed by ``::``) are
+# not matched.
+_MLX_COMPILE = re.compile(r"\b(?:mlx(?:::core)?|mx)::compile\b|(?<![\w.>])compile(?=\s*\()")
 
 
 def _blank_match(m: re.Match[str]) -> str:
@@ -478,8 +495,30 @@ def _check_hand_grad_mask(rel_posix: str, code: str) -> list[Violation]:
     return out
 
 
+def mlx_compile_calls(code: str) -> list[re.Match[str]]:
+    """Every use of MLX's ``compile`` in ``code``, which has had comments and strings blanked."""
+    return list(_MLX_COMPILE.finditer(code))
+
+
+def _check_mlx_compile(rel_posix: str, code: str) -> list[Violation]:
+    if rel_posix == SHAPELESS_OWNER:
+        return []
+    return [
+        Violation(
+            rel_posix,
+            _line_of(code, m.start()),
+            "mlx-compile",
+            m.group(0),
+            f"'{m.group(0)}' is MLX's compile, called outside {SHAPELESS_OWNER}: its shapeless "
+            "trace gives an empty broadcast one element (LCD-1062); build the fused steps "
+            "through gpu::ShapelessFused",
+        )
+        for m in mlx_compile_calls(code)
+    ]
+
+
 def scan_file(path: Path, engine: Path = ENGINE) -> list[Violation]:
-    """Scan a single C++/ObjC++ file under ``engine`` for all 7 invariants."""
+    """Scan a single C++/ObjC++ file under ``engine`` for all 8 invariants."""
     rel_posix = path.resolve().relative_to(engine.resolve()).as_posix()
     raw = path.read_text(encoding="utf-8", errors="replace")
     code = _strip_code(raw)
@@ -491,6 +530,7 @@ def scan_file(path: Path, engine: Path = ENGINE) -> list[Violation]:
     violations.extend(_check_gpu_lapack(rel_posix, code))
     violations.extend(_check_goto(rel_posix, code))
     violations.extend(_check_hand_grad_mask(rel_posix, code))
+    violations.extend(_check_mlx_compile(rel_posix, code))
     return violations
 
 
@@ -555,7 +595,7 @@ def check(
 
     print(
         f"[check_cpp_layers] all C++ layer rules OK "
-        f"(7 invariants checked, {len(allowed_hits)} legacy site(s) on _ALLOWLIST)"
+        f"(8 invariants checked, {len(allowed_hits)} legacy site(s) on _ALLOWLIST)"
     )
     return 0
 
