@@ -162,27 +162,9 @@ _CONTROL_TABLE = (
         [[0.0, 2.0, 5.0, -1.0]],
         [[0.0, 1.0, 1.0, -1.0], [-2.0, -2.0, -2.0, -2.0], [0.0, 2.0, 3.0, -1.0]],
     ),
-    (
-        "pow",
-        _INTS,
-        [[2], [3], [-1]],
-        [[0, 1, 2, 3]],
-        [[1, 2, 4, 8], [1, 3, 9, 27], [1, -1, 1, -1]],
-    ),
-    (
-        "bitwise_left_shift",
-        _INTS,
-        [[1], [2]],
-        [[0, 1, 2, 3]],
-        [[1, 2, 4, 8], [2, 4, 8, 16]],
-    ),
-    (
-        "bitwise_right_shift",
-        _INTS,
-        [[8], [16]],
-        [[0, 1, 2, 3]],
-        [[8, 4, 2, 1], [16, 8, 4, 2]],
-    ),
+    ("pow", _INTS, [[2], [3], [-1]], [[0, 1, 2, 3]], [[1, 2, 4, 8], [1, 3, 9, 27], [1, -1, 1, -1]]),
+    ("bitwise_left_shift", _INTS, [[1], [2]], [[0, 1, 2, 3]], [[1, 2, 4, 8], [2, 4, 8, 16]]),
+    ("bitwise_right_shift", _INTS, [[8], [16]], [[0, 1, 2, 3]], [[8, 4, 2, 1], [16, 8, 4, 2]]),
 )
 _CONTROL = [
     (op, dt, a, b, expected) for op, dtypes, a, b, expected in _CONTROL_TABLE for dt in dtypes
@@ -190,9 +172,7 @@ _CONTROL = [
 
 
 @pytest.mark.parametrize(
-    ("op", "dtype", "a", "b", "expected"),
-    _CONTROL,
-    ids=[f"{c[0]}-{c[1]}" for c in _CONTROL],
+    ("op", "dtype", "a", "b", "expected"), _CONTROL, ids=[f"{c[0]}-{c[1]}" for c in _CONTROL]
 )
 def test_a_non_empty_broadcast_still_computes(
     device: str,
