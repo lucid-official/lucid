@@ -438,6 +438,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `sub` and `rsub` range-check the negated `alpha`, as the reference does: `128` is an int8 alpha for `sub`, and `-128` is refused (LCD-1078).
 - The in-place pow overflow refusal names the reference's C++ type (`int8_t`, `c10::Half`) instead of the engine enum (`I8`, `F16`) (LCD-1078).
 
+- complex pow answers std::pow at a zero base (LCD-1082)
 
 ### Added
 

@@ -51,6 +51,7 @@
 
 #include "../../core/Half.h"
 #include "BinaryKernelLoad.h"
+#include "ComplexPow.h"
 #include "MlxBridge.h"
 #include "ShapelessFused.h"
 
@@ -438,11 +439,14 @@ inline bool is_signed_integer(mx::Dtype dt) {
 
 // ``a ** b`` element-wise and broadcast, ``b`` a tensor (or ``a`` a scalar
 // base).  float32, float16, and bfloat16 run the kernel above; signed
-// integers run ``int_pow``; bool and complex dtypes stay ``mx::power`` (the
-// complex principal branch).
+// integers run ``int_pow``; complex64 is ``mx::power`` (the principal branch)
+// with the zero-base lanes of ``std::pow`` (ComplexPow.h, LCD-1082); bool
+// stays ``mx::power``.
 inline ::mlx::core::array gpu_pow(const ::mlx::core::array& a, const ::mlx::core::array& b) {
     if (gpu_pow_detail::is_signed_integer(a.dtype()))
         return gpu_pow_detail::int_pow(a, b);
+    if (a.dtype() == ::mlx::core::complex64)
+        return gpu_complex_pow(a, b);
     if (!gpu_pow_detail::takes_tensor_exponent(a.dtype()))
         return ::mlx::core::power(a, b);
     return gpu_pow_detail::run(a, b, {});
@@ -457,6 +461,8 @@ inline ::mlx::core::array gpu_pow(const ::mlx::core::array& a, double exponent) 
     const mx::array b = gpu::mlx_scalar(exponent, dt);
     if (gpu_pow_detail::is_signed_integer(dt))
         return gpu_pow_detail::int_pow(a, b);
+    if (dt == mx::complex64)
+        return gpu_complex_pow(a, b);
     if (!gpu_pow_detail::is_kernel_dtype(dt))
         return mx::power(a, b);
     const float e = gpu_pow_detail::rounded_exponent(exponent, dt);
