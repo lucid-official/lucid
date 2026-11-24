@@ -80,7 +80,6 @@ class _Attention(nn.Module):
         proj_drop: float = 0.0,
     ) -> None:
         super().__init__()
-        assert dim % num_heads == 0, "dim must be divisible by num_heads"
         self.num_heads = num_heads
         self.head_dim = dim // num_heads
         self.scale = 1.0 / math.sqrt(self.head_dim)
@@ -181,7 +180,6 @@ class _CrossAttention(nn.Module):
         proj_drop: float = 0.0,
     ) -> None:
         super().__init__()
-        assert dim % num_heads == 0
         self.num_heads = num_heads
         self.head_dim = dim // num_heads
         self.scale = 1.0 / math.sqrt(self.head_dim)
