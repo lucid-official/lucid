@@ -6325,6 +6325,14 @@ def lerp(input: Tensor, end: Tensor, weight: _float | Tensor) -> Tensor:
     With ``w = 0`` the result equals ``input``; with ``w = 1`` it equals
     ``end``; out-of-range weights extrapolate beyond the endpoints.
     
+    The value takes one of two forms by the weight, as the reference does:
+    ``input + w * (end - input)`` for ``|w| < 0.5`` and
+    ``end - (end - input) * (1 - w)`` otherwise, so ``w = 1`` gives ``end``
+    exactly and an infinite operand gives what its form gives
+    (``lerp(0, inf, 0.5)`` is ``NaN``).  The gradient ignores the form:
+    ``grad * (1 - w)`` for ``input``, ``grad * w`` for ``end`` and
+    ``grad * (end - input)`` for ``w``.
+    
     Examples
     --------
     >>> import lucid

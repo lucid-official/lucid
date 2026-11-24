@@ -10,6 +10,7 @@ from lucid._dispatch import _promote_impls, _unwrap, _wrap
 from lucid._ops._adapters import _scale_by_alpha
 from lucid._ops._autocast import _amp_op, _autocast_entry, _autocast_suspended
 from lucid._ops._products import _require_vector
+from lucid._ops.composite._lerp import _apply_lerp
 from lucid._ops.composite._opmath import _in_float32_as
 from lucid._scalar_cast import ScalarRead, cast_scalar, scale_factor, scale_factors
 import lucid.linalg as _la
@@ -435,6 +436,11 @@ def _check_ternary_devices(op: str, input: Tensor, tensor1: Tensor, tensor2: Ten
         )
 
 
+def _kept(tensor: Tensor, impl: _C_engine.TensorImpl) -> Tensor:
+    """``tensor``, or a wrapper of ``impl`` when a promotion replaced its storage."""
+    return tensor if _unwrap(tensor) is impl else _wrap(impl)
+
+
 def _lerp(input: Tensor, end: Tensor, weight: float | complex | Tensor) -> Tensor:
     """Linearly interpolate ``input`` and ``end`` by ``weight``.
 
@@ -444,6 +450,9 @@ def _lerp(input: Tensor, end: Tensor, weight: float | complex | Tensor) -> Tenso
     promote to (``lerp(f16[2], f16[2], f32_0d)`` is float16).  A weight that is not a
     tensor is a number (:func:`~lucid._scalar_cast.scale_factor`), and the tensor weight
     is an operand, not a scale factor: it is never read as a number.
+
+    The value takes one of two forms by ``|weight| < 0.5`` and the gradient is the one
+    the reference gives, whichever it took (:mod:`lucid._ops.composite._lerp`).
     """
     if not isinstance(weight, lucid.Tensor):
         weight = scale_factor(weight, "lerp", "weight")
@@ -461,6 +470,7 @@ def _lerp(input: Tensor, end: Tensor, weight: float | complex | Tensor) -> Tenso
             f"DeviceMismatch (lerp: input/end): expected {input.device.type}, got {end.device.type}"
         )
     input_impl, end_impl = _unwrap(input), _unwrap(end)
+    # Metal follows the reference's CPU kernel, not its ``mps`` one (see ``_lerp.py``).
     if isinstance(weight, lucid.Tensor):
         weight_impl = _unwrap(weight)
         if weight_impl.shape and weight.dtype != input.dtype:
@@ -473,24 +483,20 @@ def _lerp(input: Tensor, end: Tensor, weight: float | complex | Tensor) -> Tenso
             return _in_float32_as(
                 input_impl.dtype, _lerp, _wrap(input_impl), _wrap(end_impl), _wrap(weight_impl)
             )
-        diff = _wrap(_C_engine.sub(end_impl, input_impl))
-        if not _can_mix_devices(diff, weight):
+        # The device the difference lands on: ``input``'s, unless it is a 0-d CPU tensor.
+        lead = end if input.ndim == 0 and input.device.type == "cpu" else input
+        if not _can_mix_devices(lead, weight):
             raise _C_engine.DeviceMismatch(
                 f"DeviceMismatch (lerp: input/weight): "
-                f"expected {diff.device.type}, got {weight.device.type}"
+                f"expected {lead.device.type}, got {weight.device.type}"
             )
-        scaled = _C_engine.mul(weight_impl, _unwrap(diff))
-    else:
-        dtype = input_impl.dtype  # ``end`` has it too, checked above
-        if _promotion.is_half(dtype):
-            return _in_float32_as(dtype, partial(_lerp, weight=weight), input, end)
-        diff_impl = _C_engine.sub(end_impl, input_impl)
-        # ``lerp`` takes floating tensors only, so the weight read for one is real.
-        step = float(cast_scalar(dtype, weight, read=ScalarRead.OP_MATH).real)
-        scaled = _C_engine.mul(
-            _C_engine.full(list(diff_impl.shape), step, dtype, diff_impl.device), diff_impl
+        return _apply_lerp(
+            _kept(input, input_impl), _kept(end, end_impl), _kept(weight, weight_impl)
         )
-    return _wrap(_C_engine.add(input_impl, scaled))
+    dtype = input_impl.dtype  # ``end`` has it too, checked above
+    if _promotion.is_half(dtype):
+        return _in_float32_as(dtype, partial(_lerp, weight=weight), input, end)
+    return _apply_lerp(input, end, weight)
 
 
 @scale_factors("value")

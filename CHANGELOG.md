@@ -468,6 +468,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ViT, I-JEPA and CLIP's image tower refuse any image that is not `image_size` squared, with one `ValueError` naming the built grid and the size received. Before, ViT's check floor-divided, so any side from N to N+patch-1 passed: the patch conv dropped the border and a 47x47 image answered as its 32x32 crop. I-JEPA and CLIP had no check; they answered 47 the same way and failed at 48 or 64 with an engine ShapeMismatch naming neither size. The reference embeddings refuse the same sizes unless position interpolation is requested (LCD-1107).
 - The DiT, MeanFlow, TVM and Drifting latent-size messages gain the "not a multiple of the patch" case. One shared `check_patch_grid` now backs both the vision towers and the generative `check_latent_size` (LCD-1107).
 
+- lerp takes the reference's two forms by the weight
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

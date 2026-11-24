@@ -3564,10 +3564,10 @@ class Tensor:
 
         Notes
         -----
-        Linear interpolation is affine: ``lerp(a, b, t)`` lies on the
-        line segment from ``a`` to ``b``. The formula is numerically
-        preferable to ``(1 - weight) * self + weight * end`` because it
-        avoids loss of precision at small ``weight`` values.
+        Linear interpolation is affine: ``lerp(a, b, t)`` lies on the segment
+        from ``a`` to ``b``. The value is ``self + weight * (end - self)`` for
+        ``|weight| < 0.5`` and ``end - (end - self) * (1 - weight)`` otherwise
+        (as the reference does), so ``weight = 1`` gives ``end`` exactly.
 
         Examples
         --------

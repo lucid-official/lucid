@@ -45,6 +45,8 @@ TRACE_FORM: frozenset[str] = frozenset(
         # Exact slopes of the gamma-family densities' primitives (LCD-1050)
         "_Bd0",
         "_StirlingSeries",
+        # The reference's one-sided ``lerp`` gradient under its two-sided value (LCD-1101)
+        "_Lerp",
     }
 )
 
