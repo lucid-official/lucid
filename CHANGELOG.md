@@ -600,9 +600,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - gamma family reads the positive-domain lgamma
 
-- TensorImpl.dtype_code, a cheap dtype read (LCD-1099)
-
-- refusals read dtype_code, not dtype.value (LCD-1099)
+- The dtype refusals of `gather`, `take`, `take_along_dim`, `complex`, `heaviside`, `polar` and the other ops that check an operand's dtype read a new engine property, `TensorImpl.dtype_code` (a plain int, about 0.07 µs per read), instead of the enum `dtype.value` (about 0.29 µs, because each read builds an enum object). This wins back the per-call cost of the LCD-1075 refusals: gather -0.27 µs, take -0.30 µs, complex -0.50 µs on the same engine. Engine ABI 60 (LCD-1099).
 
 ### Tooling
 
