@@ -321,6 +321,7 @@ class GPT2Model(PretrainedModel):
         past_key_values: Cache | None = None,
         use_cache: bool | None = None,
         cache_position: Tensor | None = None,
+        position_ids: Tensor | None = None,
         inputs_embeds: Tensor | None = None,
     ) -> BaseModelOutput:
         # ``None`` means "whatever the config says" — hard-coding False here
@@ -331,7 +332,7 @@ class GPT2Model(PretrainedModel):
         tok_emb = embed_tokens(self.wte, input_ids, inputs_embeds)
         B, T = int(tok_emb.shape[0]), int(tok_emb.shape[1])
         past_len, cache_position, pos_ids = resolve_causal_positions(
-            tok_emb, self.position_ids, self._max_pos, past_key_values, cache_position
+            tok_emb, self.position_ids, self._max_pos, past_key_values, cache_position, position_ids
         )
         pos_emb = self.wpe(pos_ids)
         hidden = self.drop(tok_emb + pos_emb)
@@ -444,6 +445,7 @@ class GPT2LMHeadModel(LanguageModelingModel, CausalLMMixin):
         past_key_values: Cache | None = None,
         use_cache: bool | None = None,
         cache_position: Tensor | None = None,
+        position_ids: Tensor | None = None,
     ) -> CausalLMOutput:
         use_cache = self._use_cache if use_cache is None else use_cache
         if use_cache and past_key_values is None:
@@ -455,6 +457,7 @@ class GPT2LMHeadModel(LanguageModelingModel, CausalLMMixin):
             past_key_values=past_key_values,
             use_cache=use_cache,
             cache_position=cache_position,
+            position_ids=position_ids,
         )
         logits = self.lm_head(outputs.last_hidden_state)
 

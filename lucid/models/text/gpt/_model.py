@@ -286,12 +286,13 @@ class GPTModel(PretrainedModel):
         past_key_values: Cache | None = None,
         use_cache: bool = False,
         cache_position: Tensor | None = None,
+        position_ids: Tensor | None = None,
         inputs_embeds: Tensor | None = None,
     ) -> BaseModelOutput:
         tok_emb = embed_tokens(self.tokens_embed, input_ids, inputs_embeds)
         B, T = int(tok_emb.shape[0]), int(tok_emb.shape[1])
         past_len, cache_position, pos_ids = resolve_causal_positions(
-            tok_emb, self.position_ids, self._max_pos, past_key_values, cache_position
+            tok_emb, self.position_ids, self._max_pos, past_key_values, cache_position, position_ids
         )
         pos_emb = self.positions_embed(pos_ids)
         hidden = self.drop(tok_emb + pos_emb)
@@ -400,6 +401,7 @@ class GPTLMHeadModel(LanguageModelingModel, CausalLMMixin):
         past_key_values: Cache | None = None,
         use_cache: bool = False,
         cache_position: Tensor | None = None,
+        position_ids: Tensor | None = None,
     ) -> CausalLMOutput:
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache()
@@ -410,6 +412,7 @@ class GPTLMHeadModel(LanguageModelingModel, CausalLMMixin):
             past_key_values=past_key_values,
             use_cache=use_cache,
             cache_position=cache_position,
+            position_ids=position_ids,
         )
         hidden = outputs.last_hidden_state
         logits = self.lm_head(hidden)

@@ -566,6 +566,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `linalg.solve_triangular` accepts complex64 and complex128 on both devices, with the conjugate-transpose gradients (LCD-1070).
 
+- generate takes attention_mask and max_new_tokens
+
 ### Performance
 
 - pool the MAE sets without rank-6 views

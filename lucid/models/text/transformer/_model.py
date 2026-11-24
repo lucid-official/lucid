@@ -585,6 +585,7 @@ class TransformerForSeq2SeqLM(LanguageModelingModel):
         input_ids: Tensor,
         *,
         max_length: int = 32,
+        max_new_tokens: int | None = None,
         bos_token_id: int | None = None,
         eos_token_id: int | None = None,
         pad_token_id: int | None = None,
@@ -609,6 +610,8 @@ class TransformerForSeq2SeqLM(LanguageModelingModel):
         Args:
             input_ids:     ``(B, S)`` source token ids.
             max_length:    Cap on generated target length (incl. BOS).
+            max_new_tokens: Cap on the tokens after BOS (``>= 0``); wins over
+                           ``max_length``.
             bos_token_id:  Start-of-sequence id; defaults to
                            ``config.bos_token_id`` then 0.
             eos_token_id:  End-of-sequence id; defaults to
@@ -623,7 +626,7 @@ class TransformerForSeq2SeqLM(LanguageModelingModel):
                            or ``"compiled"`` (compiled single-token decode via
                            :func:`compiled_decode_step`).
             max_cache_len: Self-attention buffer capacity for ``"static"`` or
-                           ``"compiled"`` (defaults to ``max_length``).
+                           ``"compiled"`` (defaults to the length cap).
             do_sample:     Sample from the (filtered) distribution instead of
                            greedy ``argmax`` (default False).
             temperature:   Logit temperature applied before sampling.
@@ -671,8 +674,9 @@ class TransformerForSeq2SeqLM(LanguageModelingModel):
         )  # fmt: skip
         return seq2seq_generate(
             next_logits, batch=int(input_ids.shape[0]), device=dev, start_token_id=bos,
-            max_length=max_length, use_cache=use_cache, sampling=sampling,
-            cache_implementation=cache_implementation, max_cache_len=max_cache_len,
+            max_length=max_length, max_new_tokens=max_new_tokens, use_cache=use_cache,
+            sampling=sampling, cache_implementation=cache_implementation,
+            max_cache_len=max_cache_len,
         )  # fmt: skip
 
 

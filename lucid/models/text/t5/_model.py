@@ -796,6 +796,7 @@ class T5ForSeq2SeqLM(LanguageModelingModel):
         input_ids: Tensor,
         *,
         max_length: int = 20,
+        max_new_tokens: int | None = None,
         attention_mask: Tensor | None = None,
         decoder_start_token_id: int | None = None,
         eos_token_id: int | None = None,
@@ -818,6 +819,8 @@ class T5ForSeq2SeqLM(LanguageModelingModel):
             English to German: …"``).
         max_length : int, default=20, keyword-only
             Cap on the returned length, start token included.
+        max_new_tokens : int or None, optional, keyword-only
+            Cap on the tokens after the start token (``>= 0``); wins over ``max_length``.
         attention_mask : Tensor or None, optional, keyword-only
             ``(B, S)`` source padding mask.
         use_cache : bool, default=True, keyword-only
@@ -828,8 +831,7 @@ class T5ForSeq2SeqLM(LanguageModelingModel):
             → :class:`StaticCache` + :func:`compiled_decode_step` for
             single-executable autoregressive decoding.
         max_cache_len : int or None, optional, keyword-only
-            Self-attention buffer capacity for ``"static"`` or ``"compiled"``;
-            defaults to ``max_length``.
+            Self-attention buffer size for ``"static"``/``"compiled"``; default: the length cap.
         do_sample : bool, default=False, keyword-only
             Sample instead of taking the ``argmax``.
         temperature : float, default=1.0, keyword-only
@@ -885,6 +887,7 @@ class T5ForSeq2SeqLM(LanguageModelingModel):
         )  # fmt: skip
         return seq2seq_generate(
             next_logits, batch=int(input_ids.shape[0]), device=dev, start_token_id=start,
-            max_length=max_length, use_cache=use_cache, sampling=sampling,
-            cache_implementation=cache_implementation, max_cache_len=max_cache_len,
+            max_length=max_length, max_new_tokens=max_new_tokens, use_cache=use_cache,
+            sampling=sampling, cache_implementation=cache_implementation,
+            max_cache_len=max_cache_len,
         )  # fmt: skip

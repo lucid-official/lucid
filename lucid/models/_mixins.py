@@ -6,6 +6,7 @@ their own); they expose methods that operate on attributes the host class
 is contracted to provide.
 """
 
+import inspect
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass, is_dataclass, replace
@@ -20,6 +21,7 @@ from lucid._tensor.tensor import Tensor
 from lucid.utils.cache import Cache, DynamicCache, StaticCache
 from lucid.models._base import ModelConfig, PretrainedModel
 from lucid.models._sampling import _SamplingParams, _select_next_ondevice
+from lucid.models._utils._text import resolve_generation_length
 
 if TYPE_CHECKING:
     from lucid.models._output import GenerationOutput, ImageClassificationOutput
@@ -507,6 +509,129 @@ def _extract_last_logits(outputs: object) -> Tensor:
     return logits[:, -1, :]
 
 
+def _forward_takes(forward: Callable[..., object], name: str) -> bool:
+    """Whether ``forward`` can be called with the keyword ``name`` (named, or through ``**kwargs``)."""
+    params = inspect.signature(forward).parameters.values()
+    return any(p.name == name or p.kind is inspect.Parameter.VAR_KEYWORD for p in params)
+
+
+class _GenerationMask:
+    """The padding mask of a causal generation in progress, and the positions it implies.
+
+    Without a mask it is inert -- no keywords, nothing to grow -- so the decode
+    loop calls it the same way either way.
+
+    A batch of prompts of different lengths is left-padded to one width.  Two
+    things then differ from an unpadded run, and this class owns both: the
+    pad columns have to stay masked for every step (one more kept column per
+    generated token), and a row's positions have to count from its first real
+    token rather than from the pad -- ``cumsum(mask) - 1``, so a padded row sees
+    the positions its prompt would have alone.  Positions are only produced for a
+    host whose ``forward`` takes ``position_ids``; any other host keeps its own
+    cache-offset positions.
+
+    Parameters
+    ----------
+    host : nn.Module
+        The model being generated from.
+    input_ids : Tensor
+        ``(B, T)`` prompt the mask belongs to.
+    attention_mask : Tensor or None
+        ``(B, T)`` bool or integer mask, 1 for a real token and 0 for padding;
+        ``None`` for a batch with no padding.
+    compiled : bool, optional, keyword-only
+        The generation runs the compiled decode step, whose one fixed input
+        signature has no room for a mask that grows.
+
+    Raises
+    ------
+    TypeError
+        ``attention_mask`` is floating point, or ``host.forward`` takes no
+        ``attention_mask`` to give it to.
+    ValueError
+        ``attention_mask`` is not ``(B, T)`` like ``input_ids``, or lives on
+        another device.
+    NotImplementedError
+        A mask is given with ``compiled``.
+    """
+
+    __slots__ = ("_mask", "_with_positions")
+
+    def __init__(
+        self,
+        host: nn.Module,
+        input_ids: Tensor,
+        attention_mask: Tensor | None,
+        *,
+        compiled: bool = False,
+    ) -> None:
+        self._mask: Tensor | None = None
+        self._with_positions: bool = False
+        if attention_mask is None:
+            return
+        if compiled:
+            raise NotImplementedError(
+                "generate(): attention_mask is not supported with "
+                'cache_implementation="compiled" -- the compiled decode step has one '
+                'fixed input signature; use "dynamic" or "static"'
+            )
+        if tuple(attention_mask.shape) != tuple(input_ids.shape):
+            raise ValueError(
+                f"generate(): attention_mask must have the shape of input_ids "
+                f"{tuple(input_ids.shape)}, got {tuple(attention_mask.shape)}"
+            )
+        if attention_mask.is_floating_point():
+            raise TypeError(
+                f"generate(): attention_mask must be a bool or integer 0/1 mask, "
+                f"got {attention_mask.dtype}"
+            )
+        if attention_mask.device.type != input_ids.device.type:
+            raise ValueError(
+                f"generate(): attention_mask is on {attention_mask.device.type} but "
+                f"input_ids is on {input_ids.device.type}"
+            )
+        if not _forward_takes(host.forward, "attention_mask"):
+            raise TypeError(
+                f"generate(): {type(host).__name__}.forward takes no attention_mask, "
+                f"so the padding cannot be masked"
+            )
+        self._mask = attention_mask.long()
+        self._with_positions = _forward_takes(host.forward, "position_ids")
+
+    def forward_kwargs(self, new_tokens: int | None = None) -> dict[str, Tensor]:
+        """The mask (and positions) for a forward over the last ``new_tokens`` columns, all when ``None``.
+
+        The mask always spans every column seen so far -- with a KV cache the
+        keys cover the cached history as well as the new tokens.
+        """
+        if self._mask is None:
+            return {}
+        kwargs: dict[str, Tensor] = {"attention_mask": self._mask}
+        if self._with_positions:
+            positions = (self._mask.cumsum(dim=-1) - 1).clamp(min=0)
+            kwargs["position_ids"] = positions if new_tokens is None else positions[:, -new_tokens:]
+        return kwargs
+
+    def append_kept(self) -> None:
+        """Add the column of the token just generated, which is always a real one."""
+        if self._mask is None:
+            return
+        B = int(self._mask.shape[0])
+        kept = lucid.ones((B, 1), dtype=self._mask.dtype, device=self._mask.device.type)
+        self._mask = lucid.cat([self._mask, kept], dim=1)
+
+
+def _generation_token_ids(
+    cfg: object, eos_token_id: int | None, pad_token_id: int | None
+) -> tuple[int | None, int]:
+    """``(eos, pad)`` ids with the host's config filling in what the call left out, pad ending at 0."""
+    if eos_token_id is None:
+        eos_token_id = getattr(cfg, "eos_token_id", None)
+    if pad_token_id is None:
+        pad_token_id = getattr(cfg, "pad_token_id", None)
+    return eos_token_id, 0 if pad_token_id is None else pad_token_id
+
+
 def _validate_static_cache_bounds(cfg: object, max_cache_len: int | None, stop_len: int) -> None:
     """Verify ``stop_len`` fits inside ``max_position_embeddings`` and ``max_cache_len``."""
     max_pos = getattr(cfg, "max_position_embeddings", None) if cfg else None
@@ -548,6 +673,62 @@ def _setup_causal_cache(
     return past, compiled_decode_step(_decode_fwd, past)
 
 
+class _CausalDecoder:
+    """The forward of each step of a causal generation, under whatever cache and padding it runs with.
+
+    What changes over a generation lives here -- the KV cache (dropped if the
+    host cannot take one), the compiled decode step, the growing padding mask --
+    so ``generate`` itself is only the token loop.
+    """
+
+    __slots__ = ("_model", "_padding", "_past", "_compiled", "_prompt_length")
+
+    def __init__(
+        self,
+        model: nn.Module,
+        padding: _GenerationMask,
+        past: Cache | None,
+        compiled_step: Callable[[Tensor, Tensor], Tensor] | None,
+        prompt_length: int,
+    ) -> None:
+        self._model = model
+        self._padding = padding
+        self._past = past
+        self._compiled = compiled_step
+        self._prompt_length = prompt_length
+
+    def next_logits(self, step: int, model_input: Tensor, out_tokens: list[Tensor]) -> Tensor:
+        """``(B, vocab)`` logits for the token after ``out_tokens``.
+
+        ``model_input`` is the prompt at step 0 and the one new token after; a
+        host with no cache is shown the whole prefix every time instead.
+        """
+        if step > 0:
+            self._padding.append_kept()  # the last step's token is in ``out_tokens`` now
+        if self._compiled is not None and step > 0:
+            position = lucid.tensor(
+                [self._prompt_length + step - 1], device=model_input.device.type
+            ).long()
+            return self._compiled(model_input, position)
+        if self._past is None:
+            prefix = lucid.stack(out_tokens, dim=1)
+            return _extract_last_logits(self._model(prefix, **self._padding.forward_kwargs()))
+        try:
+            outputs = self._model(
+                model_input,
+                use_cache=True,
+                past_key_values=self._past,
+                **self._padding.forward_kwargs(int(model_input.shape[1])),
+            )
+        except TypeError as exc:
+            if isinstance(exc, _C_engine.LucidError):
+                raise
+            self._past = self._compiled = None
+            prefix = lucid.stack(out_tokens, dim=1)
+            outputs = self._model(prefix, **self._padding.forward_kwargs())
+        return _extract_last_logits(outputs)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # CausalLMMixin — autoregressive text sampling
 # ─────────────────────────────────────────────────────────────────────────────
@@ -574,6 +755,9 @@ class CausalLMMixin:
     * Expose a ``config`` attribute carrying ``vocab_size`` /
       ``pad_token_id`` / ``bos_token_id`` / ``eos_token_id`` (fields
       :class:`lucid.models.text.LanguageModelConfig` defines).
+    * Take ``attention_mask`` in ``forward`` to accept one in :meth:`generate`
+      (refused otherwise), and ``position_ids`` to have a left-padded row
+      positioned from its first real token.
 
     Notes
     -----
@@ -608,6 +792,7 @@ class CausalLMMixin:
         self,
         input_ids: Tensor,
         *,
+        attention_mask: Tensor | None = None,
         max_length: int = 20,
         max_new_tokens: int | None = None,
         do_sample: bool = False,
@@ -627,6 +812,12 @@ class CausalLMMixin:
         ----------
         input_ids : Tensor
             ``(B, T_prompt)`` int prompt tokens.
+        attention_mask : Tensor or None, optional, keyword-only
+            ``(B, T_prompt)`` bool or integer mask, 1 for a real token and 0 for
+            padding, for a left-padded batch of unequal prompts.  Rows are
+            positioned from their first real token when ``forward`` takes
+            ``position_ids`` (see ``_GenerationMask``).  Not supported with
+            ``cache_implementation="compiled"``.
         max_length : int, optional, keyword-only, default=20
             Total sequence length cap (prompt + generated).  Ignored when
             ``max_new_tokens`` is supplied.
@@ -687,7 +878,12 @@ class CausalLMMixin:
         Raises
         ------
         ValueError
-            If ``input_ids`` is not 2-D.
+            If ``input_ids`` is not 2-D, ``attention_mask`` is not its shape or sits
+            on another device, or ``max_new_tokens`` is negative.
+        TypeError
+            If ``attention_mask`` is floating point or ``forward`` cannot take one.
+        NotImplementedError
+            If ``attention_mask`` is given with ``cache_implementation="compiled"``.
 
         Notes
         -----
@@ -711,24 +907,25 @@ class CausalLMMixin:
         >>> out.shape
         (1, 8)
         """
-        # ── Resolve token id defaults from the host model's config ────────
         cfg = getattr(self, "config", None)
-        if eos_token_id is None and cfg is not None:
-            eos_token_id = getattr(cfg, "eos_token_id", None)
-        if pad_token_id is None and cfg is not None:
-            pad_token_id = getattr(cfg, "pad_token_id", None)
-        if pad_token_id is None:
-            pad_token_id = 0
+        eos_token_id, pad_token_id = _generation_token_ids(cfg, eos_token_id, pad_token_id)
 
         if input_ids.ndim != 2:
             raise ValueError(
                 f"generate(): input_ids must be 2-D (B, T), got shape {tuple(input_ids.shape)}"
             )
 
-        B = int(input_ids.shape[0])
-        T_prompt = int(input_ids.shape[1])
+        B, T_prompt = (int(d) for d in input_ids.shape)
 
-        stop_len = T_prompt + int(max_new_tokens) if max_new_tokens is not None else int(max_length)
+        model = cast(nn.Module, self)
+        padding = _GenerationMask(
+            model,
+            input_ids,
+            attention_mask,
+            compiled=use_cache and cache_implementation == "compiled",
+        )
+
+        stop_len = resolve_generation_length(max_length, max_new_tokens, T_prompt)
         if stop_len <= T_prompt:
             return input_ids
 
@@ -738,7 +935,6 @@ class CausalLMMixin:
         dev = input_ids.device.type
         finished: Tensor = lucid.zeros((B,), device=dev).bool()
         out_tokens: list[Tensor] = [input_ids[:, t] for t in range(T_prompt)]
-        model = cast(nn.Module, self)
         sampling = _SamplingParams(
             do_sample=do_sample,
             temperature=temperature,
@@ -753,24 +949,11 @@ class CausalLMMixin:
         past, compiled_step = _setup_causal_cache(
             model, use_cache, cache_implementation, max_cache_len, stop_len
         )
+        decoder = _CausalDecoder(model, padding, past, compiled_step, T_prompt)
         model_input = input_ids
 
-        for _step in range(stop_len - T_prompt):
-            if compiled_step is not None and _step > 0:
-                cp = lucid.tensor([T_prompt + _step - 1], device=dev).long()
-                last_logits = compiled_step(model_input, cp)
-            elif past is not None:
-                try:
-                    outputs = model(model_input, use_cache=True, past_key_values=past)
-                except TypeError as exc:
-                    if isinstance(exc, _C_engine.LucidError):
-                        raise
-                    past = None
-                    compiled_step = None
-                    outputs = model(lucid.stack(out_tokens, dim=1))
-                last_logits = _extract_last_logits(outputs)
-            else:
-                last_logits = _extract_last_logits(model(lucid.stack(out_tokens, dim=1)))
+        for step in range(stop_len - T_prompt):
+            last_logits = decoder.next_logits(step, model_input, out_tokens)
             finished = _select_next_ondevice(last_logits, out_tokens, finished, sampling)
             if sampling.eos_token_id is not None and bool(lucid.all(finished).item()):
                 break

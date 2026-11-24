@@ -30,6 +30,7 @@ __all__ = [
     "init_text_weights",
     "update_causal_kv_and_bias",
     "resolve_causal_positions",
+    "resolve_generation_length",
     "embed_tokens",
     "kv_prefix",
     "prepend_kv_prefix",
@@ -392,10 +393,11 @@ def prepend_kv_prefix(
 
 def resolve_causal_positions(
     input_ids: Tensor,
-    position_ids: Tensor,
+    position_table: Tensor,
     max_pos: int,
     past_key_values: Cache | None,
     cache_position: Tensor | None,
+    position_ids: Tensor | None = None,
 ) -> tuple[int, Tensor, Tensor]:
     """Validate total sequence length and return ``(past_len, cache_position, pos_ids)`` for decoding.
 
@@ -405,7 +407,7 @@ def resolve_causal_positions(
     ----------
     input_ids : Tensor
         ``(B, T)`` ids (or ``(B, T, H)`` embeddings) of the new tokens.
-    position_ids : Tensor
+    position_table : Tensor
         ``(1, max_pos)`` table of positions to slice.
     max_pos : int
         Longest total sequence the model has positions for.
@@ -413,11 +415,22 @@ def resolve_causal_positions(
         The cache holding earlier tokens.
     cache_position : Tensor or None
         Absolute positions of the new tokens, if the caller knows them.
+    position_ids : Tensor or None, optional
+        ``(B, T)`` or ``(1, T)`` position of each new token as the caller
+        counts it -- a left-padded row starts at 0 on its first real token, not
+        on the pad.  Replaces the positions the cache offset would give;
+        ``cache_position`` still says which cache slot each token is written to.
 
     Returns
     -------
     tuple of (int, Tensor, Tensor)
         Cached length, the new tokens' cache positions, and their position ids.
+
+    Raises
+    ------
+    ValueError
+        The total length exceeds ``max_pos``, or ``position_ids`` does not cover
+        the ``T`` new tokens.
     """
     T = int(input_ids.shape[1])
     past_len = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -427,12 +440,62 @@ def resolve_causal_positions(
         )
     if cache_position is None:
         cache_position = lucid.arange(past_len, past_len + T, device=input_ids.device.type).long()
+    if position_ids is not None:
+        if position_ids.ndim != 2 or int(position_ids.shape[1]) != T:
+            raise ValueError(
+                f"position_ids must have shape (B, {T}) to match the {T} new tokens, "
+                f"got {tuple(position_ids.shape)}"
+            )
+        return past_len, cache_position, position_ids.long()
     pos_ids = (
         cache_position.reshape(1, T)
         if isinstance(past_key_values, StaticCache)
-        else position_ids[:, past_len : past_len + T]
+        else position_table[:, past_len : past_len + T]
     )
     return past_len, cache_position, pos_ids
+
+
+def resolve_generation_length(
+    max_length: int, max_new_tokens: int | None, prompt_length: int
+) -> int:
+    """The total length a generation stops at, ``prompt_length`` included.
+
+    ``max_new_tokens`` counts what is generated on top of the prompt, so it
+    wins over ``max_length`` (the total) when both are given -- the reference's
+    precedence.  An encoder-decoder's "prompt" is its start token.
+
+    Parameters
+    ----------
+    max_length : int
+        Cap on the total length, prompt included.
+    max_new_tokens : int or None
+        Cap on the new tokens alone; ``None`` leaves ``max_length`` in force.
+    prompt_length : int
+        Tokens the generation starts from.
+
+    Returns
+    -------
+    int
+        The total length to stop at.
+
+    Raises
+    ------
+    ValueError
+        ``max_new_tokens`` is negative.
+
+    Examples
+    --------
+    >>> from lucid.models._utils._text import resolve_generation_length
+    >>> resolve_generation_length(20, None, 4)
+    20
+    >>> resolve_generation_length(20, 5, 4)
+    9
+    """
+    if max_new_tokens is None:
+        return int(max_length)
+    if int(max_new_tokens) < 0:
+        raise ValueError(f"max_new_tokens must be >= 0, got {max_new_tokens}")
+    return prompt_length + int(max_new_tokens)
 
 
 def flatten_multiple_choice_inputs(
