@@ -8,6 +8,7 @@ _detection      Detection helpers (box_ops, NMS, anchors, RoI ops, FPN, RPN,
                 Hungarian/Kuhn-Munkres assignment …)
 _text           Text-LM helpers (activation dispatch, attention mask …)
 _generative     Generative helpers (β-schedule, Gaussian KL, reparam, …)
+_patch_grid     The input-size check of a fixed-grid patch model (ViT, I-JEPA, CLIP, DiT)
 
 Most callers should import directly from the sub-module:
 

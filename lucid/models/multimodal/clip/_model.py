@@ -33,7 +33,7 @@ from lucid._tensor.tensor import Tensor
 from lucid.models._base import PretrainedModel
 from lucid.models._tasks import ImageClassificationModel
 from lucid.models._output import ModelOutput
-from lucid.models._utils._classification import check_patch_grid
+from lucid.models._utils._patch_grid import check_patch_grid
 from lucid.models.multimodal.clip._towers import _TransformerTower
 from lucid.models.multimodal.clip._config import CLIPConfig
 
@@ -411,8 +411,6 @@ class CLIPModel(PretrainedModel):
         ------
         ValueError
             If the images are not ``config.image_size`` pixels on each side.
-            The position table is sized for that one grid; an off-grid size
-            would otherwise drop its border unread.
 
         Examples
         --------
@@ -502,6 +500,11 @@ class CLIPModel(PretrainedModel):
         -------
         CLIPOutput
             Embeddings, both logit matrices, and optionally the loss.
+
+        Raises
+        ------
+        ValueError
+            If the images are not ``config.image_size`` pixels on each side.
         """
         image_embeds = self.encode_image(pixel_values)
         text_embeds = self.encode_text(input_ids)
@@ -582,6 +585,11 @@ class CLIPForZeroShotImageClassification(ImageClassificationModel):
         -------
         CLIPZeroShotOutput
             ``logits`` is ``(B, num_prompts)``.
+
+        Raises
+        ------
+        ValueError
+            If the images are not ``config.image_size`` pixels on each side.
         """
         image_embeds = self.clip.encode_image(pixel_values)
         text_embeds = self.clip.encode_text(prompt_ids)

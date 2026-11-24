@@ -27,6 +27,7 @@ import lucid
 import lucid.nn as nn
 from lucid._dtype import _float32_or_wider
 from lucid._tensor.tensor import Tensor
+from lucid.models._utils._patch_grid import check_patch_grid
 
 __all__ = [
     "timestep_embedding",
@@ -168,12 +169,14 @@ def check_latent_size(height: int, width: int, grid: int, patch: int, family: st
 
     The position table holds one entry per patch of a ``grid x grid`` grid
     and :func:`unpatchify` folds the tokens back into a square of side
-    ``grid * patch``, so the network takes that one size.  Before this
-    check another size failed at ``tokens + pos_embed`` as an engine
-    broadcast that named neither size, and a side the patch embedding
-    rounds down onto the built grid (9 against an 8 build of 2 px patches)
-    answered silently, with an output of the built size rather than the
-    input's.
+    ``grid * patch``, so the network takes that one size.  The rule is
+    ``lucid.models._utils._patch_grid.check_patch_grid``'s, the one
+    every fixed-grid patch model shares; this only says it in latent terms
+    (``sample_size`` to rebuild, "latent" in the message).  Before the check
+    another size failed at ``tokens + pos_embed`` as an engine broadcast
+    that named neither size, and a side the patch embedding rounds down onto
+    the built grid (9 against an 8 build of 2 px patches) answered silently,
+    with an output of the built size rather than the input's.
 
     Parameters
     ----------
@@ -197,19 +200,14 @@ def check_latent_size(height: int, width: int, grid: int, patch: int, family: st
     ...     check_latent_size)
     >>> check_latent_size(8, 8, 4, 2, "DiT")
     """
-    side = grid * patch
-    if (height, width) == (side, side):
-        return
-    rebuild = (
-        f", or build the model with sample_size={height}"
-        if height == width and height % patch == 0
-        else ""
-    )
-    raise ValueError(
-        f"{family} is built for {side}x{side} latents: its position table "
-        f"holds one entry per patch of a {grid}x{grid} grid of {patch} px "
-        f"patches.  Got {height}x{width}.  Resize the latent to "
-        f"{side}x{side}{rebuild}."
+    check_patch_grid(
+        family,
+        height,
+        width,
+        image_size=grid * patch,
+        patch_size=patch,
+        noun="latent",
+        size_field="sample_size",
     )
 
 

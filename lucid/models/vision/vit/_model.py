@@ -21,7 +21,7 @@ import lucid
 import lucid.nn as nn
 import lucid.nn.functional as F
 from lucid._tensor.tensor import Tensor
-from lucid.models._utils._classification import check_patch_grid
+from lucid.models._utils._patch_grid import check_patch_grid
 from lucid.models._utils._common import init_transformer_trunc_normal
 from lucid.models._base import PretrainedModel
 from lucid.models._tasks import ImageClassificationModel
@@ -457,6 +457,23 @@ class ViT(PretrainedModel, BackboneMixin):
 
     @override
     def forward(self, x: Tensor) -> BaseModelOutput:
+        """Encode images into the pooled feature.
+
+        Parameters
+        ----------
+        x : Tensor
+            Images ``(B, C, H, W)``.
+
+        Returns
+        -------
+        BaseModelOutput
+            ``last_hidden_state`` of shape ``(B, 1, dim)``, the pooled feature.
+
+        Raises
+        ------
+        ValueError
+            If the images are not ``config.image_size`` pixels on each side.
+        """
         feat = self.forward_features(x)
         # Unsqueeze to (B, 1, dim) so BaseModelOutput is spatially consistent
         return BaseModelOutput(last_hidden_state=feat.unsqueeze(1))
@@ -600,6 +617,27 @@ class ViTForImageClassification(ImageClassificationModel, ClassificationHeadMixi
 
     @override
     def forward(self, x: Tensor, labels: Tensor | None = None) -> ImageClassificationOutput:
+        """Classify images.
+
+        Parameters
+        ----------
+        x : Tensor
+            Images ``(B, C, H, W)``.
+        labels : Tensor or None, optional
+            Class indices ``(B,)``; with them the cross-entropy comes back
+            beside the logits.
+
+        Returns
+        -------
+        ImageClassificationOutput
+            ``logits`` ``(B, num_classes)``, and ``loss`` — ``None`` unless
+            ``labels`` were given.
+
+        Raises
+        ------
+        ValueError
+            If the images are not ``config.image_size`` pixels on each side.
+        """
         B = x.shape[0]
         x = self.patch_embed(x)
         cls = self.cls_token.expand(B, -1, -1)

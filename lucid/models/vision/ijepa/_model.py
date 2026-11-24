@@ -30,8 +30,8 @@ from lucid._tensor.tensor import Tensor
 from lucid._types import DeviceLike
 from lucid.models._base import PretrainedModel
 from lucid.models._mixins import BackboneMixin, ClassificationHeadMixin, FeatureInfo
-from lucid.models._utils._classification import check_patch_grid
 from lucid.models._utils._common import host_random, update_averages
+from lucid.models._utils._patch_grid import check_patch_grid
 from lucid.models._output import ImageClassificationOutput, ModelOutput
 from lucid.models._tasks import ImageClassificationModel
 from lucid.models.vision._common._transformers import (
@@ -651,6 +651,11 @@ class IJEPAForImageClassification(ImageClassificationModel, ClassificationHeadMi
         -------
         ImageClassificationOutput
             Logits ``(B, num_classes)``, and the loss when labels came.
+
+        Raises
+        ------
+        ValueError
+            If the images are not ``config.image_size`` pixels on each side.
         """
         logits = self.head(self.ijepa.encode(x))
         loss = None if labels is None else F.cross_entropy(logits, labels)

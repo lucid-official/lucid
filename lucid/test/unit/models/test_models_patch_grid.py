@@ -27,14 +27,14 @@ import lucid
 import lucid.models as M
 from lucid._C import engine as _C_engine
 from lucid.models._base import ModelConfig
-from lucid.models._utils._classification import check_patch_grid
+from lucid.models.generative._common._transformers import check_latent_size
+from lucid.models.generative.dit import DiTConfig, DiTModel
+from lucid.models._utils._patch_grid import check_patch_grid
 
 _BUILT = 32
 _PATCH = 16
 
-_VIT = dict(
-    image_size=_BUILT, patch_size=_PATCH, dim=32, depth=1, num_heads=2, num_classes=3
-)
+_VIT = dict(image_size=_BUILT, patch_size=_PATCH, dim=32, depth=1, num_heads=2, num_classes=3)
 _IJEPA = dict(
     image_size=_BUILT,
     patch_size=_PATCH,
@@ -111,9 +111,9 @@ def _build(factory: str, overrides: dict[str, object]) -> M.PretrainedModel:
 def _refusal(run: Callable[..., lucid.Tensor], model: M.PretrainedModel, h: int, w: int) -> str:
     with lucid.no_grad(), pytest.raises(ValueError) as caught:
         run(model, lucid.rand(2, 3, h, w))
-    assert not isinstance(caught.value, _C_engine.LucidError), (
-        f"{h}x{w} reached the engine instead of the grid check: {caught.value}"
-    )
+    assert not isinstance(
+        caught.value, _C_engine.LucidError
+    ), f"{h}x{w} reached the engine instead of the grid check: {caught.value}"
     return str(caught.value)
 
 
@@ -165,11 +165,7 @@ class TestFixedGridRefusesOtherSizes:
     """Every public entry into ViT, I-JEPA and CLIP's tower, at sizes that used to slip by."""
 
     def test_the_built_size_answers(
-        self,
-        _id: str,
-        factory: str,
-        overrides: dict[str, object],
-        run: Callable[..., lucid.Tensor],
+        self, _id: str, factory: str, overrides: dict[str, object], run: Callable[..., lucid.Tensor]
     ) -> None:
         model = _build(factory, overrides)
         with lucid.no_grad():
@@ -240,10 +236,47 @@ def test_a_training_step_runs_at_the_built_size_and_not_off_grid() -> None:
     opt.step()
 
 
-# ── the sweep: every config with a patch size has a stated answer ────────────
+class TestLatentCheckDelegates:
+    """``check_latent_size`` is this rule in a latent's words, not a second one."""
+
+    def test_the_built_latent_passes(self) -> None:
+        check_latent_size(8, 8, 4, 2, "DiT")
+
+    def test_another_whole_grid_is_refused_in_latent_terms(self) -> None:
+        with pytest.raises(ValueError) as caught:
+            check_latent_size(12, 12, 4, 2, "DiT")
+        message = str(caught.value)
+        assert "DiT is built for 8x8 latents" in message
+        assert "a 4x4 grid of 2px patches" in message
+        assert "Got 12x12 pixels, which is 6x6 patches" in message
+        assert "Resize the latent to 8x8" in message
+        assert "sample_size=12" in message
+
+    def test_a_side_the_patch_rounds_down_onto_the_grid_is_refused(self) -> None:
+        # 9 against an 8 build of 2 px patches used to answer, at the built size.
+        with pytest.raises(ValueError) as caught:
+            check_latent_size(9, 9, 4, 2, "DiT")
+        message = str(caught.value)
+        assert "not a multiple of the 2px patch" in message
+        assert "sample_size=" not in message
+
+    def test_a_dit_forward_reaches_it(self) -> None:
+        config = DiTConfig(
+            sample_size=8, patch_size=2, hidden_size=32, depth=1, num_heads=4, num_classes=10
+        )
+        model = DiTModel(config).eval()
+        with lucid.no_grad(), pytest.raises(ValueError, match="DiT is built for 8x8 latents"):
+            model(lucid.randn((1, 4, 9, 9)), lucid.tensor([1.0]))
+
+
+# ── the sweep: every config with a patch field has a stated answer ───────────
 
 #: Refused by ``check_patch_grid`` at the patch embedding (this file).
 _REFUSED_HERE = {"ViTConfig", "IJEPAConfig", "CLIPConfig"}
+
+#: Refused by ``check_latent_size``, which delegates to ``check_patch_grid``
+#: with a latent's wording.
+_REFUSED_AS_LATENT = {"DiTConfig", "MeanFlowConfig", "TVMConfig", "DriftingConfig"}
 
 #: Refuse every size but the built one in the model, with their own message.
 _OWN_EXACT_CHECK = {
@@ -251,10 +284,6 @@ _OWN_EXACT_CHECK = {
     "VJEPA2Config",
     "VJEPA2ACConfig",
     "GenieConfig",  # ``_check_video``
-    "DiTConfig",  # ``check_latent_size``
-    "MeanFlowConfig",
-    "TVMConfig",
-    "DriftingConfig",
 }
 
 #: Accept another size on purpose.  CrossViT resizes both branches to the
@@ -271,14 +300,14 @@ def _patch_config_classes() -> set[str]:
             stack.append(sub)
             if not sub.__module__.startswith("lucid.models.") or sub.model_type == "base":
                 continue
-            if any("patch_size" in f.name for f in dataclasses.fields(sub)):
+            if any("patch" in f.name for f in dataclasses.fields(sub)):
                 found.add(sub.__name__)
     return found
 
 
-def test_every_config_with_a_patch_size_has_a_stated_answer() -> None:
+def test_every_config_with_a_patch_field_has_a_stated_answer() -> None:
     """A new patch-embedding family has to say what it does with another size."""
-    stated = _REFUSED_HERE | _OWN_EXACT_CHECK | _VARIABLE_RESOLUTION
+    stated = _REFUSED_HERE | _REFUSED_AS_LATENT | _OWN_EXACT_CHECK | _VARIABLE_RESOLUTION
     found = _patch_config_classes()
     assert found == stated, (
         f"unclassified: {sorted(found - stated)}; stale: {sorted(stated - found)} — "
@@ -287,8 +316,7 @@ def test_every_config_with_a_patch_size_has_a_stated_answer() -> None:
 
 
 @pytest.mark.xfail(
-    strict=True,
-    reason="LCD-1115: Swin stem drops a non-multiple border; the reference pads",
+    strict=True, reason="LCD-1115: Swin stem drops a non-multiple border; the reference pads"
 )
 def test_swin_stem_pads_a_non_multiple_like_the_reference() -> None:
     lucid.manual_seed(0)
