@@ -976,9 +976,9 @@ def test_every_op_of_the_table_is_pinned() -> None:
     pinned = {row.op for row in _TABLE.values() if row.op is not None}
     elsewhere = set(BOOL_REFUSED) & PINNED_OPS
     missing = sorted(owned - pinned - elsewhere)
-    assert pinned | elsewhere == owned, (
-        f"missing a row: {missing}; not in either list: {sorted(pinned - owned)}"
-    )
+    assert (
+        pinned | elsewhere == owned
+    ), f"missing a row: {missing}; not in either list: {sorted(pinned - owned)}"
 
 
 def test_every_loss_that_can_refuse_a_bool_has_a_row() -> None:

@@ -369,11 +369,10 @@ def test_contract_integer_columns_are_current(ref: ModuleType) -> None:
         f"recorded but not measured: {sorted(set(contract.symbols) - set(now.accepted))}"
     )
     got, want = integers(now.accepted), integers(contract.symbols)
-    assert got == want, (
-        f"the accepted integer widths of dtype_contract.json are stale; {hint}\n"
-        + "\n".join(
-            f"  {name}: {want[name]} -> {got[name]}" for name in want if got[name] != want[name]
-        )
+    assert (
+        got == want
+    ), f"the accepted integer widths of dtype_contract.json are stale; {hint}\n" + "\n".join(
+        f"  {name}: {want[name]} -> {got[name]}" for name in want if got[name] != want[name]
     )
     assert now.int_refusals() == contract.int_refusals, hint
     assert now.int_widths() == contract.int_widths, hint

@@ -351,9 +351,11 @@ _BY_CODE: Mapping[tuple[str, str], tuple[Rule | None, ...]] = MappingProxyType(
 #: the float slot, then the complex one.
 _COMPLEX_CODES = frozenset({_C_engine.C64.value, _C_engine.C128.value})
 _SLOT: tuple[int, ...] = tuple(
-    code
-    if code <= LAST_INTEGRAL_CODE
-    else LAST_INTEGRAL_CODE + (2 if code in _COMPLEX_CODES else 1)
+    (
+        code
+        if code <= LAST_INTEGRAL_CODE
+        else LAST_INTEGRAL_CODE + (2 if code in _COMPLEX_CODES else 1)
+    )
     for code in range(max(d.value for d in _ENGINE_TO_DTYPE) + 1)
 )
 
