@@ -14,6 +14,7 @@
 //     written.
 
 #include <cmath>
+#include <complex>
 #include <limits>
 #include <vector>
 
@@ -158,4 +159,71 @@ TEST(BlasEmptyExtents, TrsmOnASingularTriangleGivesTheIeeeResult) {
     const std::vector<double> Ud = {1, 2, 0, 0};
     cpu::dtrsm(true, false, 2, 1, Ud.data(), 2, z.data(), 1);
     EXPECT_TRUE(std::isnan(z[1]));
+}
+
+TEST(BlasComplex, EmptyContractionWithBetaZeroWritesZerosOverNaN) {
+    const std::complex<float> nan{kNan, kNan};
+    std::vector<std::complex<float>> C(12, nan);
+    cpu::cgemm(false, false, 3, 4, 0, {1.0f, 0.0f}, nullptr, 0, nullptr, 4, {0.0f, 0.0f}, C.data(),
+               4);
+    for (const auto& v : C)
+        EXPECT_EQ(v, (std::complex<float>{0.0f, 0.0f}));
+
+    std::vector<std::complex<double>> D(6, {1.5, 0.0});
+    cpu::zgemm(false, false, 2, 3, 0, {1.0, 0.0}, nullptr, 0, nullptr, 3, {0.0, 1.0}, D.data(), 3);
+    for (const auto& v : D)
+        EXPECT_EQ(v, (std::complex<double>{0.0, 1.5}));  // beta = i scales the old C
+}
+
+TEST(BlasComplex, GemmIsAPlainProductNotAConjugateOne) {
+    // [[i, 1]] (1 x 2) times [[i], [2]] (2 x 1) = i*i + 1*2 = 1.  A conjugate
+    // product would give (-i)*i + 2 = 3.
+    const std::vector<std::complex<double>> A = {{0, 1}, {1, 0}};
+    const std::vector<std::complex<double>> B = {{0, 1}, {2, 0}};
+    std::vector<std::complex<double>> C(1);
+    cpu::zgemm(false, false, 1, 1, 2, {1.0, 0.0}, A.data(), 2, B.data(), 1, {0.0, 0.0}, C.data(),
+               1);
+    EXPECT_EQ(C[0], (std::complex<double>{1.0, 0.0}));
+    // The transpose flag is a plain transpose too: A^T (2 x 1) as a 2 x 1 operand.
+    std::vector<std::complex<double>> D(1);
+    cpu::zgemm(true, false, 1, 1, 2, {1.0, 0.0}, A.data(), 1, B.data(), 1, {0.0, 0.0}, D.data(), 1);
+    EXPECT_EQ(D[0], (std::complex<double>{1.0, 0.0}));
+}
+
+TEST(BlasComplex, TrsmWithNoRowsOrNoRightHandSidesIsNotTouched) {
+    const std::vector<std::complex<float>> A(9, {1.0f, 1.0f});
+    std::vector<std::complex<float>> sentinel(2, {kPad, kPad});
+    cpu::ctrsm(true, false, 3, 0, A.data(), 3, sentinel.data(), 0);
+    cpu::ctrsm(false, true, 0, 2, nullptr, 0, sentinel.data(), 2);
+    std::vector<std::complex<double>> dsentinel(2, {kPad, kPad});
+    cpu::ztrsm(true, false, 0, 0, nullptr, 0, dsentinel.data(), 0);
+    for (const auto& v : sentinel)
+        EXPECT_EQ(v, (std::complex<float>{kPad, kPad}));
+    for (const auto& v : dsentinel)
+        EXPECT_EQ(v, (std::complex<double>{kPad, kPad}));
+}
+
+TEST(BlasComplex, TrsmSolvesBothTrianglesInPlace) {
+    // Upper [[2i, 1], [x, 4]] z = [2i * (1 + i) + 2, 8]: back substitution
+    // gives z1 = 2, z0 = (b0 - 1 * 2) / (2i) = 1 + i.  The strict lower entry
+    // is NaN and must not be read.
+    const std::complex<double> nan{kNan, kNan};
+    const std::vector<std::complex<double>> U = {{0, 2}, {1, 0}, nan, {4, 0}};
+    std::vector<std::complex<double>> b = {std::complex<double>{0, 2} * std::complex<double>{1, 1} +
+                                               std::complex<double>{2, 0},
+                                           {8, 0}};
+    cpu::ztrsm(true, false, 2, 1, U.data(), 2, b.data(), 1);
+    EXPECT_NEAR(b[0].real(), 1.0, 1e-12);
+    EXPECT_NEAR(b[0].imag(), 1.0, 1e-12);
+    EXPECT_NEAR(b[1].real(), 2.0, 1e-12);
+    EXPECT_NEAR(b[1].imag(), 0.0, 1e-12);
+
+    // Lower unit [[?, 0], [3i, ?]]: z0 = 1 + i, z1 = b1 - 3i * z0.
+    const std::vector<std::complex<float>> L = {{kNan, kNan}, {kNan, kNan}, {0, 3}, {kNan, kNan}};
+    std::vector<std::complex<float>> c = {{1, 1}, {5, 0}};
+    cpu::ctrsm(false, true, 2, 1, L.data(), 2, c.data(), 1);
+    EXPECT_EQ(c[0], (std::complex<float>{1, 1}));
+    const std::complex<float> want1 =
+        std::complex<float>{5, 0} - std::complex<float>{0, 3} * std::complex<float>{1, 1};
+    EXPECT_EQ(c[1], want1);
 }

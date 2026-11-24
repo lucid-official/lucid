@@ -1,8 +1,8 @@
 // lucid/_C/backend/cpu/Blas.cpp
 //
 // Implements the BLAS wrapper functions declared in Blas.h by delegating
-// directly to cblas_{s,d}gemm, cblas_{s,d}gemv, cblas_{s,d}axpy and
-// cblas_{s,d}trsm from Apple Accelerate.  All calls use CblasRowMajor
+// directly to cblas_{s,d,c,z}gemm, cblas_{s,d}gemv, cblas_{s,d}axpy and
+// cblas_{s,d,c,z}trsm from Apple Accelerate.  All calls use CblasRowMajor
 // storage order because Lucid tensors are row-major by default.
 //
 // Empty extents
@@ -146,6 +146,45 @@ void dgemm(bool transA,
     cblas_dgemm(CblasRowMajor, T(transA), T(transB), M, N, K, alpha, A, lda, B, ldb, beta, C, ldc);
 }
 
+void cgemm(bool transA,
+           bool transB,
+           int M,
+           int N,
+           int K,
+           Complex64 alpha,
+           const Complex64* A,
+           int lda,
+           const Complex64* B,
+           int ldb,
+           Complex64 beta,
+           Complex64* C,
+           int ldc) {
+    if (gemm_empty(M, N, K, beta, C, ldc))
+        return;
+    // The complex routines take alpha and beta by address.
+    cblas_cgemm(CblasRowMajor, T(transA), T(transB), M, N, K, &alpha, A, lda, B, ldb, &beta, C,
+                ldc);
+}
+
+void zgemm(bool transA,
+           bool transB,
+           int M,
+           int N,
+           int K,
+           Complex128 alpha,
+           const Complex128* A,
+           int lda,
+           const Complex128* B,
+           int ldb,
+           Complex128 beta,
+           Complex128* C,
+           int ldc) {
+    if (gemm_empty(M, N, K, beta, C, ldc))
+        return;
+    cblas_zgemm(CblasRowMajor, T(transA), T(transB), M, N, K, &alpha, A, lda, B, ldb, &beta, C,
+                ldc);
+}
+
 void sgemv(bool transA,
            int M,
            int N,
@@ -206,6 +245,30 @@ void dtrsm(bool upper, bool unit_diag, int M, int N, const double* A, int lda, d
     if (M <= 0 || N <= 0)
         return;
     cblas_dtrsm(CblasRowMajor, CblasLeft, Uplo(upper), CblasNoTrans, Diag(unit_diag), M, N, 1.0, A,
+                lda, B, ldb);
+}
+
+void ctrsm(
+    bool upper, bool unit_diag, int M, int N, const Complex64* A, int lda, Complex64* B, int ldb) {
+    if (M <= 0 || N <= 0)
+        return;
+    const Complex64 one{1.0f, 0.0f};
+    cblas_ctrsm(CblasRowMajor, CblasLeft, Uplo(upper), CblasNoTrans, Diag(unit_diag), M, N, &one, A,
+                lda, B, ldb);
+}
+
+void ztrsm(bool upper,
+           bool unit_diag,
+           int M,
+           int N,
+           const Complex128* A,
+           int lda,
+           Complex128* B,
+           int ldb) {
+    if (M <= 0 || N <= 0)
+        return;
+    const Complex128 one{1.0, 0.0};
+    cblas_ztrsm(CblasRowMajor, CblasLeft, Uplo(upper), CblasNoTrans, Diag(unit_diag), M, N, &one, A,
                 lda, B, ldb);
 }
 

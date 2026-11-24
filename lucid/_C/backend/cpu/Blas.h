@@ -4,15 +4,20 @@
 // for matrix multiplication, matrix-vector multiplication, scaled vector
 // accumulation and triangular solves.  All functions assume row-major storage
 // (CblasRowMajor) and map the bool flags to the CBLAS enums.  "s" prefix =
-// float32; "d" prefix = float64.
+// float32; "d" prefix = float64; "c" / "z" = complex64 / complex128.
 
 #pragma once
 
+#include <complex>
 #include <cstddef>
 
 #include "../../api.h"
 
 namespace lucid::backend::cpu {
+
+// The complex dtypes' host types, as the complex BLAS routines take them.
+using Complex64 = std::complex<float>;
+using Complex128 = std::complex<double>;
 
 // Single-precision general matrix multiply (GEMM).
 //
@@ -106,6 +111,41 @@ LUCID_INTERNAL void dgemm(bool transA,
                           int ldb,
                           double beta,
                           double* C,
+                          int ldc);
+
+// Complex general matrix multiply (GEMM), single and double precision.
+//
+// ``cgemm`` is ``cblas_cgemm`` over ``complex64`` and ``zgemm`` is
+// ``cblas_zgemm`` over ``complex128``; the contract is ``sgemm``'s.  A
+// transpose flag is a plain transpose, not a conjugate transpose, as it is
+// for the real routines: the engine's backward formulas conjugate around the
+// product themselves (``autograd/ComplexGrad.h``).
+LUCID_INTERNAL void cgemm(bool transA,
+                          bool transB,
+                          int M,
+                          int N,
+                          int K,
+                          Complex64 alpha,
+                          const Complex64* A,
+                          int lda,
+                          const Complex64* B,
+                          int ldb,
+                          Complex64 beta,
+                          Complex64* C,
+                          int ldc);
+
+LUCID_INTERNAL void zgemm(bool transA,
+                          bool transB,
+                          int M,
+                          int N,
+                          int K,
+                          Complex128 alpha,
+                          const Complex128* A,
+                          int lda,
+                          const Complex128* B,
+                          int ldb,
+                          Complex128 beta,
+                          Complex128* C,
                           int ldc);
 
 // Single-precision general matrix-vector multiply (GEMV).
@@ -322,5 +362,18 @@ strsm(bool upper, bool unit_diag, int M, int N, const float* A, int lda, float* 
 // Accelerate.framework ``cblas_dtrsm``.
 LUCID_INTERNAL void
 dtrsm(bool upper, bool unit_diag, int M, int N, const double* A, int lda, double* B, int ldb);
+
+// Complex triangular solve with a matrix right-hand side (TRSM), single and
+// double precision.
+//
+// ``ctrsm`` is ``cblas_ctrsm`` over ``complex64`` and ``ztrsm`` is
+// ``cblas_ztrsm`` over ``complex128``; the contract is ``strsm``'s (side Left,
+// no transpose, $\alpha = 1$).  The substitution divides by the complex
+// diagonal, so an exactly-zero diagonal entry gives the IEEE result there too.
+LUCID_INTERNAL void
+ctrsm(bool upper, bool unit_diag, int M, int N, const Complex64* A, int lda, Complex64* B, int ldb);
+
+LUCID_INTERNAL void ztrsm(
+    bool upper, bool unit_diag, int M, int N, const Complex128* A, int lda, Complex128* B, int ldb);
 
 }  // namespace lucid::backend::cpu
