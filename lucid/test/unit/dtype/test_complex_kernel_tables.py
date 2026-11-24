@@ -437,24 +437,49 @@ def test_pow_of_a_zero_base_follows_the_std_pow_table(
 
     table = _ZERO_BASE_TABLES[(re_neg, im_neg)]
     for i, (row, col) in enumerate((r, c) for r in range(7) for c in range(7)):
-        want = table[row][col]
-        where = (
-            f"{base_id} ** ({_PART_IDS[row]}, {_PART_IDS[col]}j) = {got[i]!r}, table says {want}"
-        )
-        re_part, im_part = got[i].real, got[i].imag
-        if want == "Z":
-            assert re_part == 0 and im_part == 0, where
-            assert not np.signbit(re_part) and not np.signbit(im_part), where
-        elif want == "I":
-            assert re_part == np.inf and np.isnan(im_part), where
-        else:
-            assert np.isnan(re_part) and np.isnan(im_part), where
+        where = f"{base_id} ** ({_PART_IDS[row]}, {_PART_IDS[col]}j) = {got[i]!r}"
+        _assert_table_value(table[row][col], got[i], where)
+
+
+def _assert_table_value(want: str, got: complex, where: str) -> None:
+    """``got`` is the value ``want`` names: ``Z``, ``I`` or ``N``."""
+    re_part, im_part = got.real, got.imag
+    if want == "Z":
+        assert re_part == 0 and im_part == 0, where
+        assert not np.signbit(re_part) and not np.signbit(im_part), where
+    elif want == "I":
+        assert re_part == np.inf and np.isnan(im_part), where
+    else:
+        assert np.isnan(re_part) and np.isnan(im_part), where
+
+
+@pytest.mark.parametrize(("device", "dtype"), _PLACEMENTS)
+def test_pow_of_a_negative_zero_base_to_an_exponent_whose_product_with_pi_overflows(
+    device: str, dtype: lucid.dtype
+) -> None:
+    """At ``Re x = -0`` ``std::pow`` forms ``d * pi`` in the dtype's width: ``3e38`` overflows float32
+    to an infinity and takes the table's infinite-``d`` row, and stays finite in float64."""
+    name = str(dtype).removeprefix("lucid.")
+    narrow = dtype == lucid.complex64
+    # (Re y, Im y) -> the table's value for complex64, for complex128.
+    cases = {
+        (1.0, 3e38): ("Z", "Z"),
+        (1.0, -3e38): ("N", "Z"),
+        (-1.0, 3e38): ("N", "I"),
+        (-1.0, -3e38): ("I", "I"),
+    }
+    expo = np.array([complex(c, d) for c, d in cases], dtype=np.complex128)
+    base = np.full(expo.shape, complex(-0.0, 0.0), dtype=np.complex128)
+    got = _numpy(lucid.pow(_tensor(lucid, base, name, device), _tensor(lucid, expo, name, device)))
+    for value, key, (as_f32, as_f64) in zip(got, cases, cases.values(), strict=True):
+        _assert_table_value(as_f32 if narrow else as_f64, value, f"-0+0j ** {key} = {value!r}")
 
 
 #: The exponent parts the reference is held to, beyond the table's classes: finite magnitudes
-#: whose products with ``log`` overflow or underflow, and ``0.5``.
+#: whose products with ``log`` overflow or underflow, ``0.5``, and ``3e38``, whose product with
+#: ``pi`` overflows float32 (the imaginary part at ``Re x = -0``).
 _GRID_RE = [0.0, -0.0, 1.0, 2.5, -1.0, -2.5, _INF, -_INF, _NAN, 1e-30, 1e30, -1e30, 0.5]
-_GRID_IM = [0.0, -0.0, 1.0, -1.0, _INF, -_INF, _NAN, 1e-30, 1e30, -1e30, 3.0]
+_GRID_IM = [0.0, -0.0, 1.0, -1.0, _INF, -_INF, _NAN, 1e-30, 1e30, -1e30, 3.0, 3e38, -3e38]
 
 
 @pytest.mark.parity
@@ -463,7 +488,7 @@ _GRID_IM = [0.0, -0.0, 1.0, -1.0, _INF, -_INF, _NAN, 1e-30, 1e30, -1e30, 3.0]
 def test_pow_of_a_zero_base_matches_the_reference_over_a_grid(
     ref: ModuleType, base_id: str, device: str, dtype: lucid.dtype
 ) -> None:
-    """The 143 exponents of the grid, each signed zero, to the bit (NaN against NaN, the sign of a zero)."""
+    """Every exponent of the grid, each signed zero, to the bit (NaN against NaN, the sign of a zero)."""
     name = str(dtype).removeprefix("lucid.")
     re_neg, im_neg = _ZERO_BASES[base_id]
     base_value = complex(-0.0 if re_neg else 0.0, -0.0 if im_neg else 0.0)
@@ -530,7 +555,23 @@ def test_pow_patches_only_the_zero_lanes_in_every_layout(device: str, dtype: luc
     run(np.array(0j), np.array([0, 1, -1, 2.5], dtype=np.complex128))
 
 
-_SCALAR_EXPONENTS = [-2.5, -2.0, -1.0, -0.5, 0.5, 1.0, 2.0, 2.5]
+_ZERO_EXPONENT_XFAIL = pytest.mark.xfail(
+    strict=True,
+    raises=AssertionError,
+    reason="LCD-1090: complex z ** 0 gives NaN at a zero entry; the reference fills 1",
+)
+_SCALAR_EXPONENTS = [
+    -2.5,
+    -2.0,
+    -1.0,
+    -0.5,
+    0.5,
+    1.0,
+    2.0,
+    2.5,
+    pytest.param(0.0, marks=_ZERO_EXPONENT_XFAIL, id="0.0"),
+    pytest.param(0, marks=_ZERO_EXPONENT_XFAIL, id="0"),
+]
 
 
 @pytest.mark.parity
@@ -587,14 +628,36 @@ _GRAD_EXPOS = np.array(
 )
 
 
+#: The CPU stream's complex multiply recovers an infinity from ``inf * NaN`` (C99 Annex G); the
+#: reference's and Metal's multiply give NaN.  The gradient of ``pow`` multiplies by the forward
+#: value at a zero base, which is ``inf + NaN j`` for a negative real exponent.
+_GRAD_PLACEMENTS = [
+    (
+        pytest.param(
+            *p.values,
+            marks=pytest.mark.xfail(
+                strict=True,
+                raises=AssertionError,
+                reason="LCD-1091: CPU complex multiply recovers inf from inf*NaN (Annex G), "
+                "so the CPU pow gradient at a zero base differs",
+            ),
+            id=p.id,
+        )
+        if p.values[0] == "cpu"
+        else p
+    )
+    for p in _PLACEMENTS
+]
+
+
 @pytest.mark.parity
-@pytest.mark.parametrize(("device", "dtype"), [p for p in _PLACEMENTS if p.values[0] == "metal"])
+@pytest.mark.parametrize(("device", "dtype"), _GRAD_PLACEMENTS)
 def test_pow_gradient_at_a_zero_base_is_nan_where_the_reference_is(
     ref: ModuleType, device: str, dtype: lucid.dtype
 ) -> None:
     """Metal's gradient of ``0 ** y`` was a finite zero where the reference's is NaN, since the
-    forward value it differentiates was 0.  (The CPU stream's multiply recovers an infinity from
-    ``inf * NaN`` where the reference's is NaN, so its gradient at ``y = -1`` is ``-inf``.)"""
+    forward value it differentiates was 0.  On the CPU stream the gradient is ``-inf`` where the
+    reference's is NaN, at 6 of the 14 exponents for the base and 4 for the exponent (LCD-1091)."""
     name = str(dtype).removeprefix("lucid.")
 
     def grads(lib: ModuleType) -> list[np.ndarray]:
