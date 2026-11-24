@@ -589,11 +589,7 @@ def test_pow_of_a_scalar_zero_to_a_tensor_exponent(
     name = str(dtype).removeprefix("lucid.")
     expo = np.array([0, 1, -1, 2.5, -2.5, 1j, -1 + 1j], dtype=np.complex128)
     z, r = _tensor(lucid, expo, name, device), _tensor(ref, expo, name, device)
-    for got, want in (
-        (lucid.pow(0.0, z), ref.pow(0.0, r)),
-        (0**z, 0**r),
-        (0.0**z, 0.0**r),
-    ):
+    for got, want in ((lucid.pow(0.0, z), ref.pow(0.0, r)), (0**z, 0**r), (0.0**z, 0.0**r)):
         _assert_same_special_values(_numpy(got), _numpy(want), _TOL[name])
 
 
