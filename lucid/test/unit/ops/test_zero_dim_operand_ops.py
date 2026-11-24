@@ -170,6 +170,53 @@ def test_addr_with_a_complex_accumulator_and_real_vectors(vectors: lucid.dtype) 
     assert out.tolist() == [[3970 + 0j, 3970 + 0j]] * 2
 
 
+@pytest.mark.parity
+@pytest.mark.parametrize("accumulator", ["complex64", "complex128"])
+@pytest.mark.parametrize("vectors", ["float32", "float64", "int64"])
+@pytest.mark.parametrize(
+    "scalars",
+    [
+        pytest.param({"alpha": 1j}, id="alpha=1j"),
+        pytest.param({"alpha": 1 + 2j, "beta": 1 - 1j}, id="alpha=1+2j,beta=1-1j"),
+        pytest.param({"beta": 2j}, id="beta=2j"),
+        pytest.param({"beta": 0, "alpha": 1j}, id="beta=0,alpha=1j"),
+        pytest.param({}, id="default"),
+    ],
+)
+def test_addr_with_a_complex_accumulator_keeps_a_complex_scalars_imaginary_part(
+    accumulator: str, vectors: str, scalars: dict[str, complex], ref: ModuleType
+) -> None:
+    """Real vectors beside a complex accumulator: ``alpha`` scales the product after it is lifted.
+
+    The product is real (the engine's ``outer`` has no complex kernel), and a complex
+    ``alpha`` applied to it as a real tensor dropped its imaginary part:
+    ``alpha=1j`` gave ``1+0j`` where the reference gives ``[[1+3j, 1+4j], [1+6j, 1+8j]]``.
+    """
+    results = []
+    for lib in (lucid, ref):
+        results.append(
+            lib.addr(
+                lib.full((2, 2), 1, dtype=getattr(lib, accumulator)),
+                lib.tensor([1, 2], dtype=getattr(lib, vectors)),
+                lib.tensor([3, 4], dtype=getattr(lib, vectors)),
+                **scalars,
+            )
+        )
+    got, want = results
+    assert str(got.dtype).rsplit(".", 1)[-1] == str(want.dtype).rsplit(".", 1)[-1]
+    assert got.tolist() == want.tolist()
+
+
+def test_addr_complex_alpha_on_a_complex_accumulator_headline() -> None:
+    out = lucid.addr(
+        lucid.full((2, 2), 1, dtype=lucid.complex64),
+        lucid.tensor([1.0, 2.0]),
+        lucid.tensor([3.0, 4.0]),
+        alpha=1j,
+    )
+    assert out.tolist() == [[1 + 3j, 1 + 4j], [1 + 6j, 1 + 8j]]
+
+
 def _stack_cases(dtype: lucid.dtype) -> list[tuple[str, Sequence[lucid.Tensor]]]:
     zero = lucid.tensor(1, dtype=dtype)
     return [

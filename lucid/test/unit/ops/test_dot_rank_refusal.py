@@ -1,11 +1,16 @@
-"""``dot`` and ``vdot`` take two 1-D tensors and refuse every other rank (LCD-1061).
+"""The vector products refuse a vector that is not 1-D, as the reference does (LCD-1061).
 
-The engine's CPU kernel answered a pair of 2-D tensors (``int8 (1, 1) . (1, 1)`` was
-``tensor([[1]])``) and refused a 0-d pair with a kernel message.  The reference
-refuses everything but 1-D with a ``RuntimeError``: ``1D tensors expected, but got
-2D and 2D tensors``.  Every spelling goes through one adapter
-(:mod:`lucid._ops._products`), so ``Tensor.dot``, ``lucid.linalg.dot`` and ``vdot``
+``dot`` and ``vdot`` take two 1-D tensors.  The engine's CPU kernel answered a pair of
+2-D tensors (``int8 (1, 1) . (1, 1)`` was ``tensor([[1]])``) and refused a 0-d pair with
+a kernel message.  The reference refuses everything but 1-D with a ``RuntimeError``:
+``1D tensors expected, but got 2D and 2D tensors``.  Every spelling goes through one
+adapter (:mod:`lucid._ops._products`), so ``Tensor.dot``, ``lucid.linalg.dot`` and ``vdot``
 (which forwards to ``dot``) cannot drift apart.
+
+``outer`` (and ``ger``, which forwards to it) and ``addr`` take vectors too, and said
+``outer: requires 1-D inputs`` from the engine, a ``LucidError``; the reference names
+the operand: ``outer: Expected 1-D argument self, but got 2-D``,
+``addr: Expected 1-D argument vec1, but got 0-D``.
 """
 
 from collections.abc import Callable
@@ -129,3 +134,77 @@ def test_dot_accepts_and_refuses_the_ranks_the_reference_does(
         if got.tolist() != want.tolist():
             problems.append(f"{label}: {got.tolist()}, reference {want.tolist()}")
     assert not problems, "\n".join(problems)
+
+
+_PRODUCTS: dict[str, Callable[[Any, Any], Any]] = {
+    "Tensor.outer": lambda a, b: a.outer(b),
+    "linalg.outer": lambda a, b: lucid.linalg.outer(a, b),
+    "ger": lambda a, b: lucid.ger(a, b),
+    "Tensor.ger": lambda a, b: a.ger(b),
+    "addr": lambda a, b: lucid.addr(lucid.zeros((3, 3), dtype=a.dtype), a, b),
+    "Tensor.addr": lambda a, b: lucid.zeros((3, 3), dtype=a.dtype).addr(a, b),
+}
+
+_REFERENCE_PRODUCTS: dict[str, Callable[[Any, Any, ModuleType], Any]] = {
+    "Tensor.outer": lambda a, b, ref: a.outer(b),
+    "linalg.outer": lambda a, b, ref: ref.outer(a, b),
+    "ger": lambda a, b, ref: ref.ger(a, b),
+    "Tensor.ger": lambda a, b, ref: a.ger(b),
+    "addr": lambda a, b, ref: ref.addr(ref.zeros((3, 3), dtype=a.dtype), a, b),
+    "Tensor.addr": lambda a, b, ref: ref.zeros((3, 3), dtype=a.dtype).addr(a, b),
+}
+
+_RANK_PAIRS = [(0, 1), (1, 0), (2, 1), (1, 2), (0, 0), (2, 2), (3, 1)]
+
+
+@pytest.mark.parametrize("spelling", list(_PRODUCTS))
+@pytest.mark.parametrize(("rank_a", "rank_b"), _RANK_PAIRS)
+def test_outer_and_addr_refuse_a_vector_of_another_rank(
+    spelling: str, rank_a: int, rank_b: int, device: str
+) -> None:
+    a = _ones((3,) * rank_a, lucid.float32, device)
+    b = _ones((3,) * rank_b, lucid.float32, device)
+    with pytest.raises(_C_engine.ShapeMismatch) as raised:
+        _PRODUCTS[spelling](a, b)
+    assert isinstance(raised.value, RuntimeError)
+    assert "Expected 1-D argument" in str(raised.value)
+
+
+@pytest.mark.parity
+@pytest.mark.parametrize("spelling", list(_PRODUCTS))
+@pytest.mark.parametrize(("rank_a", "rank_b"), _RANK_PAIRS)
+def test_outer_and_addr_name_the_operand_as_the_reference_does(
+    spelling: str, rank_a: int, rank_b: int, ref: ModuleType
+) -> None:
+    shape_a, shape_b = (3,) * rank_a, (3,) * rank_b
+    with pytest.raises(RuntimeError) as refusal:
+        _REFERENCE_PRODUCTS[spelling](
+            ref.ones(shape_a, dtype=ref.float32), ref.ones(shape_b, dtype=ref.float32), ref
+        )
+    with pytest.raises(RuntimeError) as raised:
+        _PRODUCTS[spelling](
+            _ones(shape_a, lucid.float32, "cpu"), _ones(shape_b, lucid.float32, "cpu")
+        )
+    assert str(raised.value) == str(refusal.value)
+
+
+@pytest.mark.parametrize("spelling", ["addr", "Tensor.addr"])
+def test_addr_refuses_an_accumulator_that_does_not_expand_to_the_product(spelling: str) -> None:
+    """A 3-D accumulator used to broadcast the product into a 3-D result."""
+    vec = lucid.ones(3)
+    accumulator = lucid.zeros((2, 3, 3))
+    call = (
+        (lambda: lucid.addr(accumulator, vec, vec))
+        if spelling == "addr"
+        else (lambda: accumulator.addr(vec, vec))
+    )
+    with pytest.raises(_C_engine.ShapeMismatch):
+        call()
+
+
+@pytest.mark.parametrize("accumulator_shape", [(), (3,), (1, 3), (3, 1), (3, 3)])
+def test_addr_still_expands_an_accumulator_to_the_product(
+    accumulator_shape: tuple[int, ...],
+) -> None:
+    out = lucid.addr(lucid.zeros(accumulator_shape), lucid.ones(3), lucid.ones(3))
+    assert out.shape == (3, 3)

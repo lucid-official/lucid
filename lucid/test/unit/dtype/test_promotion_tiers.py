@@ -85,6 +85,7 @@ _SWEEP: dict[str, _Call] = {
     "inner(nd, 0d)": lambda lib, z, d: _inner(lib, d, z),
     "Tensor.inner": lambda lib, z, d: z.inner(d),
     "lerp(0d weight)": lambda lib, z, d: _lerp(lib, z, d),
+    "addr(0d input)": lambda lib, z, d: lib.addr(z, d, d),
     "column_stack(0d, nd)": lambda lib, z, d: _column_stack(lib, z, d),
     "column_stack(nd, 0d)": lambda lib, z, d: _column_stack(lib, d, z),
 }
@@ -242,31 +243,6 @@ def test_zero_dim_beside_dimensioned_matches_the_reference(
     op: str, device: str, ref: ModuleType
 ) -> None:
     compared, problems = _cells_off_the_reference(_SWEEP[op], device, ref)
-    assert compared > 0
-    assert not problems, f"{len(problems)} cell(s):\n  " + "\n  ".join(problems[:20])
-
-
-def _addr(lib: Any, z: Any, d: Any) -> Any:
-    """``0 + d (x) d`` with the 0-d ``z`` as the accumulator.
-
-    The accumulator is zeroed (``z * 0`` keeps its dtype) so that only the product
-    is compared: the reference rounds a half-precision ``z + d * d`` once, Lucid
-    twice, a difference this test is not about.
-    """
-    return lib.addr(z * 0, d, d)
-
-
-@pytest.mark.parity
-def test_addr_forms_its_product_at_the_dtype_its_operands_promote_to(ref: ModuleType) -> None:
-    """The reference expands the 0-d accumulator and multiplies at the promoted dtype.
-
-    ``addr(int16_0d, int8[1], int8[1])`` is ``int16``, ``63 * 63`` is ``3969``: Lucid
-    ranked the accumulator below the vectors, multiplied them in ``int8`` and wrapped.
-
-    CPU only: an ``int8`` ``outer`` saturates on Metal where the CPU wraps, for operands
-    of one dtype, so no accumulator is involved.
-    """
-    compared, problems = _cells_off_the_reference(_addr, "cpu", ref)
     assert compared > 0
     assert not problems, f"{len(problems)} cell(s):\n  " + "\n  ".join(problems[:20])
 
