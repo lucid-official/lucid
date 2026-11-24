@@ -105,6 +105,8 @@ class _Case:
     want: Callable[..., np.ndarray]
     #: Indices of the inputs a gradient is taken for; empty = forward only.
     grad: tuple[int, ...] = ()
+    #: False for a spelling the reference refuses: the closed form still holds Lucid to it.
+    ref: bool = True
 
 
 def _outer(lib: ModuleType, a: Any, b: Any) -> Any:
@@ -182,6 +184,8 @@ _CASES = [
         _solve(upper=True),
         lambda a, b: np.linalg.solve(_tri(a, True, False), b),
         grad=(0, 1),
+        # The reference refuses a 1-D ``B``; Lucid answers it (LCD-1083).
+        ref=False,
     ),
     # The matmul family reaches the CPU's complex GEMM, which ``outer`` and the
     # gradient of ``solve_triangular`` need; its forward and gradient are held
@@ -273,9 +277,12 @@ def test_solve_triangular_gradient_is_the_conjugate_transpose_rule(
 # ── the reference ────────────────────────────────────────────────────────────
 
 
+_REF_CASES = [c for c in _CASES if c.ref]
+
+
 @pytest.mark.parity
 @pytest.mark.parametrize(("device", "dtype"), _PLACEMENTS)
-@pytest.mark.parametrize("case", _CASES, ids=_IDS)
+@pytest.mark.parametrize("case", _REF_CASES, ids=[c.name for c in _REF_CASES])
 def test_forward_matches_the_reference(
     ref: ModuleType, case: _Case, device: str, dtype: lucid.dtype
 ) -> None:
@@ -292,7 +299,7 @@ def _norm_sq(lib: ModuleType, y: Any) -> Any:
 
 @pytest.mark.parity
 @pytest.mark.parametrize(("device", "dtype"), _PLACEMENTS)
-@pytest.mark.parametrize("case", [c for c in _CASES if c.grad], ids=lambda c: c.name)
+@pytest.mark.parametrize("case", [c for c in _REF_CASES if c.grad], ids=lambda c: c.name)
 def test_gradient_matches_the_reference(
     ref: ModuleType, case: _Case, device: str, dtype: lucid.dtype
 ) -> None:
@@ -324,6 +331,59 @@ def test_pow_agrees_with_the_reference_at_a_zero_base(
     got = lucid.pow(_tensor(lucid, base, name, device), _tensor(lucid, expo, name, device))
     want = ref.pow(_tensor(ref, base, name, device), _tensor(ref, expo, name, device))
     np.testing.assert_allclose(_numpy(got), _numpy(want), **_TOL[name])
+
+
+def _assert_same_special_values(got: np.ndarray, want: np.ndarray, tol: dict[str, float]) -> None:
+    """Real and imaginary parts compared apart, so an ``inf`` beside a NaN is checked as such."""
+    np.testing.assert_allclose(got.real, want.real, **tol)
+    np.testing.assert_allclose(got.imag, want.imag, **tol)
+
+
+@pytest.mark.parity
+@pytest.mark.parametrize(
+    ("device", "dtype"),
+    [
+        pytest.param(
+            *p.values,
+            marks=(
+                pytest.mark.xfail(
+                    strict=True,
+                    raises=AssertionError,
+                    reason="LCD-1082: MLX's complex power is 0 at a zero base",
+                )
+                if p.values[0] == "metal"
+                else ()
+            ),
+            id=p.id,
+        )
+        for p in _PLACEMENTS
+    ],
+)
+def test_pow_of_a_zero_base_to_a_non_positive_exponent(
+    ref: ModuleType, device: str, dtype: lucid.dtype
+) -> None:
+    """``0 ** 0`` is NaN and ``0 ** -1`` is ``inf + NaN j``, from ``std::pow``, as in the reference."""
+    name = str(dtype).removeprefix("lucid.")
+    base = np.zeros(2, dtype=np.complex128)
+    expo = np.array([0 + 0j, -1 + 0j])
+    got = lucid.pow(_tensor(lucid, base, name, device), _tensor(lucid, expo, name, device))
+    want = ref.pow(_tensor(ref, base, name, device), _tensor(ref, expo, name, device))
+    _assert_same_special_values(_numpy(got), _numpy(want), _TOL[name])
+
+
+# The branch cut and the sign of zero: ``log(-1 + 0j) = pi j`` and ``log(-1 - 0j) = -pi j``;
+# ``log(0) = -inf + 0j``; and a magnitude whose ``x^2 + y^2`` overflows float32.
+_LOG_EDGES = np.array([-1 + 0j, complex(-1.0, -0.0), 0j, 1e30 + 1e30j, 1e-30 - 1e-30j])
+
+
+@pytest.mark.parametrize(("device", "dtype"), _PLACEMENTS)
+def test_log_at_the_branch_cut_zero_and_extreme_magnitudes(device: str, dtype: lucid.dtype) -> None:
+    name = str(dtype).removeprefix("lucid.")
+    z = _rounded(_LOG_EDGES, name)
+    got = _numpy(lucid.log(_tensor(lucid, z, name, device)))
+    want = np.log(z)
+    _assert_same_special_values(got, want, _TOL[name])
+    assert np.signbit(got.imag[1]) and not np.signbit(got.imag[0])
 
 
 # ── boundaries ───────────────────────────────────────────────────────────────

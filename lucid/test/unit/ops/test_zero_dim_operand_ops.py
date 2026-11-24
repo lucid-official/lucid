@@ -160,7 +160,7 @@ def test_addr_forms_its_product_at_the_dtype_all_three_promote_to(
 
 @pytest.mark.parametrize("vectors", [lucid.int8, lucid.float32])
 def test_addr_with_a_complex_accumulator_and_real_vectors(vectors: lucid.dtype) -> None:
-    """The product is real (the engine's ``outer`` has no complex kernel) and the sum lifts it."""
+    """The product of real vectors is real, and the sum lifts it to complex."""
     out = lucid.addr(
         lucid.tensor(1 + 0j),
         lucid.tensor([63, 63], dtype=vectors),
@@ -188,7 +188,7 @@ def test_addr_with_a_complex_accumulator_keeps_a_complex_scalars_imaginary_part(
 ) -> None:
     """Real vectors beside a complex accumulator: ``alpha`` scales the product after it is lifted.
 
-    The product is real (the engine's ``outer`` has no complex kernel), and a complex
+    The product of real vectors is real, and a complex
     ``alpha`` applied to it as a real tensor dropped its imaginary part:
     ``alpha=1j`` gave ``1+0j`` where the reference gives ``[[1+3j, 1+4j], [1+6j, 1+8j]]``.
     """

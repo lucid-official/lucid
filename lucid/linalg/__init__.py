@@ -1209,8 +1209,8 @@ def eigvals(input: Tensor) -> Tensor:
 def _complex_matmul(a: Tensor, b: Tensor) -> Tensor:
     """``a @ b`` for complex operands, from four real products.
 
-    The CPU matmul has no complex kernel; spelled in real parts it runs on
-    both devices and differentiates like any other product.
+    Predates the CPU's complex GEMM (LCD-1070); runs on both devices and
+    differentiates like any product.  Folding it into ``matmul`` is LCD-1079.
     """
     ar, ai = lucid.real(a), lucid.imag(a)
     br, bi = lucid.real(b), lucid.imag(b)

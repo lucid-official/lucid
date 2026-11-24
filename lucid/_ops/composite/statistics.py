@@ -378,8 +378,8 @@ def cov(
 
     Notes
     -----
-    A complex ``input`` runs on Metal only: the CPU stream has no complex
-    matrix product.
+    A complex ``input`` is centred and multiplied by its conjugate transpose,
+    so the result is Hermitian, on either device.
     """
     refuse_bool("cov", input)
     if input.ndim > 2:
