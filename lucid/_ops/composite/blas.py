@@ -1,5 +1,6 @@
 """BLAS-level composites (``addmm``, ``addbmm``, ``mv``, ``ger``, ...)."""
 
+from functools import partial
 from typing import TYPE_CHECKING
 
 import lucid
@@ -9,6 +10,7 @@ from lucid._dispatch import _promote_impls, _unwrap, _wrap
 from lucid._ops._adapters import _scale_by_alpha
 from lucid._ops._autocast import _amp_op, _autocast_entry, _autocast_suspended
 from lucid._ops._products import _require_vector
+from lucid._ops.composite._opmath import _in_float32_as
 from lucid._scalar_cast import ScalarRead, cast_scalar
 import lucid.linalg as _la
 
@@ -61,6 +63,19 @@ def _scaled_add(
         )
         return acc + scaled_prod
     return scaled_input + scaled_prod
+
+
+def _shared_half(*operands: Tensor) -> _C_engine.Dtype | None:
+    """The float16 / bfloat16 dtype every operand has, else ``None``.
+
+    The operand sets a half tensor's op takes: a mixed set (float32 beside half) is
+    refused by the op's own dtype check, so it is not the half path's to widen.  A
+    float32 / float64 / integer first operand costs one dtype read.
+    """
+    dtype = _unwrap(operands[0]).dtype
+    if _promotion.is_half(dtype) and all(_unwrap(t).dtype == dtype for t in operands[1:]):
+        return dtype
+    return None
 
 
 def _contract(op: str, operand: Tensor) -> None:
@@ -118,7 +133,10 @@ def addmm(
     cannot hold -- NaN, infinity or a value past the width of an integer, a
     finite value past the range of a floating type -- raises ``RuntimeError``
     (``value cannot be converted to type int8_t without overflow``) instead of
-    wrapping.
+    wrapping.  A float16 or bfloat16 call computes in float32 and rounds once, when
+    the answer is stored, as the reference does: ``alpha`` and ``beta`` are read as
+    ``float`` and the product, the two scales and the sum are never rounded to the
+    half type between one another.
 
     Examples
     --------
@@ -130,6 +148,8 @@ def addmm(
     tensor([[19., 22.], [43., 50.]])
     """
     _contract("addmm", mat1)
+    if (half := _shared_half(input, mat1, mat2)) is not None:
+        return _in_float32_as(half, partial(addmm, beta=beta, alpha=alpha), input, mat1, mat2)
     return _scaled_add(
         input, beta, lucid.matmul(mat1, mat2), alpha, op="addmm", read=ScalarRead.OP_MATH
     )
@@ -175,7 +195,10 @@ def addbmm(
         (\text{batch1}[k] \cdot \text{batch2}[k]).
 
     Differs from :func:`baddbmm` in that the batch dimension is reduced
-    away; :func:`baddbmm` keeps the per-batch results.
+    away; :func:`baddbmm` keeps the per-batch results.  A float16 or bfloat16
+    call computes in float32 and rounds once, as :func:`addmm` does; the
+    reference adds the batches one :func:`addmm` at a time and rounds after
+    each, so it may differ by a rounding or two.
 
     Examples
     --------
@@ -187,6 +210,8 @@ def addbmm(
     tensor([[12., 12.], [12., 12.]])
     """
     _contract("addbmm", batch1)
+    if (half := _shared_half(input, batch1, batch2)) is not None:
+        return _in_float32_as(half, partial(addbmm, beta=beta, alpha=alpha), input, batch1, batch2)
     product = lucid.bmm(batch1, batch2)
     summed = _wrap(_contraction.settle(_unwrap(lucid.sum(product, 0)), _unwrap(product).dtype))
     return _scaled_add(input, beta, summed, alpha, op="addbmm", read=ScalarRead.OP_MATH)
@@ -231,7 +256,8 @@ def baddbmm(
         + \alpha \cdot (\text{batch1}[k] \cdot \text{batch2}[k]).
 
     The implementation defers to :func:`lucid.bmm`, which dispatches to
-    Accelerate-batched GEMM on CPU and MLX on GPU.
+    Accelerate-batched GEMM on CPU and MLX on GPU.  A float16 or bfloat16
+    call computes in float32 and rounds once, as :func:`addmm` does.
 
     Examples
     --------
@@ -243,6 +269,8 @@ def baddbmm(
     (3, 2, 2)
     """
     _contract("baddbmm", batch1)
+    if (half := _shared_half(input, batch1, batch2)) is not None:
+        return _in_float32_as(half, partial(baddbmm, beta=beta, alpha=alpha), input, batch1, batch2)
     return _scaled_add(
         input, beta, lucid.bmm(batch1, batch2), alpha, op="baddbmm", read=ScalarRead.OP_MATH
     )
@@ -429,6 +457,10 @@ def _lerp(input: Tensor, end: Tensor, weight: float | Tensor) -> Tensor:
                 f"expected {input.dtype._name}, got {weight.dtype._name}"
             )
         input_impl, end_impl, weight_impl = _promote_impls([input_impl, end_impl, weight_impl])
+        if _promotion.is_half(input_impl.dtype):
+            return _in_float32_as(
+                input_impl.dtype, _lerp, _wrap(input_impl), _wrap(end_impl), _wrap(weight_impl)
+            )
         diff = _wrap(_C_engine.sub(end_impl, input_impl))
         if not _can_mix_devices(diff, weight):
             raise _C_engine.DeviceMismatch(
@@ -438,8 +470,11 @@ def _lerp(input: Tensor, end: Tensor, weight: float | Tensor) -> Tensor:
         scaled = _C_engine.mul(weight_impl, _unwrap(diff))
     else:
         diff_impl = _C_engine.sub(end_impl, input_impl)
+        dtype = diff_impl.dtype
+        if _promotion.is_half(dtype):
+            return _in_float32_as(dtype, partial(_lerp, weight=weight), input, end)
         # ``lerp`` takes floating tensors only, so the weight read for one is real.
-        step = float(cast_scalar(diff_impl.dtype, weight, read=ScalarRead.OP_MATH).real)
+        step = float(cast_scalar(dtype, weight, read=ScalarRead.OP_MATH).real)
         scaled = _C_engine.mul(
             _C_engine.full(list(diff_impl.shape), step, diff_impl.dtype, diff_impl.device),
             diff_impl,
@@ -487,7 +522,9 @@ def addcmul(input: Tensor, tensor1: Tensor, tensor2: Tensor, *, value: float = 1
 
     Sister op of :func:`addcdiv` (``input + value * t1 / t2``).  Common
     in optimisers (e.g. running-mean / running-variance updates) where a
-    bias-correction term is added to an existing accumulator.
+    bias-correction term is added to an existing accumulator.  A float16 or
+    bfloat16 call computes in float32 and rounds once, as :func:`addmm` does:
+    ``value`` is read as ``float``, not rounded to the half type first.
 
     Examples
     --------
@@ -504,6 +541,8 @@ def addcmul(input: Tensor, tensor1: Tensor, tensor2: Tensor, *, value: float = 1
         raise _C_engine.NotImplementedError(
             'addcmul: "addcmul" is not implemented for the Bool dtype'
         )
+    if _promotion.is_half(common):
+        return _in_float32_as(common, partial(addcmul, value=value), input, tensor1, tensor2)
     with _autocast_entry("addcmul", _unwrap(input), _unwrap(tensor1), _unwrap(tensor2)) as (
         inp,
         t1,
@@ -546,7 +585,8 @@ def addcdiv(input: Tensor, tensor1: Tensor, tensor2: Tensor, *, value: float = 1
         + \text{value} \cdot \frac{(t_1)_i}{(t_2)_i}.
 
     Division by zero follows standard IEEE 754 rules — no clamping is
-    applied. Gradients flow through all three tensor operands.
+    applied. Gradients flow through all three tensor operands.  A float16 or
+    bfloat16 call computes in float32 and rounds once, as :func:`addmm` does.
 
     Examples
     --------
@@ -565,6 +605,8 @@ def addcdiv(input: Tensor, tensor1: Tensor, tensor2: Tensor, *, value: float = 1
             "Integer division with addcdiv is no longer supported; use floor_divide instead."
         )
     common = _promotion.result_type(*(_unwrap(t) for t in (input, tensor1, tensor2)))
+    if _promotion.is_half(common):
+        return _in_float32_as(common, partial(addcdiv, value=value), input, tensor1, tensor2)
     with _autocast_entry("addcdiv", _unwrap(input), _unwrap(tensor1), _unwrap(tensor2)) as (
         inp,
         t1,

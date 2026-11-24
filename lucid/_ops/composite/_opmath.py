@@ -15,12 +15,20 @@ operands arrive in, and two kinds of operand are not fit for that:
   ``bessel_j0(300)`` in bfloat16 was 30 times too small.  The reference
   framework evaluates these kernels in float32 ("opmath") and rounds the
   answer to the 16-bit dtype; so does this.
+
+:func:`_in_float32_as` is the one place an operand set is widened and the answer
+narrowed: the special functions reach it through :func:`_in_float32`, the accumulating
+products (``addmm``, ``addcmul``, ``lerp``...) call it with the dtype their own operand
+rule gives.
 """
 
 from collections.abc import Callable
 
 import lucid
-from lucid._dispatch import _binary_operands, _float_input, _wrap
+from lucid import _promotion
+from lucid._C import engine as _C_engine
+from lucid._dispatch import _binary_operands, _float_input, _unwrap, _wrap
+from lucid._dtype import _ENGINE_TO_DTYPE
 from lucid._ops.composite._shared import _is_tensor
 from lucid._tensor.tensor import Tensor
 from lucid._types import TensorOrScalar
@@ -97,21 +105,49 @@ def _real_pair(op: str, a: TensorOrScalar, b: TensorOrScalar) -> tuple[Tensor, T
     return _real(a), _real(b)
 
 
+def _in_float32_as(common: _C_engine.Dtype, fn: Callable[..., Tensor], *operands: Tensor) -> Tensor:
+    """``fn(*operands)``, evaluated in float32 when ``common``, the dtype it answers in, is 16-bit.
+
+    The reference's kernels for a float16 or bfloat16 tensor compute in float32 ("op math") and
+    round once, when the result is stored.  A composite of engine ops rounds after each one: a
+    scale factor to the half type, then a product, then a sum.  Every operand is widened first
+    here and only the answer is narrowed, so the whole expression is the float32 one.  The casts
+    are differentiable, so a gradient reaches each operand in the operand's own dtype.  Any other
+    ``common`` takes ``fn`` as it is, at the cost of one test.
+
+    ``fn`` is usually the op itself, called again on the widened operands: the half path then
+    needs no second copy of the arithmetic, and the float32 path is the code it always was.
+
+    Parameters
+    ----------
+    common : Dtype
+        The dtype ``fn``'s answer has on ``operands`` as they are.  The caller decides it by its
+        own operand rule, so a set of operands the op refuses is never widened into one it
+        accepts.
+    fn : callable
+        The arithmetic over tensors, returning one tensor.
+    *operands : Tensor
+        What ``fn`` is called with.
+
+    Returns
+    -------
+    Tensor
+        ``fn``'s answer at ``common``.
+    """
+    if not _promotion.is_half(common):
+        return fn(*operands)
+    return fn(*(t.to(lucid.float32) for t in operands)).to(_ENGINE_TO_DTYPE[common])
+
+
 def _in_float32(fn: Callable[..., Tensor], *operands: Tensor) -> Tensor:
     """``fn(*operands)``, evaluated in float32 when the answer is 16-bit.
 
-    The answer's dtype is the operands' common one; when that is float16
-    or bfloat16 every operand is widened to float32 first and the result
-    rounded back, so only the answer carries 16-bit precision.  Any other
-    dtype is passed through untouched.  The casts are differentiable, so
-    gradients flow as they would without them.
+    The answer's dtype is the operands' common one (:func:`~lucid._promotion.result_type`);
+    when that is float16 or bfloat16 every operand is widened to float32 first and the result
+    rounded back, so only the answer carries 16-bit precision (:func:`_in_float32_as`).  Any
+    other dtype is passed through untouched.
     """
-    common = operands[0].dtype
-    if len(operands) == 2:
-        common = lucid.result_type(operands[0], operands[1])
-    if common not in (lucid.float16, lucid.bfloat16):
-        return fn(*operands)
-    return fn(*(t.to(lucid.float32) for t in operands)).to(common)
+    return _in_float32_as(_promotion.result_type(*(_unwrap(t) for t in operands)), fn, *operands)
 
 
 def _nan_quiet_pick(input: Tensor, other: Tensor, take_first: Tensor, is_max: bool) -> Tensor:

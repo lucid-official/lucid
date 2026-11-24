@@ -35,15 +35,13 @@ differently for a reason that is not this one:
   part), whatever the scalar's reading.
 
 The reference's float32 accumulating ops (``addmm``, ``addbmm``, ``baddbmm``, ``addcmul``,
-``addcdiv``, ``lerp``) read a half tensor's scalar as a float and round once; Lucid rounds the scalar
-to the half type and each product, so an answer can differ in the last bit, or turn an overflowing
-scalar into an infinity that NaNs a zero.  For those cells the answer is compared to within one half
-ulp when the half type holds the scalar exactly, and only *whether* the op answers (and its dtype)
-when it does not (``test_a_half_scalar_is_read_as_float_by_the_accumulating_ops`` pins the gap).
+``addcdiv``, ``lerp``) read a half tensor's scalar as a float and round once, at the end, and so do
+these (LCD-1087; ``test_half_opmath_accumulating.py`` holds them to the reference on values).  A
+cell of one of them is compared to within one half ulp, the one place the two may differ: the
+reference's ``addbmm`` rounds after each batch, and a product may be summed in another order.
 """
 
 import math
-import struct
 from collections.abc import Callable, Sequence
 from types import ModuleType
 from typing import Any, NamedTuple
@@ -248,15 +246,6 @@ def _same_values(got: Any, want: Any, rtol: float = 0.0) -> bool:
     return bool(got == want or abs(got - want) <= rtol * abs(want))
 
 
-def _half_holds(dtype: str, scalar: complex) -> bool:
-    """Whether ``dtype`` holds the float32 the reference reads ``scalar`` as, exactly."""
-    try:
-        wide: float = struct.unpack("f", struct.pack("f", complex(scalar).real))[0]
-    except OverflowError:
-        return False
-    return math.isnan(wide) or bool(lucid.tensor(wide, dtype=getattr(lucid, dtype)).item() == wide)
-
-
 @pytest.mark.parametrize(("name", "dtype", "device", "scalar"), _cells())
 def test_scalar_is_read_as_the_reference_reads_it(
     name: str, dtype: str, device: str, scalar: str, ref: ModuleType
@@ -271,11 +260,7 @@ def test_scalar_is_read_as_the_reference_reads_it(
         assert got[2] == want[2], f"{got[2]!r} vs {want[2]!r}"
         return
     assert got[1] == want[1]
-    rtol = 0.0
-    if op.op_math and dtype in _HALF:
-        if not _half_holds(dtype, value):
-            return
-        rtol = _HALF_RTOL[dtype]
+    rtol = _HALF_RTOL[dtype] if op.op_math and dtype in _HALF else 0.0
     assert _same_values(got[2], want[2], rtol), f"{got[2]} vs {want[2]}"
 
 
@@ -547,6 +532,23 @@ def test_a_real_alpha_on_a_real_tensor_is_unchanged(device: str) -> None:
     assert lucid.rsub(x, 10).tolist() == [9.0, 8.0]
 
 
+@pytest.mark.parametrize("device", devices_supporting(lucid.float16))
+@pytest.mark.parametrize(
+    "case",
+    [
+        lambda lib, kw: lib.addmm(*[lib.ones((2, 2), dtype=lib.bfloat16, **kw)] * 3, alpha=300.7),
+        lambda lib, kw: lib.lerp(*[lib.ones(2, dtype=lib.float16, **kw)] * 2, 70000),
+    ],
+    ids=["addmm-bfloat16-300.7", "lerp-float16-70000"],
+)
+def test_a_half_scalar_is_read_as_float_by_the_accumulating_ops(
+    case: Callable[[Any, dict[str, str]], Any], device: str, ref: ModuleType
+) -> None:
+    """``addmm`` is 604 for 300.7 (a half-rounded 300 gave 600) and ``lerp`` answers 1 for 70000
+    (a half-rounded infinity gave NaN): the scalar is a float until the answer is stored."""
+    assert case(lucid, {"device": device}).tolist() == case(ref, {}).tolist()
+
+
 # ── known gaps, pinned so the day they close is noticed ──────────────────────────────────────
 
 
@@ -561,26 +563,3 @@ def test_a_real_alpha_on_a_real_tensor_is_unchanged(device: str) -> None:
 def test_a_python_int_past_64_bits_is_refused(scalar: int) -> None:
     with pytest.raises(OverflowError):
         lucid.mul(lucid.ones(2), scalar)
-
-
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "LCD-1087: Lucid rounds a half tensor's scalar to the half type before the "
-        "accumulating ops use it; the reference reads it as float and rounds once"
-    ),
-)
-@pytest.mark.parametrize(
-    "case",
-    [
-        lambda lib: lib.addmm(*[lib.ones((2, 2), dtype=lib.bfloat16)] * 3, alpha=300.7),
-        lambda lib: lib.lerp(*[lib.ones(2, dtype=lib.float16)] * 2, 70000),
-    ],
-    ids=["addmm-bfloat16-300.7", "lerp-float16-70000"],
-)
-def test_a_half_scalar_is_read_as_float_by_the_accumulating_ops(
-    case: Callable[[Any], Any], ref: ModuleType
-) -> None:
-    """``addmm`` is 600 for 300.7 (rounded to 300 first) where the reference's is 604; ``lerp``
-    turns 70000 into infinity and answers NaN where the reference's is 1."""
-    assert case(lucid).tolist() == case(ref).tolist()

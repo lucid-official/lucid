@@ -442,6 +442,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `linalg.solve_triangular` refuses a non-square A, a B whose rows (columns with `left=False`) do not fit A, and batches that do not broadcast with the reference's class, message and order of checks (LCD-1083).
 
+- half addmm, addcmul, lerp... compute in float32, round once
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

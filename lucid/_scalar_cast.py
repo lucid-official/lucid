@@ -50,7 +50,9 @@ class ScalarRead(enum.Enum):
     ``addr`` and ``index_add`` convert the scalar to the storage type (``c10::Half``,
     ``c10::BFloat16``), and the products that accumulate in float32 (``addmm``, ``addbmm``,
     ``baddbmm``, ``addcmul``, ``addcdiv``, ``lerp``) convert it to ``float``.  The two differ in
-    the range a scalar may have and in the type the refusal names.
+    the range a scalar may have and in the type the refusal names.  The ``float`` ops also
+    *compute* in float32 and round once (:func:`lucid._ops.composite._opmath._in_float32_as`), so
+    ``alpha=300.7`` is 300.7 in the product and not the 300 a bfloat16 holds.
     """
 
     STORAGE = enum.auto()
