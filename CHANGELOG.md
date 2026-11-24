@@ -433,6 +433,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `cosine_similarity` broadcasts its operands before taking the norms. `cosine_similarity(tensor(0.5), tensor([1., 2.]), dim=0)` is now `0.9487` (was `1.342`), and a 0-d operand beside a matrix with `dim=1` no longer raises (LCD-1074).
 - `gaussian_nll_loss` ranks a 0-d `var` as the dimensioned operand the reference unsqueezes it to (LCD-1074).
 
+- read scale factors as the reference does
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

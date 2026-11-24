@@ -120,7 +120,7 @@ def rsub(input: Tensor, other: Tensor | Scalar, *, alpha: float = 1) -> Tensor:
     """
     _refuse_bool_subtraction(other, input)
     a, b = _binary_operands(other, input)
-    return _wrap(_C_engine.sub(a, _scale_by_alpha(a, b, alpha)))
+    return _wrap(_C_engine.sub(a, _scale_by_alpha(a, b, alpha, subtracts=True)))
 
 
 # ── Inverse hyperbolic (composed) ──────────────────────────────────────────

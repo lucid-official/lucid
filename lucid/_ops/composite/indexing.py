@@ -48,7 +48,7 @@ from lucid import _promotion
 from lucid._dispatch import _cannot_cast_inplace, _unwrap, _wrap
 from lucid._ops._autocast import _autocast_entry
 from lucid._ops._dims import _dim_size, _wrap_dim
-from lucid._ops._scalar_cast import cast_scalar
+from lucid._scalar_cast import cast_scalar
 import lucid._C.engine as _C_engine
 from lucid._tensor._indexing import (
     _INDEX_DTYPES,

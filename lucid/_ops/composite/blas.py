@@ -9,7 +9,7 @@ from lucid._dispatch import _promote_impls, _unwrap, _wrap
 from lucid._ops._adapters import _scale_by_alpha
 from lucid._ops._autocast import _amp_op, _autocast_entry, _autocast_suspended
 from lucid._ops._products import _require_vector
-from lucid._ops._scalar_cast import cast_scalar, real_scalar
+from lucid._scalar_cast import ScalarRead, cast_scalar
 import lucid.linalg as _la
 
 if TYPE_CHECKING:
@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 _COMPLEX = (_C_engine.C64, _C_engine.C128)
 
 
-def _scaled(tensor: Tensor, factor: float | complex, name: str) -> Tensor:
+def _scaled(tensor: Tensor, factor: float | complex, name: str, read: ScalarRead) -> Tensor:
     """``tensor * factor`` under the reference's rule for ``tensor``'s dtype.
 
     An integral tensor takes an integral factor and keeps its dtype, so the
@@ -26,7 +26,7 @@ def _scaled(tensor: Tensor, factor: float | complex, name: str) -> Tensor:
     instead of promoting the result to float.
     """
     impl = _unwrap(tensor)
-    return _wrap(_scale_by_alpha(impl, impl, factor, name))
+    return _wrap(_scale_by_alpha(impl, impl, factor, name, read))
 
 
 def _scaled_add(
@@ -36,17 +36,23 @@ def _scaled_add(
     alpha: float | complex,
     *,
     op: str | None = None,
-    cast_scalars: bool = True,
+    read: ScalarRead = ScalarRead.STORAGE,
+    by_type: bool = False,
 ) -> Tensor:
-    """``beta * input + alpha * prod``, skipping ``input``'s values when ``beta == 0``."""
+    """``beta * input + alpha * prod``, skipping ``input``'s values when ``beta == 0``.
+
+    ``read`` is the type a half tensor's scalars are read as and ``by_type`` marks an op
+    (``addr``) that judges a bool or an integral tensor's scalar by its type instead of
+    casting it (:func:`~lucid._scalar_cast.cast_scalar`).
+    """
     if op is not None and input.dtype != prod.dtype:
         raise _C_engine.DtypeMismatch(
             f"DtypeMismatch ({op}): expected {input.dtype._name}, got {prod.dtype._name}"
         )
-    beta = cast_scalar(_unwrap(input).dtype, beta, cast_integral=cast_scalars)
-    alpha = cast_scalar(_unwrap(prod).dtype, alpha, cast_integral=cast_scalars)
-    scaled_input = _scaled(input, beta, "beta")
-    scaled_prod = _scaled(prod, alpha, "alpha")
+    beta = cast_scalar(_unwrap(input).dtype, beta, read=read, by_type=by_type)
+    alpha = cast_scalar(_unwrap(prod).dtype, alpha, read=read, by_type=by_type)
+    scaled_input = _scaled(input, beta, "beta", read)
+    scaled_prod = _scaled(prod, alpha, "alpha", read)
     if beta == 0:
         acc = (
             lucid.where(lucid.zeros_like(input, dtype=lucid.bool_), input, 0)
@@ -108,7 +114,11 @@ def addmm(
     complex tensor: a real one reads it as its real part when the imaginary part
     is zero and raises ``RuntimeError`` otherwise, so an imaginary part is never
     dropped silently (the same holds for ``addmv``, ``addbmm``, ``baddbmm``,
-    ``addcmul`` and ``addcdiv``).
+    ``addcmul`` and ``addcdiv``).  A bool is 0 or 1.  A scalar the element type
+    cannot hold -- NaN, infinity or a value past the width of an integer, a
+    finite value past the range of a floating type -- raises ``RuntimeError``
+    (``value cannot be converted to type int8_t without overflow``) instead of
+    wrapping.
 
     Examples
     --------
@@ -120,7 +130,9 @@ def addmm(
     tensor([[19., 22.], [43., 50.]])
     """
     _contract("addmm", mat1)
-    return _scaled_add(input, beta, lucid.matmul(mat1, mat2), alpha, op="addmm")
+    return _scaled_add(
+        input, beta, lucid.matmul(mat1, mat2), alpha, op="addmm", read=ScalarRead.OP_MATH
+    )
 
 
 @_amp_op("addbmm")
@@ -177,7 +189,7 @@ def addbmm(
     _contract("addbmm", batch1)
     product = lucid.bmm(batch1, batch2)
     summed = _wrap(_contraction.settle(_unwrap(lucid.sum(product, 0)), _unwrap(product).dtype))
-    return _scaled_add(input, beta, summed, alpha, op="addbmm")
+    return _scaled_add(input, beta, summed, alpha, op="addbmm", read=ScalarRead.OP_MATH)
 
 
 @_amp_op("baddbmm")
@@ -231,7 +243,9 @@ def baddbmm(
     (3, 2, 2)
     """
     _contract("baddbmm", batch1)
-    return _scaled_add(input, beta, lucid.bmm(batch1, batch2), alpha, op="baddbmm")
+    return _scaled_add(
+        input, beta, lucid.bmm(batch1, batch2), alpha, op="baddbmm", read=ScalarRead.OP_MATH
+    )
 
 
 @_amp_op("addmv")
@@ -352,7 +366,7 @@ def addr(input: Tensor, vec1: Tensor, vec2: Tensor, *, beta: float = 1, alpha: f
     input_impl, vec1_impl, vec2_impl = _promote_impls(impls, tiers=_promotion.Tiers.DIMENSIONED)
     if not (real_vectors and input_impl.dtype in _COMPLEX):
         prod = lucid.linalg.outer(_wrap(vec1_impl), _wrap(vec2_impl))
-        return _scaled_add(_wrap(input_impl), beta, prod, alpha, cast_scalars=False)
+        return _scaled_add(_wrap(input_impl), beta, prod, alpha, by_type=True)
     # Real vectors beside a complex accumulator: their product is real, and the engine's
     # ``outer`` has no complex kernel.  Form it at the real dtype of the accumulator's
     # parts, then lift it to the accumulator's dtype before ``alpha`` scales it, so a
@@ -362,7 +376,7 @@ def addr(input: Tensor, vec1: Tensor, vec2: Tensor, *, beta: float = 1, alpha: f
         _wrap(_C_engine.astype(vec1_impl, part)), _wrap(_C_engine.astype(vec2_impl, part))
     )
     prod = _wrap(_C_engine.astype(_unwrap(real_prod), input_impl.dtype))
-    return _scaled_add(_wrap(input_impl), beta, prod, alpha, cast_scalars=False)
+    return _scaled_add(_wrap(input_impl), beta, prod, alpha, by_type=True)
 
 
 def _can_mix_devices(a: Tensor, b: Tensor) -> bool:
@@ -424,7 +438,8 @@ def _lerp(input: Tensor, end: Tensor, weight: float | Tensor) -> Tensor:
         scaled = _C_engine.mul(weight_impl, _unwrap(diff))
     else:
         diff_impl = _C_engine.sub(end_impl, input_impl)
-        step = float(real_scalar(diff_impl.dtype, weight))
+        # ``lerp`` takes floating tensors only, so the weight read for one is real.
+        step = float(cast_scalar(diff_impl.dtype, weight, read=ScalarRead.OP_MATH).real)
         scaled = _C_engine.mul(
             _C_engine.full(list(diff_impl.shape), step, diff_impl.dtype, diff_impl.device),
             diff_impl,
@@ -495,7 +510,7 @@ def addcmul(input: Tensor, tensor1: Tensor, tensor2: Tensor, *, value: float = 1
         t2,
     ):
         input, tensor1, tensor2 = _wrap(inp), _wrap(t1), _wrap(t2)
-        return input + (tensor1 * tensor2) * cast_scalar(common, value)
+        return input + (tensor1 * tensor2) * cast_scalar(common, value, read=ScalarRead.OP_MATH)
 
 
 def addcdiv(input: Tensor, tensor1: Tensor, tensor2: Tensor, *, value: float = 1) -> Tensor:
@@ -556,7 +571,7 @@ def addcdiv(input: Tensor, tensor1: Tensor, tensor2: Tensor, *, value: float = 1
         t2,
     ):
         input, tensor1, tensor2 = _wrap(inp), _wrap(t1), _wrap(t2)
-        return input + (tensor1 / tensor2) * cast_scalar(common, value)
+        return input + (tensor1 / tensor2) * cast_scalar(common, value, read=ScalarRead.OP_MATH)
 
 
 @_amp_op("mv")

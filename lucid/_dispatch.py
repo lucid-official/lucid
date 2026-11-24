@@ -7,6 +7,7 @@ from lucid import _promotion
 from lucid._dtype import dtype, to_engine_dtype, _ENGINE_TO_DTYPE
 from lucid._device import device, _device_from_engine  # noqa: F401
 from lucid._globals import get_default_dtype, get_default_device
+from lucid._scalar_cast import check_pow_scalar
 from lucid._tree_version import _tree_changed
 
 if TYPE_CHECKING:
@@ -96,7 +97,7 @@ def _scalar_power(base: _C_engine.TensorImpl, exponent: object) -> _C_engine.Ten
     ``PowScalarBackward::forward`` rounds the exponent to that half dtype.
     """
     exponent = _promotion.as_number(exponent)
-    _promotion.check_pow_scalar(base.dtype, exponent)
+    check_pow_scalar(base.dtype, exponent)
     if isinstance(exponent, bool) or not isinstance(exponent, (int, float)):
         return None
     if base.dtype not in _REAL_FLOATS:

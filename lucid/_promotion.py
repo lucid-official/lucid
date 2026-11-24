@@ -41,7 +41,6 @@ operands and building scalar operands is :mod:`lucid._dispatch`'s job.
 """
 
 import enum
-import math
 import numbers
 from typing import overload
 
@@ -98,17 +97,9 @@ class Tiers(enum.Enum):
 # once.
 _BY_CODE: dict[int, tuple[int, int]] = {d.value: kw for d, kw in _KIND_WIDTH.items()}
 _DTYPE: dict[int, _C_engine.Dtype] = {d.value: d for d in _KIND_WIDTH}
-_BOOL_C, _I64_C, _F16_C, _F32_C, _F64_C = (
-    _D.Bool.value,
-    _D.I64.value,
-    _D.F16.value,
-    _D.F32.value,
-    _D.F64.value,
-)
+_BOOL_C, _I64_C, _F32_C, _F64_C = (_D.Bool.value, _D.I64.value, _D.F32.value, _D.F64.value)
 _C64_C, _C128_C = _D.C64.value, _D.C128.value
 _HALF_C = frozenset(d.value for d in HALF)
-_F16_MAX = 65504.0
-_BF16_MAX = float.fromhex("0x1.fep+127")
 _NUMBER_KIND: dict[type, int] = {bool: BOOL, int: INTEGER, float: FLOATING, complex: COMPLEX}
 _CPU = _C_engine.Device.CPU
 
@@ -204,40 +195,6 @@ def try_unwrap(x: object) -> _C_engine.TensorImpl | None:
 def is_comparable(other: object) -> bool:
     """Whether ``other`` is a Tensor or a number that ``==`` / ``!=`` compares element-wise."""
     return isinstance(as_number(other), NUMBER) or try_unwrap(other) is not None
-
-
-def check_pow_scalar(d: _C_engine.Dtype, exponent: object) -> None:
-    """Refuse a Python scalar exponent a ``d`` power cannot take.
-
-    A negative Python integer is refused for a bool or integer base, as the
-    reference refuses it; a tensor exponent never reaches here, and answers
-    the value (``1 ** -n`` is 1, ``(-1) ** -n`` is +-1, the rest 0) on both
-    streams.  A finite exponent that overflows ``d`` is refused too.
-
-    Parameters
-    ----------
-    d : _C_engine.Dtype
-        Base tensor engine dtype.
-    exponent : object
-        Candidate scalar exponent.
-    """
-    exponent = as_number(exponent)
-    if isinstance(exponent, bool) or not isinstance(exponent, (int, float)):
-        return
-    c = d.value
-    if isinstance(exponent, int) and exponent < 0 and is_integral(d):
-        raise RuntimeError("Integers to negative integer powers are not allowed.")
-    if is_integer(d):
-        if isinstance(exponent, int):
-            bits = _BY_CODE[c][1]
-            if not -(1 << (bits - 1)) <= exponent < (1 << (bits - 1)):
-                raise RuntimeError(f"value cannot be converted to type {d.name} without overflow")
-        return
-    if c in _HALF_C:
-        val = float(exponent)
-        limit = _F16_MAX if c == _F16_C else _BF16_MAX
-        if math.isfinite(val) and abs(val) > limit:
-            raise RuntimeError(f"value cannot be converted to type {d.name} without overflow")
 
 
 def _complex_code(c: int) -> int:

@@ -37,7 +37,7 @@ from lucid._ops._dims import (
     _wrap_dims,
 )
 from lucid._ops._reduce import _ValuesIndices, _logical_not_adapter
-from lucid._ops._scalar_cast import check_alpha
+from lucid._scalar_cast import ScalarRead, check_alpha, check_pow_scalar
 from lucid._tensor_args import require_tensor, require_tensors
 from lucid._types import Scalar, TensorOrScalar
 
@@ -106,20 +106,29 @@ _ADD_SUB_SIGNATURE = _BINARY_SIGNATURE.replace(
 )
 
 
-def _scale_by_alpha(a: _Impl, b: _Impl, alpha: Scalar | complex, name: str = "alpha") -> _Impl:
+def _scale_by_alpha(
+    a: _Impl,
+    b: _Impl,
+    alpha: Scalar | complex,
+    name: str = "alpha",
+    read: ScalarRead = ScalarRead.STORAGE,
+    subtracts: bool = False,
+) -> _Impl:
     """Scale ``b`` by ``alpha`` for ``add`` / ``sub``, matching the reference's dtype rules.
 
     ``a`` is the operand whose dtype decides what a scale may be; ``name`` is
-    how a refusal spells the scalar, since ``addmm`` has a ``beta`` too.  A
-    float or complex ``alpha`` the dtype cannot hold is refused, not cast: a
-    complex one lost its imaginary part (:func:`~lucid._ops._scalar_cast.check_alpha`).
+    how a refusal spells the scalar, since ``addmm`` has a ``beta`` too, and
+    ``read`` is the type a half ``a`` reads it as and ``subtracts`` marks the
+    scaled operand as one that is subtracted.  A float or complex ``alpha`` the
+    dtype cannot hold is refused, not cast: a complex one lost its imaginary part
+    (:func:`~lucid._scalar_cast.check_alpha`).
     """
     alpha = _promotion.as_number(alpha)
     if isinstance(alpha, bool):
         if a.dtype != _C_engine.Bool:
             raise RuntimeError(f"Boolean {name} only supported for Boolean results.")
         return b if alpha else _C_engine.zeros_like(b)
-    check_alpha(a.dtype, alpha, name)
+    check_alpha(a.dtype, alpha, name, read=read, subtracts=subtracts)
     if alpha == 1 or (a.dtype == _C_engine.Bool and alpha != 0):
         return b
     if a.dtype == _C_engine.Bool:
@@ -142,7 +151,7 @@ def _power_operands(
     here; a number exponent costs one type test and no dtype read.
     """
     if inplace and (base_impl := _promotion.try_unwrap(base)) is not None:
-        _promotion.check_pow_scalar(base_impl.dtype, exponent)
+        check_pow_scalar(base_impl.dtype, exponent)
     a, b = _binary_operands(base, exponent, inplace=inplace)
     if (
         not isinstance(exponent, _promotion.NUMBER)
@@ -206,7 +215,7 @@ def _make_arith_adapter(
         if adds_or_subtracts:
             alpha = _promotion.as_number(alpha)
             if alpha != 1 or isinstance(alpha, (bool, float, complex)):
-                b = _scale_by_alpha(a, b, alpha)
+                b = _scale_by_alpha(a, b, alpha, subtracts=subtracts)
         return engine_fn(a, b)
 
     # The adapter's own ``(input, other)`` is the op's signature — not the
