@@ -3545,9 +3545,9 @@ class Tensor:
         end : Tensor
             Target tensor. Must broadcast against ``self``.
         weight : float or Tensor
-            Interpolation coefficient. Float values are broadcast to a
-            constant tensor matching the difference's shape; tensor
-            values are used as-is.
+            Interpolation coefficient. A float scales the whole
+            difference as a scalar; a tensor broadcasts against it and is
+            used as-is, element by element.
 
         Returns
         -------

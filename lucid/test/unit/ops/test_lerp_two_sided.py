@@ -13,8 +13,9 @@ on the CPU, so CPU and Metal agree with each other.  The reference's CPU kernel 
 multiply-add, so a finite answer may be a rounding or two away from Lucid's two-step one: finite
 answers are held to two ulps of the largest term they add up, ``inf`` / ``NaN`` ones and the
 ends of the segment exactly.  The two zeros compare equal, as the reference's scalar tail and its
-vector body disagree on the sign of a zero (``lerp(0, -0, 1)``); the sign Lucid keeps is the end's,
-which a test of its own pins.
+vector body disagree on the sign of a zero (``lerp(0, -0, 1)``).  Lucid's zeros are the vector body's,
+the sign of ``end + (weight - 1) * (end - start)``: a zero ``end`` keeps its sign only when that
+sum does (``lerp(-2, -0, 1)`` is ``+0``), which a test of its own pins.
 """
 
 import itertools
@@ -27,6 +28,7 @@ from typing import Any
 import pytest
 
 import lucid
+from lucid._C import engine as _C_engine
 from lucid.test._fixtures.devices import devices_supporting
 
 pytestmark = pytest.mark.parity
@@ -76,7 +78,12 @@ def _ulp(value: float, dtype: str) -> float:
 
 
 def _flat(tensor: Any) -> list[float]:
-    return list(tensor.float().tolist()) if tensor.ndim else [tensor.float().item()]
+    """``tensor``'s elements, row by row."""
+    return (
+        [float(x) for x in tensor.float().reshape(-1).tolist()]
+        if tensor.ndim
+        else [tensor.float().item()]
+    )
 
 
 def _agrees(got: float, want: float) -> bool:
@@ -194,13 +201,19 @@ def test_a_weight_of_one_gives_the_end_and_zero_gives_the_start_exactly(
 
 
 @pytest.mark.parametrize("dtype", _DTYPES)
-def test_a_weight_of_one_gives_the_end_including_the_sign_of_a_zero(dtype: str) -> None:
+def test_a_weight_of_one_gives_the_end_and_a_zero_end_takes_the_sums_sign(dtype: str) -> None:
+    """``end + 0 * (end - start)``: the zero is ``end``'s unless ``end - start`` is positive."""
     for device in _devices(dtype):
-        a = lucid.tensor([0.0, -0.0, 1.5, -2.0], dtype=getattr(lucid, dtype), device=device)
-        b = lucid.tensor([-0.0, 0.0, -0.0, 0.0], dtype=getattr(lucid, dtype), device=device)
+        a = lucid.tensor([0.0, -0.0, 1.5, -2.0, -2.0], dtype=getattr(lucid, dtype), device=device)
+        b = lucid.tensor([-0.0, 0.0, -0.0, 0.0, -0.0], dtype=getattr(lucid, dtype), device=device)
         for kind in _KINDS:
             got = lucid.lerp(a, b, _weight(lucid, kind, 1.0, a, device=device)).tolist()
-            assert [math.copysign(1.0, x) for x in got] == [-1.0, 1.0, -1.0, 1.0], (device, kind)
+            assert got == [0.0] * 5
+            # the last: -0 + (+0 * 2) is +0, as the reference's vector body gives
+            assert [math.copysign(1.0, x) for x in got] == [-1.0, 1.0, -1.0, 1.0, 1.0], (
+                device,
+                kind,
+            )
 
 
 def test_the_case_the_single_formula_lost_is_the_end() -> None:
@@ -342,6 +355,146 @@ def test_a_second_derivative_is_the_references(
         assert got is not None and want is not None
         for x, y in zip(_flat(got), _flat(want), strict=True):
             assert abs(x - y) <= 1e-5 * max(1.0, abs(y)), (x, y)
+
+
+#: ``(start, end, weight)`` shapes that broadcast against one another by pieces, not wholly.
+_BROADCASTS = (
+    ((3, 1), (1, 4), (4,)),
+    ((), (4,), (4,)),
+    ((4,), (4,), (2, 4)),
+    ((2, 1), (3,), (2, 3)),
+)
+
+
+def _shaped(lib: Any, values: list[float], shape: tuple[int, ...], **where: Any) -> Any:
+    if not shape:
+        return lib.tensor(values[0], **where)
+    return lib.tensor(values, **where).reshape(shape)
+
+
+@pytest.mark.parametrize("shapes", _BROADCASTS, ids=lambda s: "/".join(map(str, s)))
+@pytest.mark.parametrize(("dtype", "device", "kind"), list(_cells(("float32",), _KINDS[:2])))
+def test_gradients_under_partial_broadcasting_are_the_references(
+    dtype: str, device: str, kind: str, shapes: tuple[tuple[int, ...], ...], ref: ModuleType
+) -> None:
+    """Each gradient is summed back to its operand's own shape, a weight's included."""
+    rng = random.Random(61)
+    start, end, weight = (
+        [rng.uniform(-span, span) for _ in range(math.prod(shape))]
+        for shape, span in zip(shapes, (3.0, 3.0, 1.5), strict=True)
+    )
+    out_shape = tuple(ref.broadcast_shapes(*(shapes if kind == "tensor" else shapes[:2])))
+    upstream = [rng.uniform(-2.0, 2.0) for _ in range(math.prod(out_shape))]
+    for number in (0.3, 0.8, -0.7) if kind == "number" else (None,):
+        grads = []
+        for lib, where in ((lucid, {"device": device}), (ref, {})):
+            ops = [
+                _shaped(lib, v, s, **where).requires_grad_() for v, s in zip((start, end), shapes)
+            ]
+            if number is None:
+                ops.append(_shaped(lib, weight, shapes[2], **where).requires_grad_())
+            lib.lerp(*ops, *([] if number is None else [number])).backward(
+                _shaped(lib, upstream, out_shape, **where)
+            )
+            grads.append([t.grad for t in ops])
+        for got, want in zip(*grads, strict=True):
+            assert got is not None and want is not None
+            assert tuple(got.shape) == tuple(want.shape)
+            for x, y in zip(_flat(got), _flat(want), strict=True):
+                assert abs(x - y) <= 1e-5 * max(1.0, abs(y)), (shapes, number, x, y)
+
+
+@pytest.mark.parametrize("device", devices_supporting(lucid.float32))
+def test_a_complex_zero_dim_weights_gradients_are_the_references(
+    device: str, ref: ModuleType
+) -> None:
+    """The reference cannot back-propagate real operands beside a complex weight (a complex
+    gradient reaches a real input), so it is given the operands cast to complex: the cast's
+    backward keeps the real part, as the promotion Lucid makes does."""
+    start, end = [1.0, -2.0, 0.5], [3.0, 0.5, -1.5]
+    upstream = [1 + 0.5j, 2 - 1j, 0.3 + 0.7j]
+    for weight in (0.25 + 0.25j, 0.5 + 0.5j, 1 + 0j, -0.3 + 0.2j, 2 - 1j):
+        ours = [lucid.tensor(v, requires_grad=True, device=device) for v in (start, end)]
+        w = lucid.tensor(weight, requires_grad=True, device=device)
+        lucid.lerp(*ours, w).backward(lucid.tensor(upstream, device=device))
+        theirs = [ref.tensor(v, requires_grad=True) for v in (start, end)]
+        wt = ref.tensor(weight, requires_grad=True)
+        ref.lerp(*(t.to(ref.complex64) for t in theirs), wt).backward(ref.tensor(upstream))
+        for name, got, want in zip(("start", "end", "weight"), (*ours, w), (*theirs, wt)):
+            assert got.grad is not None and want.grad is not None, name
+            assert got.grad.dtype is got.dtype, name
+            got_values = got.grad.tolist() if got.ndim else [got.grad.item()]
+            want_values = want.grad.tolist() if want.ndim else [want.grad.item()]
+            for x, y in zip(got_values, want_values, strict=True):
+                assert abs(complex(x) - complex(y)) <= 2e-6 * max(1.0, abs(complex(y))), (
+                    name,
+                    weight,
+                )
+
+
+# ── a write after the call is refused exactly when the backward reads it ─────────────────────
+
+
+def _lerp_then_written(
+    lib: Any, device: str | None, written: str, weight_needs_grad: bool, number: bool
+) -> tuple[Any, Any]:
+    """``lerp`` of two non-leaf operands, then ``written`` doubled in place.
+
+    Returns the loss and what the write raised (``None`` if it went in).
+    """
+    where = {} if device is None else {"device": device}
+    start, end = (lib.tensor([1.0, -2.0, 0.5], requires_grad=True, **where) * 1.0 for _ in range(2))
+    weight: Any = 0.3
+    if not number:
+        weight = lib.tensor([0.25, 0.75, -0.6], requires_grad=weight_needs_grad, **where)
+        weight = weight * 1.0 if weight_needs_grad else weight
+    loss = lib.lerp(start, end, weight).sum()
+    try:
+        {"start": start, "end": end, "weight": weight}[written].mul_(2.0)
+    except RuntimeError as exc:  # the CPU refuses a write into bytes a node holds
+        return loss, exc
+    return loss, None
+
+
+#: ``(written, weight needs a gradient, number weight) -> whether the backward reads it``.
+#: The ``start`` and ``end`` gradients read the weight, and the weight's reads both ends; a number
+#: weight is read by nothing, and a gradient nobody asked for reads nothing.
+_READS = {
+    ("weight", False, False): True,
+    ("weight", True, False): True,
+    ("start", True, False): True,
+    ("end", True, False): True,
+    ("start", False, False): False,
+    ("end", False, False): False,
+    ("start", False, True): False,
+    ("end", False, True): False,
+}
+
+
+@pytest.mark.parametrize(
+    ("written", "weight_needs_grad", "number"), list(_READS), ids=lambda v: str(v)
+)
+@pytest.mark.parametrize("device", devices_supporting(lucid.float32))
+def test_a_write_after_lerp_is_refused_exactly_when_its_backward_reads_it(
+    device: str, written: str, weight_needs_grad: bool, number: bool, ref: ModuleType
+) -> None:
+    reads = _READS[(written, weight_needs_grad, number)]
+    ref_loss, ref_refused = _lerp_then_written(ref, None, written, weight_needs_grad, number)
+    assert ref_refused is None
+    if reads:
+        with pytest.raises(RuntimeError, match="modified by an inplace operation"):
+            ref_loss.backward()
+    else:
+        ref_loss.backward()
+
+    loss, refused = _lerp_then_written(lucid, device, written, weight_needs_grad, number)
+    if refused is not None:
+        assert reads and device == "cpu" and "saved for backward" in str(refused)
+    elif reads:
+        with pytest.raises(_C_engine.VersionMismatch):
+            loss.backward()
+    else:
+        loss.backward()
 
 
 # ── the spellings take one path ──────────────────────────────────────────────────────────────

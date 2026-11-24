@@ -304,6 +304,12 @@ def _cases() -> list[Case]:
     # Not bool: the reference framework rejects ``lerp`` on bools; Lucid's
     # eager answers with bool arithmetic that is not worth pinning down.
     add("lerp", lambda t: lucid.lerp(t, t.flip([0]), 0.25), dtypes=("f32", "i64", "i32"))
+    # A tensor weight picks its form on the device, in both directions of |w| < 0.5 (LCD-1101).
+    add(
+        "lerp_tensor_weight",
+        lambda t: lucid.lerp(t, t.flip([0]), lucid.tanh(t.flip([1]))),
+        dtypes=("f32",),
+    )
     add("bitwise_and", lambda t: t & t.flip([0]), dtypes=("i64", "i32", "bool"))
     add("invert", lambda t: ~t, dtypes=("i64", "i32", "bool"))
     add("bitwise_or", lambda t: t | t.flip([0]), dtypes=("i64", "i32", "bool"))

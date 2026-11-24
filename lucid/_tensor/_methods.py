@@ -669,8 +669,8 @@ def _lerp_(self: Tensor, end: Tensor, weight: float | Tensor) -> Tensor:
     """In-place :meth:`lerp`: ``self`` becomes ``self.lerp(end, weight)``.
 
     The value takes the two-sided form :meth:`lerp` does, by the weight.  A
-    non-float ``self`` or ``end`` raises the ``TypeError`` :meth:`lerp` raises,
-    before anything is written.
+    non-float ``self`` or ``end`` raises the ``NotImplementedError`` :meth:`lerp`
+    raises, before anything is written.
 
     >>> import lucid
     >>> x = lucid.tensor([0.0, 10.0])

@@ -55,6 +55,15 @@ def _flip0(x: np.ndarray) -> np.ndarray:
     return x[::-1]
 
 
+def _lerp_two_sided(start: np.ndarray, end: np.ndarray, weight: np.ndarray) -> np.ndarray:
+    """The reference's lerp: ``|weight| < 0.5`` takes the start form, the rest the end form."""
+    return np.where(
+        np.abs(weight) < 0.5,
+        start + weight * (end - start),
+        end - (end - start) * (1 - weight),
+    )
+
+
 def _softmax(x: np.ndarray, axis: int) -> np.ndarray:
     e = np.exp(_f(x) - _f(x).max(axis=axis, keepdims=True))
     return e / e.sum(axis=axis, keepdims=True)
@@ -335,6 +344,9 @@ REFS: dict[str, Ref] = {
     "nextafter": lambda x, c: np.nextafter(x, _flip0(x)),
     "isclose": lambda x, c: np.isclose(_f(x), _f(_flip0(x))),
     "lerp": lambda x, c: x + 0.25 * (_flip0(x) - x),
+    "lerp_tensor_weight": lambda x, c: _lerp_two_sided(
+        _f(x), _f(_flip0(x)), np.tanh(_f(x)[:, ::-1])
+    ),
     "bitwise_and": lambda x, c: x & _flip0(x),
     "invert": lambda x, c: ~x,
     "bitwise_or": lambda x, c: x | _flip0(x),

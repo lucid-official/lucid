@@ -470,6 +470,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - lerp takes the reference's two forms by the weight
 
+- lerp review fixes (small-tensor cost, tests, docs)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

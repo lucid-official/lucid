@@ -14,11 +14,13 @@ gives what the form it falls in gives (``inf - inf`` for ``lerp(0, inf, 0.5)``).
 
 The second form is written ``end + (weight - 1) * (end - start)``: ``weight - 1`` is
 ``-(1 - weight)`` in floating point, and ``end + (-x)`` is ``end - x``, so it is the same
-number and the whole is the first form with another base (``end``) and coefficient.  A
-tensor weight picks base and coefficient with a ``where`` on ``|weight| < 0.5`` and never
-leaves the device, so there is no host read and no sync on Metal; a Python number picks
-them at once, on the host.  Picking the *operands* of one product, not the results of two,
-keeps ``0 * inf`` out of the form that was not taken.
+number up to the sign of a zero.  At ``weight = 1`` it is ``+0`` where the other is ``-0``, and
+a zero ``end`` can come back as ``+0`` (``lerp(-2, -0, 1)``); the reference's vector body takes
+this form and its scalar tail the other, and they differ only there.  The whole is the first
+form with another base (``end``) and coefficient.  A tensor weight picks base and coefficient
+with a ``where`` on ``|weight| < 0.5`` and never leaves the device, so there is no host read
+and no sync on Metal; a Python number picks them at once, on the host.  Picking the *operands*
+of one product, not the results of two, keeps ``0 * inf`` out of the form that was not taken.
 
 Metal follows the reference's CPU kernel, not its ``mps`` one.  That one uses
 ``start + weight * (end - start)`` for every weight, which misses ``lerp(a, b, 1) == b`` and
@@ -33,13 +35,15 @@ out.
 
 from typing import final, override
 
-import lucid
 from lucid._C import engine as _C_engine
+from lucid._dispatch import _unwrap, _wrap
 from lucid._scalar_cast import ScalarRead, cast_scalar
 from lucid._tensor.tensor import Tensor
 from lucid.autograd.function import Function, FunctionCtx
 
-#: ``|weight|`` below this takes ``start + weight * (end - start)``.
+#: ``|weight|`` below this takes ``start + weight * (end - start)``.  The rule has three
+#: copies: here, ``lerp_toward`` in ``lucid/_C/optim/Prop.cpp`` and
+#: ``_CompiledRMSprop._flags`` in ``lucid/compile/_optim/compiler.py``; change all three.
 _SMALL_WEIGHT = 0.5
 
 
@@ -56,6 +60,33 @@ def _conj(t: Tensor) -> Tensor:
     return t.conj() if t.is_complex() else t
 
 
+def _constant(value: float, like: _C_engine.TensorImpl) -> _C_engine.TensorImpl:
+    """``value`` as a 0-d tensor of ``like``'s dtype, on its device."""
+    return _C_engine.full([], value, like.dtype, like.device)
+
+
+def _value(
+    start: _C_engine.TensorImpl,
+    end: _C_engine.TensorImpl,
+    weight: _C_engine.TensorImpl | float | complex,
+) -> _C_engine.TensorImpl:
+    """The split value over engine tensors: each op is the engine's own, so it records a gradient.
+
+    The engine's ops, not the tensor operators: a call to ``lerp`` is a handful of ops on a
+    small tensor, and the operators' dtype and device rules cost several times what the ops do.
+    """
+    diff = _C_engine.sub(end, start)
+    if isinstance(weight, _C_engine.TensorImpl):
+        magnitude = _C_engine.abs(weight)
+        small = _C_engine.less(magnitude, _constant(_SMALL_WEIGHT, magnitude))
+        coeff = _C_engine.where(small, weight, _C_engine.sub(weight, _constant(1.0, weight)))
+        return _C_engine.add(_C_engine.where(small, start, end), _C_engine.mul(coeff, diff))
+    step = _step(start.dtype, weight)
+    if abs(step) < _SMALL_WEIGHT:
+        return _C_engine.add(start, _C_engine.mul(diff, _constant(step, diff)))
+    return _C_engine.add(end, _C_engine.mul(diff, _constant(step - 1, diff)))
+
+
 def _lerp_value(start: Tensor, end: Tensor, weight: Tensor | float | complex) -> Tensor:
     """``lerp(start, end, weight)`` from differentiable ops, split on ``|weight| < 0.5``.
 
@@ -63,14 +94,13 @@ def _lerp_value(start: Tensor, end: Tensor, weight: Tensor | float | complex) ->
     too, as :func:`lucid._ops.composite.blas._lerp` leaves them.  A ``lucid.compile``
     recording takes this form in place of the node (:attr:`_Lerp._trace_form`).
     """
-    diff = end - start
-    if isinstance(weight, Tensor):
-        small = lucid.abs(weight) < _SMALL_WEIGHT
-        return lucid.where(small, start, end) + lucid.where(small, weight, weight - 1) * diff
-    step = _step(start._impl.dtype, weight)
-    if abs(step) < _SMALL_WEIGHT:
-        return start + diff * step
-    return end + diff * (step - 1)
+    return _wrap(
+        _value(
+            _unwrap(start),
+            _unwrap(end),
+            _unwrap(weight) if isinstance(weight, Tensor) else weight,
+        )
+    )
 
 
 @final
@@ -119,7 +149,20 @@ class _Lerp(Function):
 
 
 def _apply_lerp(start: Tensor, end: Tensor, weight: Tensor | float | complex) -> Tensor:
-    """``lerp`` of tensors of one floating dtype: the node when a gradient is wanted."""
+    """``lerp`` of tensors of one floating dtype: the node when a gradient is wanted.
+
+    Nothing records without one, and the node's bookkeeping is most of the time a small
+    tensor's ``lerp`` takes, so the value alone is returned then.
+    """
+    if not (
+        _C_engine.grad_enabled()
+        and (
+            start.requires_grad
+            or end.requires_grad
+            or (isinstance(weight, Tensor) and weight.requires_grad)
+        )
+    ):
+        return _lerp_value(start, end, weight)
     out = _Lerp.apply(start, end, weight)
     assert isinstance(out, Tensor)
     return out

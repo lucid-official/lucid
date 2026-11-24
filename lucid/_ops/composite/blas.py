@@ -441,6 +441,59 @@ def _kept(tensor: Tensor, impl: _C_engine.TensorImpl) -> Tensor:
     return tensor if _unwrap(tensor) is impl else _wrap(impl)
 
 
+def _is_real_float(dtype: _C_engine.Dtype) -> bool:
+    """Whether ``dtype`` is float16, bfloat16, float32 or float64."""
+    return not (_promotion.is_integral(dtype) or _promotion.is_complex(dtype))
+
+
+def _check_lerp_ends(input: Tensor, end: Tensor) -> _C_engine.Dtype:
+    """The dtype ``input`` and ``end`` share, or the refusal of what ``lerp`` takes.
+
+    The checks read the engine's dtype and device: a call is a handful of ops on a small
+    tensor, and the ``Tensor`` properties cost as much as those ops do.
+    """
+    input_impl, end_impl = _unwrap(input), _unwrap(end)
+    dtype = input_impl.dtype
+    if not (_is_real_float(dtype) and _is_real_float(end_impl.dtype)):
+        raise _C_engine.NotImplementedError(
+            f"lerp expects floating-point tensors, got {input.dtype} and "
+            f"{end.dtype} — cast them first"
+        )
+    if end_impl.dtype != dtype:
+        raise _C_engine.DtypeMismatch(
+            f"DtypeMismatch (lerp: input/end): expected {input.dtype._name}, got {end.dtype._name}"
+        )
+    if input_impl.device != end_impl.device and not _can_mix_devices(input, end):
+        raise _C_engine.DeviceMismatch(
+            f"DeviceMismatch (lerp: input/end): expected {input.device.type}, got {end.device.type}"
+        )
+    return dtype
+
+
+def _lerp_by_tensor(input: Tensor, end: Tensor, weight: Tensor) -> Tensor:
+    """``_lerp`` of a tensor ``weight``: an operand, promoted with the others."""
+    input_impl, end_impl, weight_impl = _unwrap(input), _unwrap(end), _unwrap(weight)
+    if weight_impl.shape and weight_impl.dtype != input_impl.dtype:
+        raise _C_engine.DtypeMismatch(
+            f"DtypeMismatch (lerp: input/weight): "
+            f"expected {input.dtype._name}, got {weight.dtype._name}"
+        )
+    input_impl, end_impl, weight_impl = _promote_impls([input_impl, end_impl, weight_impl])
+    if _promotion.is_half(input_impl.dtype):
+        return _in_float32_as(
+            input_impl.dtype, _lerp, _wrap(input_impl), _wrap(end_impl), _wrap(weight_impl)
+        )
+    if not (input_impl.device == end_impl.device == weight_impl.device):
+        # The device the difference lands on: ``input``'s, unless it is a 0-d CPU tensor.
+        lead = end if input.ndim == 0 and input.device.type == "cpu" else input
+        if not _can_mix_devices(lead, weight):
+            raise _C_engine.DeviceMismatch(
+                f"DeviceMismatch (lerp: input/weight): "
+                f"expected {lead.device.type}, got {weight.device.type}"
+            )
+    return _apply_lerp(_kept(input, input_impl), _kept(end, end_impl), _kept(weight, weight_impl))
+
+
 def _lerp(input: Tensor, end: Tensor, weight: float | complex | Tensor) -> Tensor:
     """Linearly interpolate ``input`` and ``end`` by ``weight``.
 
@@ -452,48 +505,14 @@ def _lerp(input: Tensor, end: Tensor, weight: float | complex | Tensor) -> Tenso
     is an operand, not a scale factor: it is never read as a number.
 
     The value takes one of two forms by ``|weight| < 0.5`` and the gradient is the one
-    the reference gives, whichever it took (:mod:`lucid._ops.composite._lerp`).
+    the reference gives, whichever it took (:mod:`lucid._ops.composite._lerp`).  Metal
+    follows the reference's CPU kernel, not its ``mps`` one.
     """
     if not isinstance(weight, lucid.Tensor):
         weight = scale_factor(weight, "lerp", "weight")
-    if not (input.is_floating_point() and end.is_floating_point()):
-        raise _C_engine.NotImplementedError(
-            f"lerp expects floating-point tensors, got {input.dtype} and "
-            f"{end.dtype} — cast them first"
-        )
-    if end.dtype != input.dtype:
-        raise _C_engine.DtypeMismatch(
-            f"DtypeMismatch (lerp: input/end): expected {input.dtype._name}, got {end.dtype._name}"
-        )
-    if not _can_mix_devices(input, end):
-        raise _C_engine.DeviceMismatch(
-            f"DeviceMismatch (lerp: input/end): expected {input.device.type}, got {end.device.type}"
-        )
-    input_impl, end_impl = _unwrap(input), _unwrap(end)
-    # Metal follows the reference's CPU kernel, not its ``mps`` one (see ``_lerp.py``).
+    dtype = _check_lerp_ends(input, end)
     if isinstance(weight, lucid.Tensor):
-        weight_impl = _unwrap(weight)
-        if weight_impl.shape and weight.dtype != input.dtype:
-            raise _C_engine.DtypeMismatch(
-                f"DtypeMismatch (lerp: input/weight): "
-                f"expected {input.dtype._name}, got {weight.dtype._name}"
-            )
-        input_impl, end_impl, weight_impl = _promote_impls([input_impl, end_impl, weight_impl])
-        if _promotion.is_half(input_impl.dtype):
-            return _in_float32_as(
-                input_impl.dtype, _lerp, _wrap(input_impl), _wrap(end_impl), _wrap(weight_impl)
-            )
-        # The device the difference lands on: ``input``'s, unless it is a 0-d CPU tensor.
-        lead = end if input.ndim == 0 and input.device.type == "cpu" else input
-        if not _can_mix_devices(lead, weight):
-            raise _C_engine.DeviceMismatch(
-                f"DeviceMismatch (lerp: input/weight): "
-                f"expected {lead.device.type}, got {weight.device.type}"
-            )
-        return _apply_lerp(
-            _kept(input, input_impl), _kept(end, end_impl), _kept(weight, weight_impl)
-        )
-    dtype = input_impl.dtype  # ``end`` has it too, checked above
+        return _lerp_by_tensor(input, end, weight)
     if _promotion.is_half(dtype):
         return _in_float32_as(dtype, partial(_lerp, weight=weight), input, end)
     return _apply_lerp(input, end, weight)
