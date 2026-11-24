@@ -433,9 +433,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `cosine_similarity` broadcasts its operands before taking the norms. `cosine_similarity(tensor(0.5), tensor([1., 2.]), dim=0)` is now `0.9487` (was `1.342`), and a 0-d operand beside a matrix with `dim=1` no longer raises (LCD-1074).
 - `gaussian_nll_loss` ranks a 0-d `var` as the dimensioned operand the reference unsqueezes it to (LCD-1074).
 
-- read scale factors as the reference does
+- `addmm`, `addmv`, `addbmm` and `baddbmm` accept a bool `alpha` / `beta` (1 or 0); they raised "Boolean alpha only supported for Boolean results." `index_add` on a bool tensor accepts a float or complex `alpha` and reads it as `alpha != 0` (LCD-1078).
+- A scale factor the tensor's element type cannot hold raises `RuntimeError: value cannot be converted to type <T> without overflow`, as the reference does. Before, it wrapped (`alpha=300.7` on int8 was 46), leaked Python's OverflowError or ValueError (inf, NaN), or became inf (past float32's range, or past float16's for `add`, `sub`, `addmv`, `addr`, `index_add`). This covers `addmm`, `addmv`, `addbmm`, `baddbmm`, `addr`, `addcmul`, `addcdiv`, `lerp`, `index_add` and the `alpha` of `add` / `sub` / `rsub` (LCD-1078).
+- `sub` and `rsub` range-check the negated `alpha`, as the reference does: `128` is an int8 alpha for `sub`, and `-128` is refused (LCD-1078).
+- The in-place pow overflow refusal names the reference's C++ type (`int8_t`, `c10::Half`) instead of the engine enum (`I8`, `F16`) (LCD-1078).
 
-- name the moved pow-scalar check in IntPow.h (LCD-1078)
 
 ### Added
 
