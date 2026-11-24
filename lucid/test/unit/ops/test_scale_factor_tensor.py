@@ -10,13 +10,16 @@ operand, which promoted, ignored the by-type rules and mismatched dtypes.
 
 ``lucid/_scalar_cast.py`` owns the reading (``scale_factor``, applied at the entry of every op that
 takes a scale factor), and this sweep holds every op x spelling x tensor dtype x scalar dtype x
-device to the reference, class, message, dtype and value, with the op table of
-``test_scale_factor_reading.py``.  Beside the 0-d tensors:
+device to the reference, class, message, dtype and value, on the op table of
+``_scale_factor_sweep.py`` that ``test_scale_factor_reading.py`` uses for Python numbers.  Beside
+the 0-d tensors:
 
 * a tensor with a dimension, or one that requires grad, is not a number: ``TypeError`` before the
   op checks anything else (``add(): argument 'alpha' must be Number, not Tensor``).  The reference
   names an in-place twin it writes (``addmm_()``); Lucid names the op it runs (``addmm()``), so
-  the sweep compares the name without its trailing underscore;
+  the sweep compares the name without its trailing underscore.  Where the reference lists every
+  signature (``addmm``, ``baddbmm``, ``subtract``, ``rsub``) the sweep holds the class and the
+  short sentence;
 * ``lerp``'s ``weight`` is an operand in the reference too, so a 0-d tensor there is promoted and
   never read as a number: the sweep holds it to the reference as well, to show the line.
 """
@@ -171,8 +174,8 @@ def test_a_tensor_that_is_not_a_number_is_a_type_error(
     assert got[0] == want[0] == "raised", f"{got} vs {want}"
     assert got[1] is want[1] is TypeError
     if "invalid combination" in want[2]:
-        # several signatures: the reference lists them all
-        assert got[2].startswith(want[2].split("(")[0].removesuffix("_") + "(): argument ")
+        # several signatures: the reference lists them all, and ``subtract`` is its own name there
+        assert re.search(r"^\w+\(\): argument '\w+' must be Number, not Tensor$", got[2])
     else:
         assert _op_name_without_underscore(got[2]) == _op_name_without_underscore(want[2])
 

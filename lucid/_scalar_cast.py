@@ -229,6 +229,10 @@ def _negated(alpha: Scalar | complex) -> Scalar | complex:
     return alpha if isinstance(alpha, int) and alpha == -(1 << 63) else -alpha
 
 
+#: What a scale factor already is when it needs no reading: the four Python number types.
+_PLAIN = frozenset(_promotion.NUMBER)
+
+
 def scale_factor(factor: object, op: str, name: str) -> Scalar | complex:
     """The Python number the scale factor ``name`` of ``op`` stands for.
 
@@ -262,17 +266,13 @@ def scale_factor(factor: object, op: str, name: str) -> Scalar | complex:
     TypeError
         ``factor`` is neither a number nor a 0-d tensor that does not require grad.
     """
-    number = _promotion.as_number(factor)
+    number = factor if type(factor) in _PLAIN else _promotion.as_number(factor)
     if isinstance(number, _promotion.NUMBER):
         return number
     impl = _promotion.try_unwrap(factor)
     if impl is not None and not impl.shape and not impl.requires_grad:
         return impl.item()
     raise TypeError(f"{op}(): argument '{name}' must be Number, not {type(factor).__name__}")
-
-
-#: What a scale factor already is when it needs no reading: the four Python number types.
-_PLAIN = frozenset(_promotion.NUMBER)
 
 
 def read_scale_factors(op: str, kwargs: dict[str, object], names: Iterable[str]) -> None:
@@ -307,10 +307,10 @@ def read_scale_factors(op: str, kwargs: dict[str, object], names: Iterable[str])
 def scale_factors[**P, R](*names: str) -> Callable[[Callable[P, R]], Callable[P, R]]:
     """Decorate an op so its keyword-only scale factors ``names`` are read at entry.
 
-    The declaration of which arguments of an op are scale factors, for an op that has no
-    wrapper of its own to read them in (the products with a scaled accumulator are
-    ``_amp_op`` functions, which take the same names as ``scalars``).  The wrapped function
-    sees numbers only, and keeps its signature, name and docstring.
+    The declaration of which arguments of an op are scale factors.  ``_amp_op(scalars=...)``
+    applies it outside the autocast entry, so the products with a scaled accumulator read
+    theirs before the row can cast a tensor one.  The wrapped function sees numbers only, and
+    keeps its signature, name and docstring.
 
     Parameters
     ----------

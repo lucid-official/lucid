@@ -38,7 +38,7 @@ from lucid._ops._dims import (
     _wrap_dims,
 )
 from lucid._ops._reduce import _ValuesIndices, _logical_not_adapter
-from lucid._scalar_cast import ScalarRead, check_alpha, check_pow_scalar
+from lucid._scalar_cast import ScalarRead, check_alpha, check_pow_scalar, scale_factor
 from lucid._tensor_args import require_tensor, require_tensors
 from lucid._types import Scalar, TensorOrScalar
 
@@ -122,9 +122,9 @@ def _scale_by_alpha(
     ``read`` is the type a half ``a`` reads it as and ``subtracts`` marks the
     scaled operand as one that is subtracted.  A float or complex ``alpha`` the
     dtype cannot hold is refused, not cast: a complex one lost its imaginary part
-    (:func:`~lucid._scalar_cast.check_alpha`).
+    (:func:`~lucid._scalar_cast.check_alpha`).  ``alpha`` is a number: the entry that took
+    it read a 0-d tensor (:func:`~lucid._scalar_cast.scale_factor`).
     """
-    alpha = _promotion.as_number(alpha)
     if isinstance(alpha, bool):
         if a.dtype != _C_engine.Bool:
             raise RuntimeError(f"Boolean {name} only supported for Boolean results.")
@@ -202,6 +202,10 @@ def _make_arith_adapter(
     # Positional-only: the wrappers bind the advertised names to position
     # (``exponent`` for ``pow``), so ``other=`` must not reach the body too.
     def _adapter(input: _Impl, other: _Impl, /, *, alpha: Scalar = 1) -> _Impl:
+        scale: Scalar | complex = 1
+        if adds_or_subtracts:
+            # an int (the default 1 among them) is a number already: no call on the common path
+            scale = alpha if type(alpha) is int else scale_factor(alpha, name, "alpha")
         if subtracts:
             _refuse_bool_subtraction(input, other)
         if powers and isinstance(input, _C_engine.TensorImpl):
@@ -213,10 +217,8 @@ def _make_arith_adapter(
             if raises_to_power
             else _binary_operands(input, other, opmath=opmath, inplace=inplace)
         )
-        if adds_or_subtracts:
-            alpha = _promotion.as_number(alpha)
-            if alpha != 1 or isinstance(alpha, (bool, float, complex)):
-                b = _scale_by_alpha(a, b, alpha, subtracts=subtracts)
+        if adds_or_subtracts and (scale != 1 or isinstance(scale, (bool, float, complex))):
+            b = _scale_by_alpha(a, b, scale, subtracts=subtracts)
         return engine_fn(a, b)
 
     # The adapter's own ``(input, other)`` is the op's signature — not the
