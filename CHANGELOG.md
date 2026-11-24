@@ -484,6 +484,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Loading a checkpoint into the wrong class or at the wrong size raised an error that named every missing and unexpected key, hundreds of lines; it now counts each kind of mismatch, names the first few weights and the class the checkpoint was saved from (LCD-1111).
 - `AutoModelFor*.from_pretrained` loaded a directory with its own copy of `PretrainedModel.from_pretrained`'s code; both go through one loader, `lucid.models._checkpoint` (LCD-1111).
 
+- Swin stem pads a non-multiple border like the reference
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

@@ -36,6 +36,7 @@ from lucid.models._tasks import ImageClassificationModel
 from lucid.models._mixins import BackboneMixin, ClassificationHeadMixin, FeatureInfo
 from lucid.models._output import BaseModelOutput, ImageClassificationOutput
 from lucid.models._utils._classification import DropPath
+from lucid.models.vision._common._padding import pad_to_patch_multiple
 from lucid.models.vision.swin._config import SwinConfig
 
 # ---------------------------------------------------------------------------
@@ -46,6 +47,7 @@ from lucid.models.vision.swin._config import SwinConfig
 class _PatchEmbed(nn.Module):
     def __init__(self, in_ch: int, patch_size: int, embed_dim: int, dropout: float = 0.0) -> None:
         super().__init__()
+        self.patch_size = patch_size
         self.proj = nn.Conv2d(in_ch, embed_dim, patch_size, stride=patch_size)
         self.norm = nn.LayerNorm(embed_dim)
         # The reference holds ``pos_drop = nn.Dropout(drop_rate)`` and applies
@@ -55,8 +57,9 @@ class _PatchEmbed(nn.Module):
 
     @override
     def forward(self, x: Tensor) -> Tensor:
-        x = self.proj(x)  # (B, C, H, W)
-        B, C, H, W = x.shape
+        # The strided convolution drops a border that does not fill a patch;
+        # the reference pads the right and bottom so it takes part.
+        x = self.proj(pad_to_patch_multiple(x, self.patch_size))  # (B, C, H, W)
         x = x.permute(0, 2, 3, 1)  # (B, H, W, C)
         x = self.norm(x)
         return self.pos_drop(x)
@@ -522,6 +525,11 @@ class SwinTransformer(PretrainedModel, BackboneMixin):
     Reference: Ze Liu *et al.*, *"Swin Transformer: Hierarchical Vision
     Transformer using Shifted Windows"*, ICCV 2021,
     `arXiv:2103.14030 <https://arxiv.org/abs/2103.14030>`_.
+
+    Any input size is accepted.  A side that is not a multiple of
+    ``patch_size`` is zero-padded on the right and bottom before the patch
+    convolution (as the reference does), and each stage then pads its
+    feature map up to a whole number of windows, so no border is dropped.
 
     Examples
     --------

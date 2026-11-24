@@ -49,6 +49,7 @@ from lucid.models._utils._segmentation import (
     sigmoid_ce_loss,
     uncertain_point_coords,
 )
+from lucid.models.vision._common._padding import pad_to_patch_multiple
 from lucid.models.vision._common._position import SinePositionEmbedding
 from lucid.models.vision.mask2former._config import Mask2FormerConfig
 
@@ -70,15 +71,7 @@ class _SwinPatchEmbeddings(nn.Module):
 
     @override
     def forward(self, x: Tensor) -> tuple[Tensor, tuple[int, int]]:
-        # Pad to a multiple of patch_size, as the reference does.  A
-        # stride-``patch_size`` convolution silently *drops* the remainder
-        # otherwise, so an image whose side is not a multiple loses its last
-        # rows/columns before the backbone ever sees them.
-        ph = (self.patch_size - int(x.shape[2]) % self.patch_size) % self.patch_size
-        pw = (self.patch_size - int(x.shape[3]) % self.patch_size) % self.patch_size
-        if ph or pw:
-            x = F.pad(x, (0, pw, 0, ph))
-        emb: Tensor = self.projection(x)  # (B, C, H', W')
+        emb: Tensor = self.projection(pad_to_patch_multiple(x, self.patch_size))  # (B, C, H', W')
         h = int(emb.shape[2])
         w = int(emb.shape[3])
         # (B, C, H', W') -> (B, H'*W', C)
