@@ -171,4 +171,5 @@ class MobileNetV4Config(ModelConfig):
                 f"MobileNetV4Config.drop_path_rate must lie in [0, 1), got "
                 f"{self.drop_path_rate}"
             )
-        check_positive(self, "num_classes", "in_channels")
+        owner = type(self).__name__
+        check_positive(owner, num_classes=self.num_classes, in_channels=self.in_channels)

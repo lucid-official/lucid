@@ -191,20 +191,20 @@ class ViTConfig(ModelConfig):
     classifier: Literal["token", "gap"] = "token"
 
     def __post_init__(self) -> None:
+        owner = type(self).__name__
         # A zero ``num_heads`` / ``patch_size`` is a ZeroDivisionError at
         # build, and an indivisible ``dim`` only fails in the first forward
         # (the qkv reshape), so both are refused here, by field name.
         check_positive(
-            self,
-            "image_size",
-            "patch_size",
-            "num_classes",
-            "in_channels",
-            "dim",
-            "num_heads",
-            "mlp_ratio",
+            owner,
+            image_size=self.image_size,
+            patch_size=self.patch_size,
+            num_classes=self.num_classes,
+            in_channels=self.in_channels,
+            dim=self.dim,
+            num_heads=self.num_heads,
+            mlp_ratio=self.mlp_ratio,
         )
-        owner = type(self).__name__
         check_divisible(owner, "image_size", self.image_size, "patch_size", self.patch_size)
         check_divisible(owner, "dim", self.dim, "num_heads", self.num_heads)
         if self.classifier not in ("token", "gap"):

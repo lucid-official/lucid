@@ -90,5 +90,7 @@ class ResNeXtConfig(ModelConfig):
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "layers", tuple(self.layers))
-        check_residual_layers(self)
-        check_positive(self, "num_classes", "in_channels", "cardinality", "width_per_group")
+        owner = type(self).__name__
+        check_positive(owner, cardinality=self.cardinality, width_per_group=self.width_per_group)
+        check_positive(owner, num_classes=self.num_classes, in_channels=self.in_channels)
+        check_residual_layers(owner, layers=self.layers)

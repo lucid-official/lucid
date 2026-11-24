@@ -111,6 +111,8 @@ class SENetConfig(ModelConfig):
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "layers", tuple(self.layers))
-        check_residual_layers(self)
-        check_positive(self, "num_classes", "in_channels", "reduction")
-        check_choice(self, "block_type", ("basic", "bottleneck"))
+        owner = type(self).__name__
+        check_residual_layers(owner, layers=self.layers)
+        check_positive(owner, num_classes=self.num_classes, in_channels=self.in_channels)
+        check_positive(owner, reduction=self.reduction)
+        check_choice(owner, "block_type", self.block_type, ("basic", "bottleneck"))

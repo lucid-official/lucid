@@ -150,14 +150,20 @@ class CvTConfig(ModelConfig):
         object.__setattr__(self, "num_heads", tuple(self.num_heads))
         object.__setattr__(self, "embed_strides", tuple(self.embed_strides))
         object.__setattr__(self, "cls_token", tuple(self.cls_token))
+        owner = type(self).__name__
         check_stage_lengths(
-            type(self).__name__,
+            owner,
             dims=self.dims,
             depths=self.depths,
             num_heads=self.num_heads,
             embed_strides=self.embed_strides,
         )
+        check_positive(owner, num_classes=self.num_classes, in_channels=self.in_channels)
         check_positive(
-            self, "num_classes", "in_channels", "dims", "num_heads", "embed_strides", "mlp_ratio"
+            owner,
+            dims=self.dims,
+            num_heads=self.num_heads,
+            embed_strides=self.embed_strides,
+            mlp_ratio=self.mlp_ratio,
         )
-        check_stage_divisible(type(self).__name__, "dims", self.dims, "num_heads", self.num_heads)
+        check_stage_divisible(owner, "dims", self.dims, "num_heads", self.num_heads)

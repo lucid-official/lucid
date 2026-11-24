@@ -5,7 +5,12 @@ from typing import ClassVar
 
 from lucid.models._base import ModelConfig
 from lucid.models._meta import model_family_meta
-from lucid.models._utils._common import check_choice, check_positive, check_residual_layers
+from lucid.models._utils._common import (
+    check_choice,
+    check_non_negative,
+    check_positive,
+    check_residual_layers,
+)
 
 
 @model_family_meta(
@@ -144,15 +149,16 @@ class SKNetConfig(ModelConfig):
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "layers", tuple(self.layers))
-        check_residual_layers(self)
+        owner = type(self).__name__
+        check_residual_layers(owner, layers=self.layers)
+        check_positive(owner, num_classes=self.num_classes, in_channels=self.in_channels)
         check_positive(
-            self,
-            "num_classes",
-            "in_channels",
-            "cardinality",
-            "base_width",
-            "rd_ratio",
-            "rd_divisor",
-            "min_attn_channels",
+            owner,
+            cardinality=self.cardinality,
+            base_width=self.base_width,
+            rd_ratio=self.rd_ratio,
+            rd_divisor=self.rd_divisor,
         )
-        check_choice(self, "block_type", ("basic", "bottleneck"))
+        # A floor of 0 is no floor, so only a negative one is meaningless.
+        check_non_negative(owner, min_attn_channels=self.min_attn_channels)
+        check_choice(owner, "block_type", self.block_type, ("basic", "bottleneck"))

@@ -13,7 +13,9 @@ of input:
   ``in_channels`` rule, so a family added later cannot skip it;
 * the structural rules one family needs (heads, patches, stage counts);
 * the same refusal reached through the public factory's ``**overrides``;
-* every registered default still constructs and round-trips.
+* every registered default still constructs and round-trips, and so does
+  the shrunken config the zoo's compiled / device tests build from it;
+* the values the models do handle, which stay accepted.
 """
 
 import dataclasses
@@ -27,6 +29,7 @@ from lucid.models._registry import _REGISTRY
 from lucid.models.vision.attention_unet import AttentionUNetConfig
 from lucid.models.vision.coatnet import CoAtNetConfig
 from lucid.models.vision.crossvit import CrossViTConfig
+from lucid.models.vision.convnext import ConvNeXtConfig
 from lucid.models.vision.cspnet import CSPNetConfig
 from lucid.models.vision.cvt import CvTConfig
 from lucid.models.vision.densenet import DenseNetConfig
@@ -51,6 +54,7 @@ from lucid.models.vision.unet import UNetConfig
 from lucid.models.vision.vgg import VGGConfig
 from lucid.models.vision.vit import ViTConfig
 from lucid.models.vision.yolo import YOLOConfig, YOLOV2Config
+from lucid.test.unit.compile import _zoo_matrix as zoo
 
 
 def _vision_config_classes() -> list[type[ModelConfig]]:
@@ -158,8 +162,21 @@ _STRUCTURAL: list[tuple[type[ModelConfig], dict[str, Any], str]] = [
     (MaskFormerConfig, {"backbone_layers": (3, 4)}, rf"backbone_layers {_STAGES} 4 stages"),
     (CoAtNetConfig, {"dims": (96, 192, 384)}, rf"blocks_per_stage, dims {_STAGES} 4 stages"),
     (CrossViTConfig, {"patch_sizes": (12,)}, rf"patch_sizes, embed_dims, num_heads {_STAGES} 2"),
-    # -- a stage that cannot be empty, and zero-width layers ---------------
+    # -- a depth the builder would silently round up, and zero-width layers -
     (ResNetConfig, {"layers": (3, 0, 6, 3)}, r"layers\[1\] must be positive, got 0"),
+    (DETRConfig, {"backbone_layers": (0, 1, 1, 1)}, r"backbone_layers\[0\] must be positive"),
+    (FasterRCNNConfig, {"backbone_layers": (1, 1, 0, 1)}, r"backbone_layers\[2\] must be positive"),
+    (MaskRCNNConfig, {"backbone_layers": (1, 1, 1, -1)}, r"backbone_layers\[3\] must be positive"),
+    (MaskFormerConfig, {"backbone_layers": (0, 1, 1, 1)}, r"backbone_layers\[0\] must be positive"),
+    (CoAtNetConfig, {"blocks_per_stage": (2, 0, 5, 2)}, r"blocks_per_stage\[1\] must be positive"),
+    (
+        CoAtNetConfig,
+        {"mixed_s3": (8, 42)},
+        r"mixed_s3 is \(MBConv blocks, .*holds 3 entries; got 2",
+    ),
+    (CoAtNetConfig, {"mixed_s3": (0, 42, 1536)}, r"mixed_s3\[0\] must be positive, got 0"),
+    (CoAtNetConfig, {"mixed_s3": (8, 42, 1535)}, rf"attention width of stage 3 \(1535\) {_HEADS}"),
+    (SKNetConfig, {"min_attn_channels": -1}, r"min_attn_channels must be non-negative, got -1"),
     (ResNetConfig, {"stem_channels": 0}, r"stem_channels must be positive, got 0"),
     (ResNetConfig, {"hidden_sizes": (64, 0, 256, 512)}, r"hidden_sizes\[1\] must be positive"),
     (ResNeXtConfig, {"cardinality": 0}, r"cardinality must be positive, got 0"),
@@ -204,6 +221,34 @@ def test_a_value_the_architecture_cannot_use_is_refused_at_construction(
 ) -> None:
     with pytest.raises(ValueError, match=message):
         config_class(**overrides)
+
+
+#: Values the models handle, so the configs must keep accepting them: the
+#: refusals above are policy only where the request would be silently ignored.
+_STILL_ACCEPTED: list[tuple[type[ModelConfig], dict[str, Any]]] = [
+    # No floor (Eq. 4): ``make_divisible`` already floors at the divisor.
+    (SKNetConfig, {"min_attn_channels": 0}),
+    # The model skips DropBlock when the block is smaller than one pixel.
+    (ResNeStConfig, {"drop_block_size": 0}),
+    # Transformer stages the builders build empty without complaint.
+    (SwinConfig, {"depths": (1, 0, 1, 1)}),
+    (ConvNeXtConfig, {"depths": (1, 0, 1, 1)}),
+    (ViTConfig, {"depth": 0}),
+    # A stage count other than four is the point of these configs.
+    (ConvNeXtConfig, {"depths": (1, 1, 1), "dims": (8, 16, 32)}),
+    (CoAtNetConfig, {"mixed_s3": (8, 42, 1536)}),
+]
+
+
+@pytest.mark.parametrize(
+    ("config_class", "overrides"),
+    _STILL_ACCEPTED,
+    ids=[f"{c.__name__}-{'-'.join(o)}" for c, o in _STILL_ACCEPTED],
+)
+def test_a_value_the_model_handles_is_still_accepted(
+    config_class: type[ModelConfig], overrides: dict[str, Any]
+) -> None:
+    config_class(**overrides)
 
 
 #: (factory, bad override): the refusal must reach the public entry point,
@@ -258,3 +303,22 @@ def test_every_registered_default_config_still_constructs(name: str) -> None:
     config = _REGISTRY[name].default_config
     assert dataclasses.replace(config) == config
     assert type(config).from_dict(config.to_dict()) == config
+
+
+@pytest.mark.parametrize("name", _VISION_DEFAULTS)
+def test_the_zoo_matrix_shrunken_config_is_not_refused(name: str) -> None:
+    """The accept side: the compiled / device / dtype zoo tests all build each
+    factory from ``shrink(default) + SPECS[family].overrides``.
+
+    Their size-by-field-name rules know nothing of these refusals: shrinking
+    every int field called ``dim`` to 32 hands UNet (where ``dim`` is the
+    spatial rank, 2 or 3) a rank its config refuses, and five unrelated zoo
+    tests failed.  Replaying the same shrink here fails in this file, next to
+    the refusal that caused it.
+    """
+    entry = _REGISTRY[name]
+    overrides = {
+        **zoo.shrink(entry.default_config),
+        **zoo.SPECS.get(str(entry.family), zoo.Spec()).overrides,
+    }
+    dataclasses.replace(entry.default_config, **overrides)

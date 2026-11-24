@@ -183,15 +183,15 @@ class SwinConfig(ModelConfig):
         owner = type(self).__name__
         check_stage_lengths(owner, depths=self.depths, num_heads=self.num_heads)
         check_positive(
-            self,
-            "image_size",
-            "patch_size",
-            "in_channels",
-            "num_classes",
-            "embed_dim",
-            "num_heads",
-            "window_size",
-            "mlp_ratio",
+            owner,
+            image_size=self.image_size,
+            patch_size=self.patch_size,
+            in_channels=self.in_channels,
+            num_classes=self.num_classes,
+            embed_dim=self.embed_dim,
+            num_heads=self.num_heads,
+            window_size=self.window_size,
+            mlp_ratio=self.mlp_ratio,
         )
         # Each stage doubles ``embed_dim``, and its attention splits that
         # width across its own head count.

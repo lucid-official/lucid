@@ -1,11 +1,16 @@
 """U-Net configuration (Ronneberger et al., MICCAI 2015)."""
 
 from dataclasses import dataclass
-from typing import ClassVar, Literal
+from typing import ClassVar, Literal, get_args
 
 from lucid.models._base import ModelConfig
 from lucid.models._meta import model_family_meta
 from lucid.models._utils._common import check_choice, check_positive
+
+# The accepted values live here once: the field annotations and the
+# ``__post_init__`` refusal both read them.
+_Dim = Literal[2, 3]
+_Block = Literal["basic", "res"]
 
 
 @model_family_meta(
@@ -110,9 +115,9 @@ class UNetConfig(ModelConfig):
     bilinear: bool = False
     dropout: float = 0.0
     # Spatial dimensionality (2 → standard images, 3 → volumetric data).
-    dim: Literal[2, 3] = 2
+    dim: _Dim = 2
     # Block style: "basic" = paper DoubleConv, "res" = residual DoubleConv.
-    block: Literal["basic", "res"] = "basic"
+    block: _Block = "basic"
     # 3D U-Net (Cicek 2016): "we avoid bottlenecks by doubling the number
     # of channels already before max pooling. We also adopt this scheme in
     # the synthesis path."  With it, the first conv of each level emits
@@ -121,6 +126,8 @@ class UNetConfig(ModelConfig):
     double_before_pool: bool = False
 
     def __post_init__(self) -> None:
-        check_positive(self, "num_classes", "in_channels", "base_channels", "depth")
-        check_choice(self, "dim", (2, 3))
-        check_choice(self, "block", ("basic", "res"))
+        owner = type(self).__name__
+        check_positive(owner, num_classes=self.num_classes, in_channels=self.in_channels)
+        check_positive(owner, base_channels=self.base_channels, depth=self.depth)
+        check_choice(owner, "dim", self.dim, get_args(_Dim))
+        check_choice(owner, "block", self.block, get_args(_Block))

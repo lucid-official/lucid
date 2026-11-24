@@ -7,7 +7,7 @@ regardless of its output task (classification, detection, segmentation …).
 import random
 from collections.abc import Mapping, Sequence, Sized
 from dataclasses import replace
-from typing import TYPE_CHECKING, Protocol, cast
+from typing import TYPE_CHECKING, cast
 
 import lucid
 import lucid.nn as nn
@@ -57,7 +57,7 @@ def apply_overrides[C: DataclassInstance](cfg: C, overrides: Mapping[str, object
     return replace(cfg, **overrides) if overrides else cfg
 
 
-def check_stage_lengths(owner: str, **per_stage: Sized) -> None:
+def check_stage_lengths(owner: str, *, count: int | None = None, **per_stage: Sized) -> None:
     """Refuse per-stage config tuples that disagree on the stage count.
 
     A builder walks these fields together, one entry per stage.  Checked in
@@ -65,17 +65,27 @@ def check_stage_lengths(owner: str, **per_stage: Sized) -> None:
     than surfacing as a ``zip`` length error, or a head built for a stage
     that never ran, inside the model.
 
+    Some builders lay out a set number of stages (the four residual stages
+    of a ResNet) and index each field directly; ``count`` names that number.
+    Without it a short tuple was a bare ``IndexError`` mid-build, and a long
+    one was silently truncated, or read at ``[-1]`` for the head width,
+    which then disagreed with the last stage actually built.
+
     Parameters
     ----------
     owner : str
         The config class, named in the message.
+    count : int, optional
+        The number of stages the network builds.  ``None`` (default) asks
+        only that the fields agree with one another.
     **per_stage : Sized
         Each per-stage field by its config name.
 
     Raises
     ------
     ValueError
-        When the fields do not all have the same length.
+        When the fields do not all have the same length, or, given
+        ``count``, when any of them does not hold exactly ``count`` entries.
 
     Examples
     --------
@@ -85,58 +95,40 @@ def check_stage_lengths(owner: str, **per_stage: Sized) -> None:
     Traceback (most recent call last):
         ...
     ValueError: Cfg: depths, dims hold one entry per stage and must be the same length; got depths=2, dims=3
-    """
-    lengths = {name: len(value) for name, value in per_stage.items()}
-    if len(set(lengths.values())) > 1:
-        got = ", ".join(f"{name}={n}" for name, n in lengths.items())
-        raise ValueError(
-            f"{owner}: {', '.join(lengths)} hold one entry per stage and must be "
-            f"the same length; got {got}"
-        )
-
-
-def check_stage_count(owner: str, count: int, **per_stage: Sized) -> None:
-    """Refuse per-stage config tuples that do not match a fixed stage count.
-
-    Some builders lay out a set number of stages (the four residual stages
-    of a ResNet) and index each per-stage field directly.  A short tuple
-    raised a bare ``IndexError`` mid-build; a long one was silently
-    truncated, or read at ``[-1]`` for the head width, which then
-    disagreed with the last stage actually built.
-
-    Parameters
-    ----------
-    owner : str
-        The config class, named in the message.
-    count : int
-        The number of stages the network builds.
-    **per_stage : Sized
-        Each per-stage field by its config name.
-
-    Raises
-    ------
-    ValueError
-        When any field does not hold exactly ``count`` entries.
-
-    Examples
-    --------
-    >>> from lucid.models._utils._common import check_stage_count
-    >>> check_stage_count("Cfg", 2, layers=(1, 1), widths=(8, 16))
-    >>> check_stage_count("Cfg", 2, layers=(1, 1, 1), widths=(8, 16))
+    >>> check_stage_lengths("Cfg", count=2, depths=(1, 1, 1))
     Traceback (most recent call last):
         ...
-    ValueError: Cfg: layers, widths hold one entry per stage and the network has 2 stages; got layers=3, widths=2
+    ValueError: Cfg: depths hold one entry per stage and the network has 2 stages; got depths=3
     """
     lengths = {name: len(value) for name, value in per_stage.items()}
-    if any(n != count for n in lengths.values()):
-        got = ", ".join(f"{name}={n}" for name, n in lengths.items())
-        raise ValueError(
-            f"{owner}: {', '.join(lengths)} hold one entry per stage and the network "
-            f"has {count} stages; got {got}"
-        )
+    if count is None:
+        if len(set(lengths.values())) <= 1:
+            return
+        rule = "must be the same length"
+    else:
+        if all(n == count for n in lengths.values()):
+            return
+        rule = f"the network has {count} stages"
+    got = ", ".join(f"{name}={n}" for name, n in lengths.items())
+    raise ValueError(
+        f"{owner}: {', '.join(lengths)} hold one entry per stage and {rule}; got {got}"
+    )
 
 
-def check_positive(config: object, *names: str) -> None:
+def _check_bound(
+    owner: str, fields: Mapping[str, float | Sequence[float]], *, strict: bool
+) -> None:
+    """Refuse, by field name, any scalar or sequence entry below the bound."""
+    word = "positive" if strict else "non-negative"
+    for name, value in fields.items():
+        entries = list(value) if isinstance(value, Sequence) else [value]
+        for i, entry in enumerate(entries):
+            if not (entry > 0 if strict else entry >= 0):
+                where = f"{name}[{i}]" if isinstance(value, Sequence) else name
+                raise ValueError(f"{owner}: {where} must be {word}, got {entry}")
+
+
+def check_positive(owner: str, **fields: float | Sequence[float]) -> None:
     """Refuse a size, count, or channel width that is zero or negative.
 
     A zero-width layer builds without complaint (``Linear(8, 0)``,
@@ -146,13 +138,16 @@ def check_positive(config: object, *names: str) -> None:
     where it was written.  A sequence field (``hidden_sizes``) is checked
     entry by entry.
 
+    A scale factor (``width_mult``, ``depth_mult``) is refused on policy, not
+    because the build fails: at ``0`` it builds, since the builders floor the
+    channel and block counts, but the requested scale is silently ignored.
+
     Parameters
     ----------
-    config : object
-        The config instance; its class name leads the message.
-    *names : str
-        The fields that must be positive.  Each is a number or a sequence
-        of numbers.
+    owner : str
+        The config class, named in the message.
+    **fields : float or Sequence[float]
+        Each value that must be positive, by its config name.
 
     Raises
     ------
@@ -161,27 +156,44 @@ def check_positive(config: object, *names: str) -> None:
 
     Examples
     --------
-    >>> from dataclasses import dataclass
     >>> from lucid.models._utils._common import check_positive
-    >>> @dataclass(frozen=True)
-    ... class Cfg:
-    ...     num_classes: int = 10
-    ...     widths: tuple[int, ...] = (8, 0)
-    >>> check_positive(Cfg(), "num_classes")
-    >>> check_positive(Cfg(), "widths")
+    >>> check_positive("Cfg", num_classes=10, widths=(8, 16))
+    >>> check_positive("Cfg", num_classes=10, widths=(8, 0))
     Traceback (most recent call last):
         ...
     ValueError: Cfg: widths[1] must be positive, got 0
     """
-    owner = type(config).__name__
-    for name in names:
-        value = getattr(config, name)
-        if isinstance(value, Sequence):
-            for i, entry in enumerate(value):
-                if not entry > 0:
-                    raise ValueError(f"{owner}: {name}[{i}] must be positive, got {entry}")
-        elif not value > 0:
-            raise ValueError(f"{owner}: {name} must be positive, got {value}")
+    _check_bound(owner, fields, strict=True)
+
+
+def check_non_negative(owner: str, **fields: float | Sequence[float]) -> None:
+    """Refuse a size, count, or floor that is negative; zero is allowed.
+
+    For a field where ``0`` means "none" (a floor of ``0`` channels is no
+    floor), so only a negative value is meaningless.
+
+    Parameters
+    ----------
+    owner : str
+        The config class, named in the message.
+    **fields : float or Sequence[float]
+        Each value that must be at least zero, by its config name.
+
+    Raises
+    ------
+    ValueError
+        On the first field (or sequence entry) that is below ``0``.
+
+    Examples
+    --------
+    >>> from lucid.models._utils._common import check_non_negative
+    >>> check_non_negative("Cfg", floor=0)
+    >>> check_non_negative("Cfg", floor=-1)
+    Traceback (most recent call last):
+        ...
+    ValueError: Cfg: floor must be non-negative, got -1
+    """
+    _check_bound(owner, fields, strict=False)
 
 
 def check_divisible(owner: str, name: str, value: int, by_name: str, by: int) -> None:
@@ -262,49 +274,47 @@ def check_stage_divisible(
         check_divisible(owner, f"{name}[{i}]", value, f"{by_name}[{i}]", by)
 
 
-class _HasLayers(Protocol):
-    """A config whose ``layers`` field lists the blocks of each residual stage."""
+def check_residual_layers(owner: str, **layers: Sequence[int]) -> None:
+    """Refuse a per-stage block count that is not four stages of at least one block.
 
-    @property
-    def layers(self) -> Sequence[int]: ...
-
-
-def check_residual_layers(config: _HasLayers) -> None:
-    """Refuse a ``layers`` field that is not four non-empty residual stages.
-
-    ResNet, ResNeXt, ResNeSt, SE-ResNet and SK-ResNet all build exactly four
-    stages and index ``layers[0..3]``.  A stage with no blocks cannot change
-    the width the next stage expects, so every entry is at least 1.
+    ResNet, ResNeXt, ResNeSt, SE-ResNet, SK-ResNet and the R-CNN / DETR /
+    MaskFormer backbones all build exactly four residual stages and index
+    ``[0..3]``.  A stage always emits its first block, so a ``0`` (or
+    negative) entry is not an empty stage: it builds one block and the
+    requested depth is silently ignored.  Every entry is therefore at least 1.
 
     Parameters
     ----------
-    config : _HasLayers
-        The config instance, with a ``layers`` sequence field.
+    owner : str
+        The config class, named in the message.
+    **layers : Sequence[int]
+        Each block-count field by its config name (``layers``,
+        ``backbone_layers``).
 
     Raises
     ------
     ValueError
-        When ``layers`` does not hold four entries, or an entry is not
+        When a field does not hold four entries, or an entry is not
         positive.
 
     Examples
     --------
-    >>> from dataclasses import dataclass
     >>> from lucid.models._utils._common import check_residual_layers
-    >>> @dataclass(frozen=True)
-    ... class Cfg:
-    ...     layers: tuple[int, ...] = (3, 4, 6, 3)
-    >>> check_residual_layers(Cfg())
-    >>> check_residual_layers(Cfg(layers=(3, 4, 6)))
+    >>> check_residual_layers("Cfg", layers=(3, 4, 6, 3))
+    >>> check_residual_layers("Cfg", layers=(3, 4, 6))
     Traceback (most recent call last):
         ...
     ValueError: Cfg: layers hold one entry per stage and the network has 4 stages; got layers=3
+    >>> check_residual_layers("Cfg", backbone_layers=(0, 1, 1, 1))
+    Traceback (most recent call last):
+        ...
+    ValueError: Cfg: backbone_layers[0] must be positive, got 0
     """
-    check_stage_count(type(config).__name__, 4, layers=config.layers)
-    check_positive(config, "layers")
+    check_stage_lengths(owner, count=4, **layers)
+    check_positive(owner, **layers)
 
 
-def check_choice(config: object, name: str, choices: Sequence[object]) -> None:
+def check_choice(owner: str, name: str, value: object, choices: Sequence[object]) -> None:
     """Refuse a mode field whose value is not one the builder branches on.
 
     Builders pick between a few layouts with ``if cfg.x == "a" ... else``,
@@ -313,36 +323,33 @@ def check_choice(config: object, name: str, choices: Sequence[object]) -> None:
 
     Parameters
     ----------
-    config : object
-        The config instance; its class name leads the message.
+    owner : str
+        The config class, named in the message.
     name : str
-        The field to check.
+        The field being checked.
+    value : object
+        Its value.
     choices : Sequence[object]
-        The accepted values.
+        The accepted values.  Derive them from the single place the builder
+        reads them from (a ``Literal`` alias, a lookup table's keys) rather
+        than restating them.
 
     Raises
     ------
     ValueError
-        When the field's value is not in ``choices``.
+        When ``value`` is not in ``choices``.
 
     Examples
     --------
-    >>> from dataclasses import dataclass
     >>> from lucid.models._utils._common import check_choice
-    >>> @dataclass(frozen=True)
-    ... class Cfg:
-    ...     variant: str = "smal"
-    >>> check_choice(Cfg("large"), "variant", ("large", "small"))
-    >>> check_choice(Cfg(), "variant", ("large", "small"))
+    >>> check_choice("Cfg", "variant", "large", ("large", "small"))
+    >>> check_choice("Cfg", "variant", "smal", ("large", "small"))
     Traceback (most recent call last):
         ...
     ValueError: Cfg: variant must be one of ('large', 'small'), got 'smal'
     """
-    value = getattr(config, name)
     if value not in choices:
-        raise ValueError(
-            f"{type(config).__name__}: {name} must be one of {tuple(choices)}, got {value!r}"
-        )
+        raise ValueError(f"{owner}: {name} must be one of {tuple(choices)}, got {value!r}")
 
 
 def make_divisible(v: float, divisor: int = 8, min_value: int | None = None) -> int:

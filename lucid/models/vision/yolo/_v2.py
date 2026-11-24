@@ -210,7 +210,9 @@ class YOLOV2Config(ModelConfig):
                 f"num_anchors ({self.num_anchors})"
             )
         object.__setattr__(self, "anchors", tuple((float(a), float(b)) for a, b in self.anchors))
-        check_positive(self, "num_classes", "in_channels", "num_anchors")
+        owner = type(self).__name__
+        check_positive(owner, num_classes=self.num_classes, in_channels=self.in_channels)
+        check_positive(owner, num_anchors=self.num_anchors)
 
 
 # ---------------------------------------------------------------------------

@@ -153,15 +153,17 @@ class PVTConfig(ModelConfig):
         object.__setattr__(self, "num_heads", tuple(self.num_heads))
         object.__setattr__(self, "sr_ratios", tuple(self.sr_ratios))
         object.__setattr__(self, "mlp_ratios", tuple(self.mlp_ratios))
+        owner = type(self).__name__
         check_stage_lengths(
-            type(self).__name__,
+            owner,
             embed_dims=self.embed_dims,
             depths=self.depths,
             num_heads=self.num_heads,
             sr_ratios=self.sr_ratios,
             mlp_ratios=self.mlp_ratios,
         )
-        check_positive(self, "num_classes", "in_channels", "embed_dims", "num_heads", "mlp_ratios")
-        check_stage_divisible(
-            type(self).__name__, "embed_dims", self.embed_dims, "num_heads", self.num_heads
+        check_positive(owner, num_classes=self.num_classes, in_channels=self.in_channels)
+        check_positive(
+            owner, embed_dims=self.embed_dims, num_heads=self.num_heads, mlp_ratios=self.mlp_ratios
         )
+        check_stage_divisible(owner, "embed_dims", self.embed_dims, "num_heads", self.num_heads)

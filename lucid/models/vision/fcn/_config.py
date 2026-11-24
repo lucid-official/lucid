@@ -7,6 +7,13 @@ from lucid.models._base import ModelConfig
 from lucid.models._meta import model_family_meta
 from lucid.models._utils._common import check_choice, check_positive
 
+#: Residual block counts of each backbone the config names.  The one table:
+#: the config accepts its keys, the model builds from its values.
+_BACKBONE_LAYERS: dict[str, tuple[int, int, int, int]] = {
+    "resnet50": (3, 4, 6, 3),
+    "resnet101": (3, 4, 23, 3),
+}
+
 
 @model_family_meta(
     canonical_name="FCN",
@@ -124,5 +131,6 @@ class FCNConfig(ModelConfig):
                 f"(a scored pool4, and pool3 for fcn8s), which this module "
                 f"does not build; only the single-scale head is implemented."
             )
-        check_positive(self, "num_classes", "in_channels")
-        check_choice(self, "backbone", ("resnet50", "resnet101"))
+        owner = type(self).__name__
+        check_positive(owner, num_classes=self.num_classes, in_channels=self.in_channels)
+        check_choice(owner, "backbone", self.backbone, tuple(_BACKBONE_LAYERS))

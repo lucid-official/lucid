@@ -89,4 +89,6 @@ class VGGConfig(ModelConfig):
                 f"arch must have exactly 5 entries, one per conv block, got "
                 f"{len(self.arch)}: {self.arch!r}"
             )
-        check_positive(self, "num_classes", "in_channels", "arch")
+        owner = type(self).__name__
+        check_positive(owner, num_classes=self.num_classes, in_channels=self.in_channels)
+        check_positive(owner, arch=self.arch)

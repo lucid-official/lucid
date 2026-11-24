@@ -100,4 +100,5 @@ class LeNetConfig(ModelConfig):
             raise ValueError(f"activation must be 'tanh' or 'relu', got {self.activation!r}")
         if self.pooling not in ("avg", "max"):
             raise ValueError(f"pooling must be 'avg' or 'max', got {self.pooling!r}")
-        check_positive(self, "num_classes", "in_channels")
+        owner = type(self).__name__
+        check_positive(owner, num_classes=self.num_classes, in_channels=self.in_channels)

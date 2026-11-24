@@ -185,7 +185,8 @@ class YOLOV3Config(ModelConfig):
         object.__setattr__(self, "strides", tuple(self.strides))
         object.__setattr__(self, "anchor_masks", tuple(tuple(m) for m in self.anchor_masks))
         _check_scale_table(type(self).__name__, self.anchors, self.strides, self.anchor_masks)
-        check_positive(self, "num_classes", "in_channels")
+        owner = type(self).__name__
+        check_positive(owner, num_classes=self.num_classes, in_channels=self.in_channels)
 
 
 def _check_scale_table(

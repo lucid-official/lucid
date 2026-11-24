@@ -93,4 +93,5 @@ class GoogLeNetConfig(ModelConfig):
     aux_dropout: float = 0.7
 
     def __post_init__(self) -> None:
-        check_positive(self, "num_classes", "in_channels")
+        owner = type(self).__name__
+        check_positive(owner, num_classes=self.num_classes, in_channels=self.in_channels)

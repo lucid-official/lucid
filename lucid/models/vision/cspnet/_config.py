@@ -186,14 +186,14 @@ class CSPNetConfig(ModelConfig):
                 raise ValueError(
                     f"CSPNetConfig: {f!r} length {len(getattr(self, f))} " f"!= depths length {n}"
                 )
+        owner = type(self).__name__
+        check_positive(owner, num_classes=self.num_classes, in_channels=self.in_channels)
         check_positive(
-            self,
-            "num_classes",
-            "in_channels",
-            "stem_out_chs",
-            "stem_kernel",
-            "stem_stride",
-            "out_chs",
-            "strides",
-            "groups",
+            owner,
+            stem_out_chs=self.stem_out_chs,
+            stem_kernel=self.stem_kernel,
+            stem_stride=self.stem_stride,
+            out_chs=self.out_chs,
+            strides=self.strides,
+            groups=self.groups,
         )

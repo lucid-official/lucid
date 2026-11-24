@@ -179,4 +179,5 @@ class Mask2FormerConfig(ModelConfig):
         object.__setattr__(self, "swin_depths", tuple(self.swin_depths))
         object.__setattr__(self, "swin_num_heads", tuple(self.swin_num_heads))
         object.__setattr__(self, "feature_strides", tuple(self.feature_strides))
-        check_positive(self, "num_classes", "in_channels")
+        owner = type(self).__name__
+        check_positive(owner, num_classes=self.num_classes, in_channels=self.in_channels)

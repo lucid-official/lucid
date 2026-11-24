@@ -38,7 +38,7 @@ import lucid.nn.functional as F
 from lucid._tensor.tensor import Tensor
 from lucid.models._tasks import SemanticSegmentationModel
 from lucid.models._output import SemanticSegmentationOutput
-from lucid.models.vision.fcn._config import FCNConfig
+from lucid.models.vision.fcn._config import _BACKBONE_LAYERS, FCNConfig
 
 # ---------------------------------------------------------------------------
 # ResNet backbone (dilated, self-contained)
@@ -324,12 +324,8 @@ class FCNForSemanticSegmentation(SemanticSegmentationModel):
         super().__init__(config)
         self._cfg = config
 
-        # Backbone layer counts by name
-        _layer_counts: dict[str, tuple[int, int, int, int]] = {
-            "resnet50": (3, 4, 6, 3),
-            "resnet101": (3, 4, 23, 3),
-        }
-        layers = _layer_counts.get(config.backbone, (3, 4, 6, 3))
+        # ``config.backbone`` is one of the table's keys (the config refuses the rest).
+        layers = _BACKBONE_LAYERS[config.backbone]
 
         self.backbone = _DilatedResNet(config.in_channels, layers)
 

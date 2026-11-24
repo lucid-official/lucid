@@ -149,11 +149,17 @@ class MaxViTConfig(ModelConfig):
     def __post_init__(self) -> None:
         object.__setattr__(self, "depths", tuple(self.depths))
         object.__setattr__(self, "dims", tuple(self.dims))
-        check_stage_lengths(type(self).__name__, depths=self.depths, dims=self.dims)
+        owner = type(self).__name__
+        check_positive(owner, num_classes=self.num_classes, in_channels=self.in_channels)
         check_positive(
-            self, "num_classes", "in_channels", "dims", "head_dim", "window_size", "mlp_ratio"
+            owner,
+            dims=self.dims,
+            head_dim=self.head_dim,
+            window_size=self.window_size,
+            mlp_ratio=self.mlp_ratio,
         )
+        check_stage_lengths(owner, depths=self.depths, dims=self.dims)
         # Heads are ``dim // head_dim`` per stage, so each stage width must be a
         # whole number of heads.
         for stage, dim in enumerate(self.dims):
-            check_divisible(type(self).__name__, f"dims[{stage}]", dim, "head_dim", self.head_dim)
+            check_divisible(owner, f"dims[{stage}]", dim, "head_dim", self.head_dim)

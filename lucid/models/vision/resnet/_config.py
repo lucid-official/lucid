@@ -5,7 +5,7 @@ from typing import ClassVar
 
 from lucid.models._base import ModelConfig
 from lucid.models._meta import model_family_meta
-from lucid.models._utils._common import check_positive, check_stage_count
+from lucid.models._utils._common import check_positive, check_stage_lengths
 
 
 @model_family_meta(
@@ -200,20 +200,19 @@ class ResNetConfig(ModelConfig):
             raise ValueError(
                 f"block_type must be 'basic' or 'bottleneck', got " f"{self.block_type!r}"
             )
+        owner = type(self).__name__
         # The builder lays out exactly four residual stages and reads
         # ``layers[i]`` / ``hidden_sizes[i]`` for each (and ``hidden_sizes[-1]``
         # for the head), so a short tuple was an ``IndexError`` at build and a
-        # long one a silently dropped stage.  An empty stage cannot change the
-        # width the next one expects, so ``layers`` entries are at least 1.
-        check_stage_count(
-            type(self).__name__, 4, layers=self.layers, hidden_sizes=self.hidden_sizes
-        )
+        # long one a silently dropped stage.  A stage always emits its first
+        # block, so a ``0`` in ``layers`` would silently build one: the
+        # requested depth is refused instead.
+        check_stage_lengths(owner, count=4, layers=self.layers, hidden_sizes=self.hidden_sizes)
+        check_positive(owner, num_classes=self.num_classes, in_channels=self.in_channels)
         check_positive(
-            self,
-            "num_classes",
-            "in_channels",
-            "layers",
-            "stem_channels",
-            "hidden_sizes",
-            "bottleneck_width_mult",
+            owner,
+            layers=self.layers,
+            stem_channels=self.stem_channels,
+            hidden_sizes=self.hidden_sizes,
+            bottleneck_width_mult=self.bottleneck_width_mult,
         )

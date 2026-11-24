@@ -113,5 +113,7 @@ class AttentionUNetConfig(ModelConfig):
     deep_supervision: bool = False
 
     def __post_init__(self) -> None:
-        check_positive(self, "num_classes", "in_channels", "base_channels", "depth")
-        check_choice(self, "spatial_dims", (2, 3))
+        owner = type(self).__name__
+        check_positive(owner, num_classes=self.num_classes, in_channels=self.in_channels)
+        check_positive(owner, base_channels=self.base_channels, depth=self.depth)
+        check_choice(owner, "spatial_dims", self.spatial_dims, (2, 3))

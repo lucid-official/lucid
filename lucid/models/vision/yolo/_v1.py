@@ -219,7 +219,9 @@ class YOLOConfig(ModelConfig):
     tiny: bool = False
 
     def __post_init__(self) -> None:
-        check_positive(self, "num_classes", "in_channels", "split_size", "num_boxes")
+        owner = type(self).__name__
+        check_positive(owner, num_classes=self.num_classes, in_channels=self.in_channels)
+        check_positive(owner, split_size=self.split_size, num_boxes=self.num_boxes)
 
 
 # ---------------------------------------------------------------------------

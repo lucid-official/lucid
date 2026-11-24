@@ -83,7 +83,8 @@ class InceptionConfig(ModelConfig):
             raise ValueError(
                 f"only version='v3' is implemented by this module, got " f"{self.version!r}"
             )
-        check_positive(self, "num_classes", "in_channels")
+        owner = type(self).__name__
+        check_positive(owner, num_classes=self.num_classes, in_channels=self.in_channels)
 
     aux_logits: bool = False
     dropout: float = 0.5

@@ -193,7 +193,8 @@ class EfficientDetConfig(ModelConfig):
         object.__setattr__(self, "anchor_scales", tuple(self.anchor_scales))
         object.__setattr__(self, "anchor_ratios", tuple(self.anchor_ratios))
         object.__setattr__(self, "anchor_base_sizes", tuple(self.anchor_base_sizes))
-        check_positive(self, "num_classes", "in_channels")
+        owner = type(self).__name__
+        check_positive(owner, num_classes=self.num_classes, in_channels=self.in_channels)
 
 
 # ---------------------------------------------------------------------------

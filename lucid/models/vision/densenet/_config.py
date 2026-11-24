@@ -89,6 +89,11 @@ class DenseNetConfig(ModelConfig):
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "block_config", tuple(self.block_config))
+        owner = type(self).__name__
+        check_positive(owner, num_classes=self.num_classes, in_channels=self.in_channels)
         check_positive(
-            self, "num_classes", "in_channels", "growth_rate", "num_init_features", "bn_size"
+            owner,
+            growth_rate=self.growth_rate,
+            num_init_features=self.num_init_features,
+            bn_size=self.bn_size,
         )

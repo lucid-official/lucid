@@ -204,7 +204,8 @@ class YOLOV4Config(ModelConfig):
                 f"each of P3, P4, P5 — but got {len(self.anchors)} anchors and "
                 f"{len(self.strides)} strides {self.strides}"
             )
-        check_positive(self, "num_classes", "in_channels")
+        owner = type(self).__name__
+        check_positive(owner, num_classes=self.num_classes, in_channels=self.in_channels)
 
 
 # ---------------------------------------------------------------------------

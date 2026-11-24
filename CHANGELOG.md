@@ -458,6 +458,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - vision configs refuse sizes their model cannot build
 
+- review fixes for the vision config validators
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

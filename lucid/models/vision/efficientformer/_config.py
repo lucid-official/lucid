@@ -176,10 +176,9 @@ class EfficientFormerConfig(ModelConfig):
         object.__setattr__(self, "depths", tuple(self.depths))
         object.__setattr__(self, "embed_dims", tuple(self.embed_dims))
         object.__setattr__(self, "mlp_ratios", tuple(self.mlp_ratios))
+        owner = type(self).__name__
         check_stage_lengths(
-            type(self).__name__,
-            depths=self.depths,
-            embed_dims=self.embed_dims,
-            mlp_ratios=self.mlp_ratios,
+            owner, depths=self.depths, embed_dims=self.embed_dims, mlp_ratios=self.mlp_ratios
         )
-        check_positive(self, "num_classes", "in_channels", "embed_dims")
+        check_positive(owner, num_classes=self.num_classes, in_channels=self.in_channels)
+        check_positive(owner, embed_dims=self.embed_dims)

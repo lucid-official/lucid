@@ -5,7 +5,7 @@ from typing import ClassVar
 
 from lucid.models._base import ModelConfig
 from lucid.models._meta import model_family_meta
-from lucid.models._utils._common import check_divisible, check_positive, check_stage_count
+from lucid.models._utils._common import check_divisible, check_positive, check_stage_lengths
 
 
 @model_family_meta(
@@ -174,23 +174,32 @@ class CoAtNetConfig(ModelConfig):
         object.__setattr__(self, "dims", tuple(self.dims))
         object.__setattr__(self, "attn_heads", tuple(self.attn_heads))
         owner = type(self).__name__
-        check_stage_count(owner, 4, blocks_per_stage=self.blocks_per_stage, dims=self.dims)
-        check_stage_count(owner, 2, attn_heads=self.attn_heads)
+        # A stage always builds its first block, so a ``0`` in ``blocks_per_stage``
+        # would silently build one: the requested depth is refused instead.
+        check_stage_lengths(owner, count=4, blocks_per_stage=self.blocks_per_stage, dims=self.dims)
+        check_stage_lengths(owner, count=2, attn_heads=self.attn_heads)
+        check_positive(owner, num_classes=self.num_classes, in_channels=self.in_channels)
         check_positive(
-            self,
-            "num_classes",
-            "in_channels",
-            "image_size",
-            "stem_width",
-            "mbconv_expand",
-            "blocks_per_stage",
-            "dims",
-            "attn_heads",
+            owner,
+            image_size=self.image_size,
+            stem_width=self.stem_width,
+            mbconv_expand=self.mbconv_expand,
+            blocks_per_stage=self.blocks_per_stage,
+            dims=self.dims,
+            attn_heads=self.attn_heads,
         )
         # The third stage's attention runs at ``dims[2]`` (or the mixed-S3
         # transformer width) and the fourth at ``dims[3]``, each split across
         # its own head count.
-        s3_width = self.dims[2] if self.mixed_s3 is None else self.mixed_s3[2]
+        s3_width = self.dims[2]
+        if self.mixed_s3 is not None:
+            if len(self.mixed_s3) != 3:
+                raise ValueError(
+                    f"{owner}: mixed_s3 is (MBConv blocks, attention blocks, attention "
+                    f"width), so it holds 3 entries; got {len(self.mixed_s3)}: {self.mixed_s3}"
+                )
+            check_positive(owner, mixed_s3=self.mixed_s3)
+            s3_width = self.mixed_s3[2]
         check_divisible(
             owner, "attention width of stage 3", s3_width, "attn_heads[0]", self.attn_heads[0]
         )

@@ -113,14 +113,13 @@ class ResNeStConfig(ModelConfig):
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "layers", tuple(self.layers))
-        check_residual_layers(self)
+        owner = type(self).__name__
         check_positive(
-            self,
-            "num_classes",
-            "in_channels",
-            "radix",
-            "groups",
-            "bottleneck_width",
-            "stem_width",
-            "drop_block_size",
+            owner,
+            radix=self.radix,
+            groups=self.groups,
+            bottleneck_width=self.bottleneck_width,
+            stem_width=self.stem_width,
         )
+        check_positive(owner, num_classes=self.num_classes, in_channels=self.in_channels)
+        check_residual_layers(owner, layers=self.layers)

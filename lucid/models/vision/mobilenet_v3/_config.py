@@ -78,5 +78,7 @@ class MobileNetV3Config(ModelConfig):
     dropout: float = 0.2
 
     def __post_init__(self) -> None:
-        check_positive(self, "num_classes", "in_channels", "width_mult")
-        check_choice(self, "variant", ("large", "small"))
+        owner = type(self).__name__
+        check_positive(owner, num_classes=self.num_classes, in_channels=self.in_channels)
+        check_positive(owner, width_mult=self.width_mult)
+        check_choice(owner, "variant", self.variant, ("large", "small"))

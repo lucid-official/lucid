@@ -145,7 +145,8 @@ class InceptionNeXtConfig(ModelConfig):
     def __post_init__(self) -> None:
         object.__setattr__(self, "depths", tuple(self.depths))
         object.__setattr__(self, "dims", tuple(self.dims))
-        check_stage_lengths(type(self).__name__, depths=self.depths, dims=self.dims)
+        owner = type(self).__name__
+        check_stage_lengths(owner, depths=self.depths, dims=self.dims)
         # The reference broadcasts a scalar across the stages
         # (``if not isinstance(mlp_ratios, (list, tuple)): [mlp_ratios] * n``)
         # and always has one entry per stage.  Accepting only a tuple made
@@ -163,4 +164,5 @@ class InceptionNeXtConfig(ModelConfig):
                 f"{len(ratios)} for {n_stages} stages (depths={self.depths})"
             )
         object.__setattr__(self, "mlp_ratios", ratios)
-        check_positive(self, "num_classes", "in_channels", "dims")
+        check_positive(owner, num_classes=self.num_classes, in_channels=self.in_channels)
+        check_positive(owner, dims=self.dims)
