@@ -462,9 +462,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `generate()` (decoder-only, `T5ForSeq2SeqLM`, `TransformerForSeq2SeqLM`) checks its sampling arguments and raises `ValueError` with the reference's messages. Before, a bad value produced NaN-driven tokens or crashed in `topk`. `repetition_penalty` must be strictly positive, greedy or not. Under `do_sample=True`: `temperature` must be strictly positive, `top_k` is `None` or `0` (off) or a positive integer, and `top_p` lies in `[0, 1]`. Greedy decoding still ignores the sampling-only knobs. The arguments are checked before any work: `max_new_tokens=0` no longer skips the check, and the seq2seq models check before the encoder runs (LCD-1108).
 - `generate(..., top_k=0)` turns the top-k filter off; it crashed with `ShapeMismatch`. `top_p=0.0` keeps the most likely token; it kept none and sampled uniformly over the vocabulary. `top_p=1.0` is a true no-op. An unknown `cache_implementation` raises `ValueError` on all three loops, whether or not the cache is used; before, it was read as `"dynamic"` (LCD-1108).
 
-- CSPNet enums and negative block counts are refused
-
-- strings are leaves in bound checks; DenseNet refuses n < 0
+- `CSPNetConfig` refuses an unknown `stem_pool` (anything but `"max"` or `""`) and an unknown entry in `block_type` (anything but `"bottle"` or `"dark"`), naming the field and, for the tuple, the index (`block_type[1]`). Before, a typo in either silently built the other layout (`_DarkBlock`, no stem pool) (LCD-1113).
+- A negative block count is refused by field name on every vision, detection and segmentation config: `ViTConfig.depth`, the `depths` of Swin, ConvNeXt, CvT, PVT, MaxViT, EfficientFormer, InceptionNeXt, CrossViT (including its per-stage cross-attention depth, named `depths[1][2]`) and CSPNet, `EfficientFormerConfig.num_vit`, the encoder / decoder layer counts of DETR, MaskFormer and Mask2Former, `Mask2FormerConfig.swin_depths`, `EfficientDetConfig.fpn_repeats` / `head_repeats` and `MaskRCNNConfig.mask_num_convs`, and `DenseNetConfig.block_config`. Before, `range(-1)` was empty, so a negative depth built a model with no stack and raised nothing (DenseNet: a ShapeMismatch in the first forward). A depth of 0 is still accepted where the builder handles it. `DETRConfig.num_bbox_layers` and `Mask2FormerConfig.num_decoder_layers` must be at least 1: below that the box head is one layer and the masked decoder is the same empty stack as one layer (LCD-1113).
 
 ### Added
 
@@ -626,6 +625,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - record that 1055fa3b9 moves no binary interface
 
 - The footprint tests in `test_cache_memory.py` no longer fail about half the time on a loaded machine. The cache did evict; Metal returned the memory of the released executables 2–13 s later, after the tests' fixed 3 s sleep. They now wait until the release the assertion needs has arrived, against the lowest footprint seen, with the threshold unchanged and larger graphs (LCD-1112).
+- The zoo's accept-side config guard (`test_the_zoo_matrix_shrunken_config_is_not_refused`) replays the compile-matrix shrink over every registered default in every domain, not only vision (LCD-1113).
 
 ### Changed
 
@@ -692,6 +692,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - every engine forward checks that its result's storage holds its shape's bytes before handing it back; a short result is an error rather than a silent out-of-bounds read. Engine shape messages now spell a shape as `[2, 3]` (LCD-1072).
 - **Behaviour change:** `linalg.solve_triangular`, `linalg.lu_solve` and `linalg.ldl_solve` need a right-hand side `B` of at least two dimensions, as the reference does. A 1-D (or 0-d) `B` was solved as a vector and now raises: `ShapeMismatch` (a `RuntimeError` and a `ValueError`) reading `linalg.solve_triangular: The input tensor B must have at least 2 dimensions.` (`lu_solve` alike; `ldl_solve` raises the reference's `IndexError`). To migrate, pass one column: `lu_solve(LU, pivots, b.unsqueeze(-1))`, then `.squeeze(-1)` the answer. `linalg.solve`, `solve_ex` and `lstsq` still read a vector `B` (LCD-1083).
 - `reset_classifier(n)` raises `ValueError` for `n < 1`; it used to build a zero-width head (LCD-1106).
+- **Behaviour change:** a negative block count (`depth`, `depths`, encoder/decoder layer counts, `block_config`, …) or an unknown CSPNet `stem_pool`/`block_type` raises `ValueError` when the config is constructed; before, it built a model with an empty stack or the other layout (LCD-1113).
 - **Behaviour change:** `num_classes` and `in_channels` must be at least 1 on every vision, detection and segmentation config. Before, `num_classes=0` built a zero-width head and a negative value raised an engine `InvalidArgument`. EfficientNet, MobileNet, UNet, AttentionUNet, VGG and others also refuse non-positive widths, including a `width_mult` or `depth_mult` of 0, which used to be silently floored. `MobileNetV3Config.variant`, `UNetConfig.dim` and `block`, `AttentionUNetConfig.spatial_dims`, `SENetConfig.block_type` and `SKNetConfig.block_type` and `FCNConfig.backbone` refuse an unknown value. Before, an unknown value silently selected the other layout (LCD-1109).
 
 - Half-precision `addmm`, `addbmm` and `baddbmm` multiply in float32, so a half GEMM becomes a float32 GEMM. That costs more memory and lower Metal throughput, and buys the reference's single rounding. `addbmm` rounds once, where the reference's CPU kernel rounds after each batch: 1-2 half ulp apart (LCD-1087).
@@ -701,7 +702,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `take_along_dim(x, indices, dim)` and `take` read int64 positions only, as the reference does; a bool, int8, int16 or int32 index raises `DtypeMismatch`. `gather` reads int32 or int64. A bool, int8 or int16 index raises `DtypeMismatch`, and so does a flat `take_along_dim(x, indices)` with one. `gather` answers an index with no element whatever its dtype, as the reference does (LCD-1075).
 - `ldexp(input, other)` refuses a bool `other` beside a real floating `input` with `NotImplementedError`, as the reference does. An integer, bool or complex `input` still answers (LCD-1075).
 - **Behaviour change:** a scale factor that is a tensor with a dimension, a tensor that requires grad, or a value that is not a number (a str, None or a list) raises `TypeError: <op>(): argument '<name>' must be Number, not <type>`, as the reference does. Before, such values were accepted or gave `expected Tensor or Number`. To migrate a learnable 0-d scale, multiply by it explicitly (`x + alpha * y`) (LCD-1088).
-- drop CrossViT's dead head-split asserts
 
 ---
 
