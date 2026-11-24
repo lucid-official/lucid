@@ -228,6 +228,83 @@ def test_a_gradient_is_the_float32_gradient_in_the_operand_dtype(
             assert abs(g - w) <= 1.0 * _ulp(w, dtype), f"{g} vs {w}"
 
 
+# ── lerp with a weight tensor ────────────────────────────────────────────────────────────────
+
+_WEIGHTS = ("shaped like the operands", "0-d float32")
+
+
+def _weight_values(kind: str) -> Any:
+    """A weight of the operands' shape (some past 1, which ``lerp`` extrapolates) or a 0-d one."""
+    return _nested(random.Random(23), (9,), False) if kind == _WEIGHTS[0] else 0.3
+
+
+def _weight_dtype(kind: str, dtype: str) -> str:
+    return dtype if kind == _WEIGHTS[0] else "float32"
+
+
+@pytest.mark.parametrize("kind", _WEIGHTS)
+@pytest.mark.parametrize("dtype", _HALF)
+@pytest.mark.parametrize("device", devices_supporting(lucid.float16))
+def test_lerp_with_a_weight_tensor_is_the_float32_answer_rounded_once(
+    kind: str, dtype: str, device: str, ref: ModuleType
+) -> None:
+    rng = random.Random(29)
+    start, stop = (_nested(rng, (9,), True) for _ in range(2))
+    weight = _weight_values(kind)
+    half = getattr(lucid, dtype)
+    ours = [*_build(lucid, dtype, device, [start, stop])]
+    ours.append(
+        lucid.tensor(weight, dtype=getattr(lucid, _weight_dtype(kind, dtype)), device=device)
+    )
+    got = lucid.lerp(*ours)
+    assert got.dtype is half
+    # the weight is read at the dtype the three promote to, then everything is float32
+    held = [t.to(lucid.float32) for t in ours[:2]] + [ours[2].to(half).to(lucid.float32)]
+    assert _same(
+        list(_flat(got.tolist())), list(_flat(lucid.lerp(*held).to(half).tolist()))
+    ), "not the float32 answer rounded once"
+    # and within a rounding of the reference's, which takes the same weight tensor
+    theirs = [*_build(ref, dtype, None, [start, stop])]
+    theirs.append(ref.tensor(weight, dtype=getattr(ref, _weight_dtype(kind, dtype))))
+    want = list(_flat(ref.lerp(*theirs).float().tolist()))
+    held_start, held_stop = (list(_flat(t.float().tolist())) for t in theirs[:2])
+    held_weight = list(_flat(theirs[2].to(getattr(ref, dtype)).float().tolist()))
+    held_weight *= len(want) if len(held_weight) == 1 else 1
+    for g, w, i, e, k in zip(
+        _flat(got.tolist()), want, held_start, held_stop, held_weight, strict=True
+    ):
+        scale = max(abs(w), abs(i), abs(k * (e - i)))
+        assert abs(g - w) <= _ulp(scale, dtype), f"{g} vs {w}"
+
+
+@pytest.mark.parametrize("kind", _WEIGHTS)
+@pytest.mark.parametrize("dtype", _HALF)
+@pytest.mark.parametrize("device", devices_supporting(lucid.float16))
+def test_lerp_with_a_weight_tensor_differentiates_in_each_operands_dtype(
+    kind: str, dtype: str, device: str, ref: ModuleType
+) -> None:
+    rng = random.Random(31)
+    start, stop = (_nested(rng, (9,), True) for _ in range(2))
+    weight = _weight_values(kind)
+    weight_dtype = _weight_dtype(kind, dtype)
+    ours = [t.requires_grad_() for t in _build(lucid, dtype, device, [start, stop])]
+    ours.append(
+        lucid.tensor(weight, dtype=getattr(lucid, weight_dtype), device=device).requires_grad_()
+    )
+    lucid.lerp(*ours).sum().backward()
+    # the reference's float32 gradient at what the half type holds of each operand
+    wide = [t.float().requires_grad_() for t in _build(ref, dtype, None, [start, stop])]
+    held = ref.tensor(weight, dtype=getattr(ref, dtype)).float()
+    wide.append(held.requires_grad_())
+    ref.lerp(*wide).sum().backward()
+    for narrow, reference, name in zip(ours, wide, ("input", "end", "weight"), strict=True):
+        assert narrow.grad is not None, name
+        assert narrow.grad.dtype is narrow.dtype, name
+        assert narrow.grad.shape == narrow.shape, name
+        for g, w in zip(_flat(narrow.grad.tolist()), _flat(reference.grad.tolist()), strict=True):
+            assert abs(g - w) <= _ulp(w, dtype), f"{name}: {g} vs {w}"
+
+
 # ── the method and in-place twins take the same path ─────────────────────────────────────────
 
 _SPELLINGS: dict[str, tuple[Callable[[Any, list[Any]], Any], Callable[[Any, list[Any]], Any]]] = {

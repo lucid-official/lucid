@@ -444,6 +444,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - half addmm, addcmul, lerp... compute in float32, round once
 
+- half lerp tests its dtype before the wasted sub (LCD-1087)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

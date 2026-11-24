@@ -469,15 +469,14 @@ def _lerp(input: Tensor, end: Tensor, weight: float | Tensor) -> Tensor:
             )
         scaled = _C_engine.mul(weight_impl, _unwrap(diff))
     else:
-        diff_impl = _C_engine.sub(end_impl, input_impl)
-        dtype = diff_impl.dtype
+        dtype = input_impl.dtype  # ``end`` has it too, checked above
         if _promotion.is_half(dtype):
             return _in_float32_as(dtype, partial(_lerp, weight=weight), input, end)
+        diff_impl = _C_engine.sub(end_impl, input_impl)
         # ``lerp`` takes floating tensors only, so the weight read for one is real.
         step = float(cast_scalar(dtype, weight, read=ScalarRead.OP_MATH).real)
         scaled = _C_engine.mul(
-            _C_engine.full(list(diff_impl.shape), step, diff_impl.dtype, diff_impl.device),
-            diff_impl,
+            _C_engine.full(list(diff_impl.shape), step, dtype, diff_impl.device), diff_impl
         )
     return _wrap(_C_engine.add(input_impl, scaled))
 
