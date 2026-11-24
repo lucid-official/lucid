@@ -3,6 +3,8 @@
 // Implements OuterBackward and the outer_op free function.
 // The outer product is computed via a matrix multiply between reshaped inputs:
 //   a[:, None] @ b[None, :]  → [M×1] @ [1×N] = [M×N]
+// except for bool, which has no matrix product and takes the elementwise product
+// of the same two views.
 
 #include "Outer.h"
 
@@ -119,6 +121,13 @@ TensorImplPtr outer_op(const TensorImplPtr& a, const TensorImplPtr& b) {
     if (a->shape().size() != 1 || b->shape().size() != 1)
         ErrorBuilder("outer").fail("requires 1-D inputs");
     const Dtype dt = a->dtype();
+    // A bool outer product is ``a[i] & b[j]``, which is what the elementwise
+    // product of the two views is.  It has no matmul kernel: the integer GEMM of
+    // the backends wraps at a width and has no bool form, and bool is refused
+    // there.  Taken before the scope below opens, so the ops it composes trace
+    // themselves, as ``inner`` does for integers.
+    if (dt == Dtype::Bool)
+        return mul_op(reshape_op(a, {a->shape()[0], 1}), reshape_op(b, {1, b->shape()[0]}));
     const Device device = a->device();
     OpScopeFull scope{"outer", device, dt, Shape{}};
 

@@ -290,6 +290,49 @@ def test_the_reported_products_have_the_reference_answer(
     assert out.tolist() == want
 
 
+# A bool has no matrix product (``matmul`` refuses it, and so does each backend's integer GEMM),
+# but its outer product is ``a[i] & b[j]``, which the engine takes as the elementwise product of
+# the two views.
+_BOOL_OUTERS: dict[str, Callable[..., lucid.Tensor]] = {
+    "outer": lambda a, b: a.outer(b),
+    "linalg_outer": lambda a, b: lucid.linalg.outer(a, b),
+    "ger": lambda a, b: lucid.ger(a, b),
+}
+
+_BOOL_A = [True, False, True]
+_BOOL_B = [True, True, False, False, True]
+
+
+@pytest.mark.parametrize("name", sorted(_BOOL_OUTERS))
+def test_a_bool_outer_product_is_the_elementwise_and(name: str, device: str) -> None:
+    a = lucid.tensor(_BOOL_A, device=device)
+    b = lucid.tensor(_BOOL_B, device=device)
+    out = _BOOL_OUTERS[name](a, b)
+    assert out.dtype == lucid.bool_
+    assert out.tolist() == [[x and y for y in _BOOL_B] for x in _BOOL_A]
+
+
+@pytest.mark.parametrize("name", sorted(_BOOL_OUTERS))
+def test_an_empty_bool_outer_product_keeps_its_shape(name: str, device: str) -> None:
+    empty = lucid.zeros((0,), dtype=lucid.bool_, device=device)
+    full = lucid.tensor(_BOOL_B, device=device)
+    assert _BOOL_OUTERS[name](empty, full).shape == (0, len(_BOOL_B))
+    assert _BOOL_OUTERS[name](full, empty).shape == (len(_BOOL_B), 0)
+
+
+def test_addr_of_a_bool_matrix_adds_the_and_with_or(device: str) -> None:
+    base = [[bool((i + j) % 2) for j in range(len(_BOOL_B))] for i in range(len(_BOOL_A))]
+    out = lucid.addr(
+        lucid.tensor(base, device=device),
+        lucid.tensor(_BOOL_A, device=device),
+        lucid.tensor(_BOOL_B, device=device),
+    )
+    assert out.dtype == lucid.bool_
+    assert out.tolist() == [
+        [base[i][j] or (x and y) for j, y in enumerate(_BOOL_B)] for i, x in enumerate(_BOOL_A)
+    ]
+
+
 @pytest.mark.parametrize(("device", "dtype"), device_dtype_params(_INT_DTYPES))
 def test_an_empty_integer_product_keeps_its_shape_and_an_empty_sum_is_zero(
     device: str, dtype: lucid.dtype

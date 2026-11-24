@@ -411,6 +411,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - exact wrapping integer GEMM on CPU and GPU (LCD-1067)
 
+- take a bool outer product through the elementwise product
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call
