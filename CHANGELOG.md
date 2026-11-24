@@ -456,6 +456,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - add and sub read a 0-d tensor alpha as the number it holds
 
+- decorate index_add_ in tensor.py, drop the injector hook
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

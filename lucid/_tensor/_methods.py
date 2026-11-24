@@ -1416,10 +1416,6 @@ def _read_version(self: Tensor) -> int:
     return self._impl.version
 
 
-#: In-place twins defined in the ``Tensor`` body, with the scale factors they take.
-_CLASS_BODY_SCALE_FACTORS: dict[str, tuple[str, ...]] = {"index_add_": ("alpha",)}
-
-
 def _inject_methods(tensor_cls: type) -> None:
     """Attach all registry ops as Tensor methods."""
     globals().setdefault("Tensor", tensor_cls)
@@ -1437,9 +1433,5 @@ def _inject_methods(tensor_cls: type) -> None:
     for _name, _fn in (("eval", eval), *_EXTRA_METHODS):
         _fn.__name__ = _name
         setattr(tensor_cls, _name, _fn)
-    # a twin written in the class body (``tensor.py`` is at its size cap) reads its scale
-    # factors here, so it names itself in a refusal like the twins above
-    for _name, _factors in _CLASS_BODY_SCALE_FACTORS.items():
-        setattr(tensor_cls, _name, scale_factors(*_factors)(getattr(tensor_cls, _name)))
     type.__setattr__(tensor_cls, "_version", property(_read_version))
     guard_methods(tensor_cls)

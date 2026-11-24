@@ -46,6 +46,7 @@ from lucid._device import device as _device_cls, _device_from_engine
 from lucid._dispatch import _read_grad, _set_grad, _set_requires_grad, _swap_data, _wrap
 from lucid._factories.creation import zeros as _zeros, ones as _ones, empty as _empty, full as _full
 from lucid._factories.converters import tensor as _tensor_fn, _to_impl, _refuse_dlpack_of_grad
+from lucid._scalar_cast import scale_factors
 from lucid._tensor._pickle import _reduce_tensor
 
 if TYPE_CHECKING:
@@ -3050,6 +3051,7 @@ class Tensor:
 
         return _index_add(self, dim, index, source, alpha=alpha)
 
+    @scale_factors("alpha")
     def index_add_(self, dim: int, index: Tensor, source: Tensor, *, alpha: float = 1.0) -> Self:
         r"""Add ``alpha * source`` into ``self`` at ``index`` along ``dim``, in place.
 
@@ -3840,11 +3842,9 @@ from lucid._tensor._dunders import _inject_dunders
 from lucid._tensor._methods import _clamp_inplace, _inject_methods
 from lucid._tensor._to import _inject_to, _legacy_type_name, _type_target
 
-# ``register_hook`` is annotated ``-> _RemovableHandle``, imported under
-# TYPE_CHECKING to keep the module's import graph acyclic.  PEP 649 then
-# has nothing to resolve it against, so ``inspect.signature`` on that one
-# method raised NameError.  Bound here rather than at the top: by this
-# point the class exists and the import cannot cycle back through it.
+# ``register_hook`` is annotated ``-> _RemovableHandle``, imported under TYPE_CHECKING to keep the
+# import graph acyclic, so PEP 649 could not resolve it and ``inspect.signature`` raised NameError.
+# Bound here, not at the top: the class exists by now and the import cannot cycle back through it.
 from lucid.autograd._hooks import RemovableHandle as _RemovableHandle
 
 _inject_dunders(Tensor)
