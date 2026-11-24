@@ -405,6 +405,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - rank kron and the stacking ops as dimensioned (LCD-1060)
 
+- cross refuses operands of two dtypes (LCD-1060)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

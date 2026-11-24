@@ -841,10 +841,20 @@ def _outcome(fn: Callable[[], Any]) -> str:
 
 
 @pytest.mark.parity
-@pytest.mark.parametrize("name", ["cross", "vdot"])
+@pytest.mark.parametrize(
+    ("name", "refuses"),
+    [
+        # The reference's MPS answers cross(half, float32) at the first operand's
+        # dtype — float16 here, a float32 narrowed or, beside an integer, truncated
+        # without a word — while its CPU refuses every mixed pair.  Lucid follows
+        # the CPU reference, on every rank and device (LCD-1060).
+        pytest.param("cross", True, id="cross-refuses-as-the-cpu-reference-does"),
+        pytest.param("vdot", False, id="vdot"),
+    ],
+)
 @_METAL
 def test_dropped_metal_rows_meet_a_mixed_pair_as_the_reference_does(
-    ref: ModuleType, name: str
+    ref: ModuleType, name: str, refuses: bool
 ) -> None:
     """``cross`` and ``vdot`` are not on the reference's MPS list (its
     ``cross`` is ``linalg_cross``, and its ``vdot`` row is not an MPS one),
@@ -859,4 +869,12 @@ def test_dropped_metal_rows_meet_a_mixed_pair_as_the_reference_does(
         with lib.amp.autocast(device_type=device, dtype=half):
             return _outcome(lambda: op(h(n), f(n)))
 
-    assert run(lucid, "metal") == run(ref, ref_device)
+    got = run(lucid, "metal")
+    if refuses:
+        assert got == "raises"
+        # What it follows: the reference's CPU refuses the same pair.
+        assert _outcome(lambda: ref.linalg.cross(ref.ones(3, dtype=ref.float16), ref.ones(3))) == (
+            "raises"
+        )
+    else:
+        assert got == run(ref, ref_device)

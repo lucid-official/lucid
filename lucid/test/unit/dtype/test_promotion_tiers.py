@@ -22,6 +22,7 @@ import pytest
 
 import lucid
 from lucid import _promotion
+from lucid._C import engine as _C_engine
 from lucid.test._fixtures.devices import device_supports
 
 _DTYPES = [
@@ -153,6 +154,31 @@ def test_block_diag_ranks_the_operands_as_they_are_given() -> None:
     assert lucid.block_diag(a.reshape(1), b).dtype is lucid.int16
 
 
+@pytest.mark.parametrize(
+    ("da", "db"),
+    [
+        (lucid.float32, lucid.float16),
+        (lucid.float32, lucid.bfloat16),
+        (lucid.float64, lucid.float32),
+        (lucid.int16, lucid.int8),
+    ],
+)
+@pytest.mark.parametrize("shape", [(3,), (2, 3)])
+def test_linalg_cross_refuses_mixed_dtypes(
+    da: lucid.dtype, db: lucid.dtype, shape: tuple[int, ...]
+) -> None:
+    """The engine reads a 0-d float32 beside half as a scalar and answered half.
+
+    A single vector and a batch refuse alike, with the engine's ``DtypeMismatch``
+    — the class the batch already raised.
+    """
+    a = lucid.ones(shape, dtype=da)
+    b = lucid.ones(shape, dtype=db)
+    for x, y in ((a, b), (b, a)):
+        with pytest.raises(_C_engine.DtypeMismatch):
+            lucid.linalg.cross(x, y)
+
+
 @pytest.mark.parity
 @pytest.mark.parametrize("op", list(_SWEEP))
 def test_zero_dim_beside_dimensioned_matches_the_reference(
@@ -190,6 +216,28 @@ def test_zero_dim_beside_dimensioned_matches_the_reference(
                 problems.append(f"{label}: {got.tolist()}, reference {want.tolist()}")
     assert compared > 0
     assert not problems, f"{len(problems)} cell(s):\n  " + "\n  ".join(problems[:20])
+
+
+@pytest.mark.parity
+def test_linalg_cross_refuses_wherever_the_reference_does(ref: ModuleType) -> None:
+    """Every mixed-dtype pair: the reference refuses, and so does Lucid."""
+    problems: list[str] = []
+    for da in _DTYPES:
+        for db in _DTYPES:
+            if da is db:
+                continue
+            ref_args = [ref.tensor([_value(dt)] * 3, dtype=_dtype_in(ref, dt)) for dt in (da, db)]
+            try:
+                ref.linalg.cross(*ref_args)
+            except RuntimeError:
+                pass
+            else:
+                problems.append(f"{_name(da)} , {_name(db)}: the reference answers")
+                continue
+            args = [lucid.tensor([_value(dt)] * 3, dtype=dt) for dt in (da, db)]
+            with pytest.raises(_C_engine.DtypeMismatch):
+                lucid.linalg.cross(*args)
+    assert not problems, "\n".join(problems)
 
 
 def _inner(lib: Any, z: Any, d: Any) -> Any:
