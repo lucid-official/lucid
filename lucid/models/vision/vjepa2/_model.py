@@ -1167,6 +1167,7 @@ class VJEPA2ForVideoClassification(ImageClassificationModel, ClassificationHeadM
     """
 
     config_class: ClassVar[type[VJEPA2Config]] = VJEPA2Config
+    _class_heads: ClassVar[tuple[str, ...]] = ("head",)
 
     def __init__(self, config: VJEPA2Config) -> None:
         super().__init__(config)

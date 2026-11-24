@@ -450,6 +450,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - a float64 `x` beside a float32 `y` answers float64, as in the reference;
   - `trapezoid` of a `y` with no sample answers in `y`'s own dtype, as the reference does (LCD-1075).
 
+- reset_classifier builds the head where the old one lived
 
 ### Added
 

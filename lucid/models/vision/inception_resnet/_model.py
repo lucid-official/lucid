@@ -50,7 +50,7 @@ from lucid._tensor.tensor import Tensor
 from lucid.models._base import PretrainedModel
 from lucid.models._tasks import ImageClassificationModel
 from lucid.models._utils._classification import BasicConvBnReLU2d as _ConvBnReLU
-from lucid.models._mixins import BackboneMixin, FeatureInfo
+from lucid.models._mixins import BackboneMixin, ClassificationHeadMixin, FeatureInfo
 from lucid.models._output import BaseModelOutput, ImageClassificationOutput
 from lucid.models.vision.inception_resnet._config import InceptionResNetConfig
 
@@ -555,7 +555,7 @@ class InceptionResNetV2(PretrainedModel, BackboneMixin):
 # ---------------------------------------------------------------------------
 
 
-class InceptionResNetV2ForImageClassification(ImageClassificationModel):
+class InceptionResNetV2ForImageClassification(ImageClassificationModel, ClassificationHeadMixin):
     r"""Inception-ResNet v2 image classifier (backbone + GAP + dropout + linear).
 
     Combines an :class:`InceptionResNetV2` backbone with a
@@ -621,6 +621,8 @@ class InceptionResNetV2ForImageClassification(ImageClassificationModel):
 
     config_class: ClassVar[type[InceptionResNetConfig]] = InceptionResNetConfig
     base_model_prefix: ClassVar[str] = "inception_resnet_v2"
+    # The head keeps the reference checkpoint's ``classif`` name, not ``classifier``.
+    _class_heads: ClassVar[tuple[str, ...]] = ("classif",)
 
     def __init__(self, config: InceptionResNetConfig) -> None:
         super().__init__(config)
@@ -659,16 +661,6 @@ class InceptionResNetV2ForImageClassification(ImageClassificationModel):
         x = self.conv2d_3b(x)
         x = self.conv2d_4a(x)
         return self._pool2(x)
-
-    def reset_classifier(self, num_classes: int) -> None:
-        """Replace the classification head with a freshly initialised one.
-
-        The head keeps the reference checkpoint's ``classif`` attribute name,
-        so this cannot come from ``ClassificationHeadMixin`` (which looks for
-        ``self.classifier``).  The class docstring documented the method
-        without anything implementing it.
-        """
-        self.classif = nn.Linear(self.classif.in_features, num_classes)
 
     @override
     def forward(self, x: Tensor, labels: Tensor | None = None) -> InceptionResNetOutput:

@@ -34,7 +34,7 @@ class _DummyConfig(ModelConfig):
 
     model_type: ClassVar[str] = "dummy"
     in_features: int = 4
-    out_features: int = 2
+    num_classes: int = 2
     hidden_dim: int = 8
 
 
@@ -59,7 +59,7 @@ class _DummyForClassification(PretrainedModel, ClassificationHeadMixin):
     def __init__(self, config: _DummyConfig) -> None:
         super().__init__(config)
         self.backbone = _DummyBackbone(config)
-        self._build_classifier(config.hidden_dim, config.out_features)
+        self._build_classifier(config.hidden_dim, config.num_classes)
 
     def forward(self, x: lucid.Tensor) -> ImageClassificationOutput:
         features = self.backbone(x).last_hidden_state
@@ -127,7 +127,7 @@ class TestModelConfig:
         assert d["in_features"] == 4
 
     def test_from_dict_round_trip(self) -> None:
-        cfg = _DummyConfig(in_features=8, out_features=3, hidden_dim=16)
+        cfg = _DummyConfig(in_features=8, num_classes=3, hidden_dim=16)
         d = cfg.to_dict()
         rebuilt = _DummyConfig.from_dict(d)
         assert rebuilt == cfg
@@ -178,7 +178,7 @@ class TestPretrainedModel:
         assert tuple(out.last_hidden_state.shape) == (3, 8)
 
     def test_save_pretrained_then_from_pretrained(self, tmp_path: Path) -> None:
-        cfg = _DummyConfig(in_features=4, hidden_dim=8, out_features=2)
+        cfg = _DummyConfig(in_features=4, hidden_dim=8, num_classes=2)
         model = _DummyForClassification(cfg)
         # Run once so any lazy params materialise
         x = lucid.randn(2, 4)
@@ -197,7 +197,7 @@ class TestPretrainedModel:
         np.testing.assert_allclose(again, original, atol=1e-6)
 
     def test_num_parameters_counts_correctly(self) -> None:
-        cfg = _DummyConfig(in_features=4, hidden_dim=8, out_features=2)
+        cfg = _DummyConfig(in_features=4, hidden_dim=8, num_classes=2)
         model = _DummyForClassification(cfg)
         # backbone Linear(4→8) = 4*8 + 8 = 40
         # classifier Linear(8→2) = 8*2 + 2 = 18
@@ -315,19 +315,21 @@ class TestAutoClasses:
 
 class TestClassificationHeadMixin:
     def test_build_creates_linear_classifier(self) -> None:
-        cfg = _DummyConfig(hidden_dim=8, out_features=4)
+        cfg = _DummyConfig(hidden_dim=8, num_classes=4)
         m = _DummyForClassification(cfg)
         assert isinstance(m.classifier, nn.Linear)
         assert m.classifier.out_features == 4
 
     def test_reset_classifier_changes_output(self) -> None:
-        cfg = _DummyConfig(hidden_dim=8, out_features=4)
+        cfg = _DummyConfig(hidden_dim=8, num_classes=4)
         m = _DummyForClassification(cfg)
         m.reset_classifier(num_classes=10)
         assert isinstance(m.classifier, nn.Linear)
         assert m.classifier.out_features == 10
         # New head still receives same input dim
         assert m.classifier.in_features == 8
+        # The config follows the head, or a saved copy would not load back.
+        assert m.config.num_classes == 10
 
 
 class TestBackboneMixin:

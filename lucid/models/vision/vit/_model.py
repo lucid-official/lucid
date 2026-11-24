@@ -580,6 +580,9 @@ class ViTForImageClassification(ImageClassificationModel, ClassificationHeadMixi
 
     config_class: ClassVar[type[ViTConfig]] = ViTConfig
     base_model_prefix: ClassVar[str] = "vit"
+    # ``head`` matches timm's vit_base_patch16_224 state-dict keys, so the
+    # mixin's default ``classifier`` is not where this family's head lives.
+    _class_heads: ClassVar[tuple[str, ...]] = ("head",)
 
     cls_token: Tensor
     pos_embed: Tensor
@@ -615,16 +618,6 @@ class ViTForImageClassification(ImageClassificationModel, ClassificationHeadMixi
         nn.init.zeros_(self.head.weight)
         if self.head.bias is not None:
             nn.init.zeros_(self.head.bias)
-
-    @override
-    def reset_classifier(self, num_classes: int) -> None:
-        """Replace the classification head with a freshly initialised one.
-
-        ViT keeps the reference's ``head`` attribute name so checkpoints port
-        directly, which means the mixin's default — which looks for
-        ``self.classifier`` — cannot find it and raised ``AttributeError``.
-        """
-        self.head = nn.Linear(self.head.in_features, num_classes)
 
     @override
     def forward(self, x: Tensor, labels: Tensor | None = None) -> ImageClassificationOutput:

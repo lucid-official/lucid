@@ -690,6 +690,7 @@ class EfficientFormerForImageClassification(ImageClassificationModel, Classifica
 
     config_class: ClassVar[type[EfficientFormerConfig]] = EfficientFormerConfig
     base_model_prefix: ClassVar[str] = "efficientformer"
+    _class_heads: ClassVar[tuple[str, ...]] = ("head", "head_dist")
 
     def __init__(self, config: EfficientFormerConfig) -> None:
         super().__init__(config)
@@ -700,12 +701,6 @@ class EfficientFormerForImageClassification(ImageClassificationModel, Classifica
         self.head = nn.Linear(out_dim, config.num_classes)
         self.head_dist = nn.Linear(out_dim, config.num_classes)
         init_transformer_trunc_normal(self)
-
-    @override
-    def reset_classifier(self, num_classes: int) -> None:
-        in_features = int(self.head.in_features)
-        self.head = nn.Linear(in_features, num_classes)
-        self.head_dist = nn.Linear(in_features, num_classes)
 
     @override
     def forward(self, x: Tensor, labels: Tensor | None = None) -> EfficientFormerOutput:

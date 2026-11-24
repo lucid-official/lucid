@@ -490,6 +490,7 @@ class SENetForImageClassification(ImageClassificationModel, ClassificationHeadMi
 
     config_class: ClassVar[type[SENetConfig]] = SENetConfig
     base_model_prefix: ClassVar[str] = "senet"
+    _class_heads: ClassVar[tuple[str, ...]] = ("fc",)
 
     def __init__(self, config: SENetConfig) -> None:
         super().__init__(config)

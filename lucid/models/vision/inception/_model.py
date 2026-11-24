@@ -668,6 +668,15 @@ class InceptionV3ForImageClassification(ImageClassificationModel, Classification
         _init_reference_weights(self)
 
     @override
+    def _class_head_paths(self) -> tuple[str, ...]:
+        # The auxiliary classifier scores the same labels, so it is resized
+        # with the main head -- else its loss and the saved config disagree.
+        cfg = self.config
+        assert isinstance(cfg, InceptionConfig)
+        paths = super()._class_head_paths()
+        return (*paths, "aux.fc") if cfg.aux_logits else paths
+
+    @override
     def forward(self, x: Tensor, labels: Tensor | None = None) -> InceptionV3Output:
         cfg = self.config
         assert isinstance(cfg, InceptionConfig)

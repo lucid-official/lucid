@@ -29,7 +29,7 @@ import lucid.nn as nn
 import lucid.nn.functional as F
 from lucid._tensor.tensor import Tensor
 from lucid.models._base import PretrainedModel
-from lucid.models._mixins import BackboneMixin, FeatureInfo
+from lucid.models._mixins import BackboneMixin, ClassificationHeadMixin, FeatureInfo
 from lucid.models._output import BaseModelOutput, ImageClassificationOutput
 from lucid.models._tasks import ImageClassificationModel
 from lucid.models._utils._classification import BasicConvBnReLU2d as _ConvBnReLU
@@ -489,7 +489,7 @@ class InceptionV4(PretrainedModel, BackboneMixin):
 # ---------------------------------------------------------------------------
 
 
-class InceptionV4ForImageClassification(ImageClassificationModel):
+class InceptionV4ForImageClassification(ImageClassificationModel, ClassificationHeadMixin):
     r"""Inception-v4 image classifier (trunk + GAP + dropout + linear).
 
     Adds the paper's head to the :class:`InceptionV4` trunk: global
@@ -545,6 +545,8 @@ class InceptionV4ForImageClassification(ImageClassificationModel):
 
     config_class: ClassVar[type[InceptionV4Config]] = InceptionV4Config
     base_model_prefix: ClassVar[str] = "inception_v4"
+    # The head keeps the checkpoint's ``last_linear`` name, not ``classifier``.
+    _class_heads: ClassVar[tuple[str, ...]] = ("last_linear",)
 
     def __init__(self, config: InceptionV4Config) -> None:
         super().__init__(config)
@@ -555,20 +557,6 @@ class InceptionV4ForImageClassification(ImageClassificationModel):
         else:
             self.head_drop = nn.Identity()
         self.last_linear = nn.Linear(_NUM_FEATURES, config.num_classes)
-
-    def reset_classifier(self, num_classes: int) -> None:
-        """Replace the classification head with a freshly initialised one.
-
-        The head keeps the checkpoint's ``last_linear`` attribute name, so
-        this cannot come from ``ClassificationHeadMixin`` (which looks for
-        ``self.classifier``).
-
-        Parameters
-        ----------
-        num_classes : int
-            Width of the new head.
-        """
-        self.last_linear = nn.Linear(self.last_linear.in_features, num_classes)
 
     @override
     def forward(self, x: Tensor, labels: Tensor | None = None) -> InceptionV4Output:

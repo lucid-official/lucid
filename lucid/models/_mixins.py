@@ -8,8 +8,8 @@ is contracted to provide.
 
 from abc import ABC, abstractmethod
 from collections.abc import Callable
-from dataclasses import dataclass
-from typing import TYPE_CHECKING, cast
+from dataclasses import dataclass, is_dataclass, replace
+from typing import TYPE_CHECKING, ClassVar, cast
 
 import lucid
 from lucid._C import engine as _C_engine
@@ -18,6 +18,7 @@ import lucid.nn.functional as F
 
 from lucid._tensor.tensor import Tensor
 from lucid.utils.cache import Cache, DynamicCache, StaticCache
+from lucid.models._base import ModelConfig, PretrainedModel
 from lucid.models._sampling import _SamplingParams, _select_next_ondevice
 
 if TYPE_CHECKING:
@@ -160,6 +161,83 @@ class BackboneMixin(ABC):
         return self._feature_info
 
 
+def _child_module(root: nn.Module, parent: nn.Module, name: str, path: str) -> nn.Module:
+    """The submodule ``name`` of ``parent``, or an ``AttributeError`` naming ``path`` on ``root``."""
+    child = getattr(parent, name, None)
+    if isinstance(child, nn.Module):
+        return child
+    raise AttributeError(
+        f"{type(root).__name__} has no submodule at {path!r}; "
+        f"fix the head path its class declares"
+    )
+
+
+def _locate_class_head(root: nn.Module, path: str) -> tuple[nn.Module, str, nn.Linear]:
+    """Resolve a dotted head ``path`` to ``(owner, attribute name, Linear)``.
+
+    Containers keep their children under their position (``"0"``, ``"1"``),
+    so a path walks a ``ModuleList`` the same way it walks an attribute.  A
+    path that ends on a ``Sequential`` stands for the last ``Linear`` inside
+    it: the head of a ``[Dropout, Linear]`` or a multi-layer classifier is
+    the projection to the classes, not the layers before it.
+    """
+    *walk, name = path.split(".")
+    owner = root
+    for step in walk:
+        owner = _child_module(root, owner, step, path)
+    target = _child_module(root, owner, name, path)
+    if isinstance(target, nn.Linear):
+        return owner, name, target
+    if isinstance(target, nn.Sequential):
+        for child_name, child in reversed(list(target.named_children())):
+            if isinstance(child, nn.Linear):
+                return target, child_name, child
+        raise RuntimeError(f"reset_classifier: no Linear layer found in {path!r}")
+    raise NotImplementedError(f"reset_classifier not implemented for {type(target).__name__}")
+
+
+def _renewed_linear(old: nn.Linear, num_classes: int) -> nn.Linear:
+    """A freshly initialised ``Linear`` standing in for ``old``, with ``num_classes`` outputs.
+
+    It is built where ``old`` lives: same device, same dtype, same bias and
+    train/eval mode.  A model already moved with ``.half()`` /
+    ``.to("metal")`` would otherwise get a float32 CPU head and fail its next
+    forward on a dtype or device mismatch.
+    """
+    new = nn.Linear(
+        old.in_features,
+        num_classes,
+        bias=old.bias is not None,
+        device=old.weight.device,
+        dtype=old.weight.dtype,
+    )
+    return new.train(old.training)
+
+
+def _with_num_classes(config: ModelConfig, num_classes: int) -> ModelConfig:
+    """``config`` with ``num_classes`` replaced, which re-runs its own validation."""
+    if not is_dataclass(config) or isinstance(config, type):
+        raise TypeError(f"{type(config).__name__} must be a dataclass instance")
+    return replace(config, num_classes=num_classes)
+
+
+def _reset_class_heads(model: PretrainedModel, paths: tuple[str, ...], num_classes: int) -> None:
+    """Replace the ``Linear`` at each of ``paths`` and move ``model.config`` to ``num_classes``.
+
+    Every replacement and the new config are built first and installed after, so
+    a path that names nothing, or a config that refuses the width, leaves the
+    model as it was.
+    """
+    config = _with_num_classes(model.config, num_classes)
+    swaps = []
+    for path in paths:
+        owner, name, old = _locate_class_head(model, path)
+        swaps.append((owner, name, _renewed_linear(old, num_classes)))
+    for owner, name, head in swaps:
+        setattr(owner, name, head)
+    model.config = config
+
+
 class ClassificationHeadMixin:
     r"""Standard Linear classification head + transfer-learning helper.
 
@@ -178,6 +256,18 @@ class ClassificationHeadMixin:
     The host class exposes ``self.classifier`` as either a plain
     ``nn.Linear`` (no dropout configured) or an ``nn.Sequential`` of
     ``[Dropout, Linear]``; :meth:`reset_classifier` handles both shapes.
+
+    The host is a :class:`PretrainedModel` whose config carries ``num_classes``;
+    :meth:`reset_classifier` keeps that field in step with the head.
+
+    A family whose head lives elsewhere, or is more than one ``Linear``,
+    declares where in ``_class_heads`` — dotted paths from the model to each
+    ``Linear`` whose width is ``config.num_classes`` (``("head",)`` for ViT,
+    ``("head", "head_dist")`` for a model with a distillation head,
+    ``("head.0", "head.1")`` for a ``ModuleList`` of heads).  A head that
+    exists only under some config, such as an auxiliary classifier, adds its
+    path by overriding :meth:`_class_head_paths`.  Nothing else about the
+    swap is the family's to repeat.
 
     Examples
     --------
@@ -207,14 +297,21 @@ class ClassificationHeadMixin:
     >>> model(lucid.randn(2, 64, 7, 7)).shape
     (2, 1000)
 
-    Transfer learning swaps the head and leaves the body where it is.
+    Transfer learning swaps the head and leaves the body where it is.  The
+    new head takes the old one's dtype and device, and the config follows it,
+    so a model already cast with ``.half()`` keeps working and a saved copy
+    reloads at the new width.
 
     >>> model.reset_classifier(num_classes=10)
     >>> model(lucid.randn(2, 64, 7, 7)).shape
     (2, 10)
+    >>> model.config.num_classes
+    10
     """
 
     classifier: nn.Linear | nn.Sequential
+    #: Dotted paths to every ``Linear`` sized by ``config.num_classes``.
+    _class_heads: ClassVar[tuple[str, ...]] = ("classifier",)
 
     def _build_classifier(
         self, in_features: int, num_classes: int, *, dropout: float = 0.0
@@ -246,8 +343,16 @@ class ClassificationHeadMixin:
         else:
             self.classifier = nn.Linear(in_features, num_classes)
 
+    def _class_head_paths(self) -> tuple[str, ...]:
+        r"""Dotted paths to the ``Linear`` layers :meth:`reset_classifier` replaces.
+
+        ``_class_heads`` for the family.  Override to add a head that exists
+        only under some configs, such as an auxiliary classifier.
+        """
+        return type(self)._class_heads
+
     def reset_classifier(self, num_classes: int) -> None:
-        r"""Replace the final ``Linear`` with a freshly initialised one.
+        r"""Replace the classification head with a freshly initialised one.
 
         Parameters
         ----------
@@ -257,10 +362,15 @@ class ClassificationHeadMixin:
 
         Raises
         ------
+        ValueError
+            If ``num_classes`` is not positive.
         RuntimeError
             If the head is a ``Sequential`` containing no ``Linear``.
         NotImplementedError
             If the head is some other custom module type.
+        AttributeError
+            If a path the family declares in ``_class_heads`` names no
+            submodule.
 
         Notes
         -----
@@ -268,28 +378,30 @@ class ClassificationHeadMixin:
         after :meth:`from_pretrained` to adapt a 1000-class ImageNet head
         to a downstream task with a different label set.
 
+        The new head is built with the dtype, device and train/eval mode of
+        the head it replaces, so the model keeps working after ``.half()``,
+        ``.to(lucid.bfloat16)`` or ``.to("metal")``.  ``config.num_classes``
+        is updated too: ``save_pretrained`` then ``from_pretrained`` rebuilds
+        the model at the new width instead of failing on a size mismatch.
+        Every new head is built before anything is changed, so a refusal
+        leaves the model as it was.
+
         Examples
         --------
         >>> model = AutoModelForImageClassification.from_pretrained("resnet_50")
         >>> model.reset_classifier(num_classes=10)
         >>> model(lucid.randn(1, 3, 224, 224)).logits.shape
         (1, 10)
+        >>> model.config.num_classes
+        10
         """
-        if isinstance(self.classifier, nn.Linear):
-            in_features = int(self.classifier.in_features)
-            self.classifier = nn.Linear(in_features, num_classes)
-            return
-        if isinstance(self.classifier, nn.Sequential):
-            for i in range(len(self.classifier) - 1, -1, -1):
-                m = self.classifier[i]
-                if isinstance(m, nn.Linear):
-                    in_features = int(m.in_features)
-                    self.classifier[i] = nn.Linear(in_features, num_classes)
-                    return
-            raise RuntimeError("reset_classifier: no Linear layer found in classifier Sequential")
-        raise NotImplementedError(
-            f"reset_classifier not implemented for " f"{type(self.classifier).__name__}"
-        )
+        if num_classes < 1:
+            raise ValueError(f"reset_classifier: num_classes must be positive, got {num_classes}")
+        if not isinstance(self, PretrainedModel):
+            raise TypeError(
+                f"{type(self).__name__} mixes in ClassificationHeadMixin but is not a PretrainedModel"
+            )
+        _reset_class_heads(self, self._class_head_paths(), num_classes)
 
     def _classify(
         self, features: Tensor, labels: Tensor | None = None, *, label_smoothing: float = 0.0

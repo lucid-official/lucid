@@ -517,6 +517,15 @@ class GoogLeNetForImageClassification(ImageClassificationModel, ClassificationHe
         _init_reference_weights(self)
 
     @override
+    def _class_head_paths(self) -> tuple[str, ...]:
+        # The auxiliary classifiers score the same labels, so they are resized
+        # with the main head -- else their loss and the saved config disagree.
+        cfg = self.config
+        assert isinstance(cfg, GoogLeNetConfig)
+        paths = super()._class_head_paths()
+        return (*paths, "aux1.fc2", "aux2.fc2") if cfg.aux_logits else paths
+
+    @override
     def forward(self, x: Tensor, labels: Tensor | None = None) -> GoogLeNetOutput:
         cfg = self.config
         assert isinstance(cfg, GoogLeNetConfig)

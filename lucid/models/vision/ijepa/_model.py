@@ -602,6 +602,7 @@ class IJEPAForImageClassification(ImageClassificationModel, ClassificationHeadMi
     """
 
     config_class: ClassVar[type[IJEPAConfig]] = IJEPAConfig
+    _class_heads: ClassVar[tuple[str, ...]] = ("head",)
 
     def __init__(self, config: IJEPAConfig) -> None:
         """Build the probe. See the class docstring for parameters."""

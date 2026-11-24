@@ -695,6 +695,7 @@ class VJEPAForVideoClassification(ImageClassificationModel, ClassificationHeadMi
     """
 
     config_class: ClassVar[type[VJEPAConfig]] = VJEPAConfig
+    _class_heads: ClassVar[tuple[str, ...]] = ("head",)
 
     def __init__(self, config: VJEPAConfig) -> None:
         """Build the probe. See the class docstring for parameters."""

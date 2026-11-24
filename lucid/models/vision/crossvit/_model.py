@@ -642,6 +642,9 @@ class CrossViTForImageClassification(ImageClassificationModel, ClassificationHea
 
     config_class: ClassVar[type[CrossViTConfig]] = CrossViTConfig
     base_model_prefix: ClassVar[str] = "crossvit"
+    # Both branch heads: they average their logits, so resetting one would
+    # leave the model emitting a mixture of old and new label spaces.
+    _class_heads: ClassVar[tuple[str, ...]] = ("head.0", "head.1")
 
     def __init__(self, config: CrossViTConfig) -> None:
         super().__init__(config)
@@ -711,17 +714,6 @@ class CrossViTForImageClassification(ImageClassificationModel, ClassificationHea
         pos = self.pos_embed_0 if branch == 0 else self.pos_embed_1
         x = x + pos
         return self.pos_drop(x)
-
-    @override
-    def reset_classifier(self, num_classes: int) -> None:
-        """Replace *both* branch heads.
-
-        CrossViT predicts from two branches and averages their logits, so the
-        head is a two-entry ``ModuleList``; resetting one would leave the model
-        emitting a mixture of old and new label spaces.  The mixin's default
-        looks for a single ``self.classifier`` and raised ``AttributeError``.
-        """
-        self.head = nn.ModuleList([nn.Linear(lin.in_features, num_classes) for lin in self.head])
 
     @override
     def forward(self, x: Tensor, labels: Tensor | None = None) -> ImageClassificationOutput:

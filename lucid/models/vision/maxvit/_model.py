@@ -928,6 +928,9 @@ class MaxViTForImageClassification(ImageClassificationModel, ClassificationHeadM
 
     config_class: ClassVar[type[MaxViTConfig]] = MaxViTConfig
     base_model_prefix: ClassVar[str] = "maxvit"
+    # The head is a ``_HeadNorm`` (timm's ``NormMlpClassifierHead`` layout):
+    # only its inner ``fc`` is class-dependent, the norm and pre-logits carry over.
+    _class_heads: ClassVar[tuple[str, ...]] = ("head.fc",)
 
     def __init__(self, config: MaxViTConfig) -> None:
         super().__init__(config)
@@ -936,17 +939,6 @@ class MaxViTForImageClassification(ImageClassificationModel, ClassificationHeadM
         self.stages = stages
         self.head = _HeadNorm(out_dim, out_dim, config.num_classes)
         init_transformer_trunc_normal(self)
-
-    @override
-    def reset_classifier(self, num_classes: int) -> None:
-        """Replace the final projection of the norm-MLP head.
-
-        The head is a ``_HeadNorm`` (matching timm's ``NormMlpClassifierHead``
-        layout), so only its inner ``fc`` is class-dependent; the norm and
-        pre-logits stages carry over.  The mixin's default looks for
-        ``self.classifier`` and raised ``AttributeError`` here.
-        """
-        self.head.fc = nn.Linear(self.head.fc.in_features, num_classes)
 
     @override
     def forward(self, x: Tensor, labels: Tensor | None = None) -> ImageClassificationOutput:
