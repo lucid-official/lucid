@@ -15,19 +15,99 @@ without ever pulling a scalar to the host — so a decode step costs a few tenso
 ops and (only when an EOS id is set) a single all-finished reduction per step,
 not ``B`` ``.item()`` syncs.  This matters most for batched generation, where the
 old per-row ``.item()`` loop drained the GPU ``B`` times every token.
+
+The module also owns the argument checks of those loops.  They follow the
+reference text-generation library's: what it rejects with a ``ValueError`` is
+rejected here with its message, and what it reads as "off" (``top_k=0``,
+``top_p=1.0``, ``temperature=1.0``, ``repetition_penalty=1.0``) is off here.
+:class:`_SamplingParams` runs the sampling checks once, where the params are
+built; :func:`_check_cache_implementation` does the same for the cache name.
 """
 
 from dataclasses import dataclass
+from typing import TypeGuard
 
 import lucid
 import lucid.nn.functional as F
 from lucid._tensor.tensor import Tensor
 
+#: The ``cache_implementation`` names a decode loop knows how to build.
+_CACHE_IMPLEMENTATIONS: tuple[str, ...] = ("dynamic", "static", "compiled")
+
+
+def _is_real(value: object) -> TypeGuard[int | float]:
+    """A number the sampling knobs take: an ``int`` or ``float``, never a ``bool``.
+
+    The reference insists on ``float`` for ``temperature`` / ``repetition_penalty``
+    and so refuses ``temperature=2``.  Here an ``int`` is as good as the ``float``
+    the signature declares; a ``bool`` is a flag that landed in the wrong place.
+    """
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def _check_temperature(temperature: object) -> None:
+    """Reject a ``temperature`` that is not a strictly positive number (NaN included)."""
+    if _is_real(temperature) and temperature > 0:
+        return
+    message = (
+        f"`temperature` (={temperature}) has to be a strictly positive float, "
+        "otherwise your next token scores will be invalid."
+    )
+    if _is_real(temperature) and temperature == 0:
+        message += " If you're looking for greedy decoding strategies, set `do_sample=False`."
+    raise ValueError(message)
+
+
+def _check_top_k(top_k: object) -> None:
+    """Accept ``None`` and ``0`` (the filter is off) or a positive ``int``; reject the rest."""
+    if top_k is None:
+        return
+    if not isinstance(top_k, int) or isinstance(top_k, bool) or top_k < 0:
+        raise ValueError(f"`top_k` has to be a strictly positive integer, but is {top_k}")
+
+
+def _check_top_p(top_p: object) -> None:
+    """Accept ``None`` or a number in ``[0, 1]`` (``1`` is off, ``0`` keeps only the argmax)."""
+    if top_p is None:
+        return
+    if not (_is_real(top_p) and 0 <= top_p <= 1):  # NaN fails the comparison
+        raise ValueError(f"`top_p` has to be a float > 0 and < 1, but is {top_p}")
+
+
+def _check_repetition_penalty(penalty: object) -> None:
+    """Reject a repetition penalty that is not a strictly positive number (NaN included)."""
+    if not (_is_real(penalty) and penalty > 0):
+        raise ValueError(f"`penalty` has to be a strictly positive float, but is {penalty}")
+
+
+def _check_cache_implementation(cache_implementation: object) -> None:
+    """Reject a ``cache_implementation`` the decode loops do not know.
+
+    Checked whether or not a cache is used: a misspelt name is a mistake either way, and
+    the reference refuses it at the same point.
+    """
+    if cache_implementation not in _CACHE_IMPLEMENTATIONS:
+        raise ValueError(
+            f"Invalid `cache_implementation` ({cache_implementation}). "
+            f"Choose one of: {_CACHE_IMPLEMENTATIONS}"
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class _SamplingParams:
     r"""Bundle of next-token selection knobs shared by the eager and compiled
-    decode loops (so both paths sample identically)."""
+    decode loops (so both paths sample identically).
+
+    Built once per ``generate`` call, and the one place the knobs are checked
+    (``ValueError``, with the reference's messages):
+
+    * ``repetition_penalty`` must be a strictly positive number, greedy or not;
+      ``1.0`` is off.
+    * Under ``do_sample`` only: ``temperature`` strictly positive (``1.0`` is
+      off); ``top_k`` ``None``, ``0`` (off) or a positive ``int``; ``top_p``
+      ``None`` or in ``[0, 1]`` (``1.0`` is off, ``0.0`` keeps just the argmax).
+      Greedy decoding never reads them, so it does not check them either.
+    """
 
     do_sample: bool
     temperature: float
@@ -37,6 +117,14 @@ class _SamplingParams:
     eos_token_id: int | None
     pad_token_id: int
     dev: str
+
+    def __post_init__(self) -> None:
+        _check_repetition_penalty(self.repetition_penalty)
+        if not self.do_sample:
+            return
+        _check_temperature(self.temperature)
+        _check_top_k(self.top_k)
+        _check_top_p(self.top_p)
 
 
 def _next_token(next_logits: Tensor, out_tokens: list[Tensor], params: _SamplingParams) -> Tensor:
@@ -69,9 +157,9 @@ def _next_token(next_logits: Tensor, out_tokens: list[Tensor], params: _Sampling
 
     if params.temperature != 1.0:
         next_logits = next_logits / params.temperature
-    if params.top_k is not None:
+    if params.top_k is not None and params.top_k != 0:  # 0 turns the filter off
         next_logits = _top_k_filter(next_logits, params.top_k)
-    if params.top_p is not None:
+    if params.top_p is not None and params.top_p < 1.0:  # 1.0 keeps every token
         next_logits = _top_p_filter(next_logits, params.top_p)
     probs = F.softmax(next_logits, dim=-1)  # (B, vocab)
     return _multinomial_one(probs, device=params.dev)
@@ -132,7 +220,8 @@ def _apply_repetition_penalty(logits: Tensor, prefix: Tensor, penalty: float) ->
     prefix : Tensor
         ``(B, T)`` int tokens generated so far.
     penalty : float
-        Strictly positive float; ``> 1`` discourages repetition.
+        Strictly positive float; ``> 1`` discourages repetition and
+        ``< 1`` encourages it.
 
     Returns
     -------
@@ -144,6 +233,12 @@ def _apply_repetition_penalty(logits: Tensor, prefix: Tensor, penalty: float) ->
     Convention popularised by the wider ML ecosystem: positive logits
     shrink toward 0, negative logits grow more negative — both directions
     push the affected token's probability down.
+
+    ``prefix`` is every token of the running sequence, pad ids included, and
+    no attention mask is consulted.  A left-padded prompt therefore penalises
+    its pad id like any other seen token.  That is deliberate: the reference's
+    processor takes the same ``input_ids`` (pads and all) and does the same, so a
+    padded batch matches it row for row.
 
     Fully vectorised (no per-element CPU round-trip): the seen-token mask is
     built by scattering the prefix ids into a ``(B, vocab)`` indicator, then the
@@ -168,8 +263,9 @@ def _top_k_filter(logits: Tensor, k: int) -> Tensor:
     logits : Tensor
         ``(B, vocab)`` logits.
     k : int
-        Number of tokens to retain per row.  If ``k >= vocab``, ``logits``
-        is returned unchanged.
+        Number of tokens to retain per row, ``>= 1`` (``_next_token`` never
+        asks for ``0``, which switches the filter off).  If ``k >= vocab``,
+        ``logits`` is returned unchanged.
 
     Returns
     -------
@@ -197,7 +293,8 @@ def _top_p_filter(logits: Tensor, p: float) -> Tensor:
     logits : Tensor
         ``(B, vocab)`` logits.
     p : float
-        Cumulative probability threshold in ``(0, 1]``.
+        Cumulative probability threshold in ``[0, 1]``; ``0`` keeps only the
+        most likely token.
 
     Returns
     -------
@@ -211,13 +308,14 @@ def _top_p_filter(logits: Tensor, p: float) -> Tensor:
     whose *exclusive-prefix* cumulative probability is ``< p`` (so the token
     that crosses the threshold is itself kept, and the highest-probability token
     is always kept), then scatter the mask back to the original token order via
-    the inverse permutation.
+    the inverse permutation.  The head of the sort has an empty prefix, so it is
+    kept for every ``p``, ``0`` included, rather than leaving a row with nothing.
     """
     sorted_vals = lucid.flip(lucid.sort(logits, dim=-1).values, -1)
     sorted_idx = lucid.flip(lucid.argsort(logits, dim=-1), -1)
     sorted_probs = F.softmax(sorted_vals, dim=-1)
     exclusive_cdf = lucid.cumsum(sorted_probs, dim=-1) - sorted_probs
-    keep = exclusive_cdf < p
+    keep = (exclusive_cdf < p) | (exclusive_cdf <= 0.0)
     masked = lucid.where(keep, sorted_vals, lucid.full_like(sorted_vals, -1e9))
     # Undo the sort: gather by the inverse permutation back to token order.
     inverse = lucid.argsort(sorted_idx, dim=-1)

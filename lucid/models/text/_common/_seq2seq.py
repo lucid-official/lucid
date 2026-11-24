@@ -12,7 +12,11 @@ from collections.abc import Callable
 
 import lucid
 from lucid._tensor.tensor import Tensor
-from lucid.models._sampling import _SamplingParams, _select_next_ondevice
+from lucid.models._sampling import (
+    _SamplingParams,
+    _check_cache_implementation,
+    _select_next_ondevice,
+)
 from lucid.utils.cache import DynamicCache, EncoderDecoderCache, StaticCache
 
 __all__ = ["NextTokenLogits", "seq2seq_generate"]
@@ -72,7 +76,14 @@ def seq2seq_generate(
         ``(batch, T_out)`` int64 target tokens, ``T_out <= max_length``.
         A row that emitted end-of-sequence is padded with
         ``sampling.pad_token_id`` while the others finish.
+
+    Raises
+    ------
+    ValueError
+        ``cache_implementation`` is not ``"dynamic"``, ``"static"`` or
+        ``"compiled"`` -- whether or not ``use_cache`` is set.
     """
+    _check_cache_implementation(cache_implementation)
     finished = lucid.zeros((batch,), device=device).bool()
     out_tokens = [lucid.tensor([start_token_id] * batch, device=device).long()]
     cache: EncoderDecoderCache | None = None

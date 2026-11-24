@@ -459,6 +459,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Vision, detection and segmentation configs refuse, when they are constructed and by field name, values their model cannot build. Before, such a value failed later or built a broken model. `ViTConfig` refuses an `image_size` that is not a multiple of `patch_size`, and a `dim` that is not a multiple of `num_heads` (before, a `ShapeMismatch` in the first forward). Swin, CvT, PVT, MaxViT, CoAtNet and CrossViT check their per-stage head splits (LCD-1109).
 - `ResNetConfig`, `ResNeXtConfig`, `ResNeStConfig`, `SENetConfig`, `SKNetConfig`, `CoAtNetConfig` and the R-CNN / DETR / MaskFormer `backbone_layers` require exactly the number of stages the builder lays out, each at least 1. Before, a short `hidden_sizes` raised `IndexError` at build, a long `layers` was silently cut, and a 0 entry was silently built as one block. `FCNConfig.backbone` accepts exactly the backbones the model builds (LCD-1109).
 
+- check generate() sampling args like the reference
 
 ### Added
 
