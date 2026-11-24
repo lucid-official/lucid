@@ -450,6 +450,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - trapezoid ranks a 0-d x as the dimensioned operand it is
 
+- householder_product judges its pair after the autocast cast
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

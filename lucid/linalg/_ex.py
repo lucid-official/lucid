@@ -1225,8 +1225,8 @@ def householder_product(input: Tensor, tau: Tensor) -> Tensor:
     k, r = _check_householder_shapes(
         tuple(int(s) for s in input.shape), tuple(int(s) for s in tau.shape)
     )
-    refuse_unlike("linalg.householder_product", input, tau)
     with _autocast_entry("householder_product", _unwrap(input), _unwrap(tau)) as (h_impl, t_impl):
+        refuse_unlike("linalg.householder_product", h_impl, t_impl)
         H_cast, tau_cast = _wrap(h_impl), _wrap(t_impl)
         use_ops = (
             H_cast.ndim > 2

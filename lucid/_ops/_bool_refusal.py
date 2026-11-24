@@ -46,12 +46,13 @@ engine checks).  The bypass is the caller's: a pipeline that resamples a mask ca
 
 A third kind of refusal is not about one operand's dtype but about two operands that differ
 (``PAIRS``, :func:`refuse_unlike`).  The reference's ``heaviside``, ``complex``, ``polar``,
-``cdist``, ``grid_sample`` and ``cross`` have no type promotion at all (``vecdot`` and the
-two-operand solvers ``solve`` and ``householder_product`` too, but those entries are still on
-their own helper until step 6 of LCD-1075 lands): a pair that does not share a dtype is a
+``cdist``, ``grid_sample``, ``cross``, ``vecdot`` and the two-operand solvers ``solve`` and
+``householder_product`` have no type promotion at all: a pair that does not share a dtype is a
 ``RuntimeError``, a float16 beside a float32 included, where an ordinary binary op promotes it.
 A 0-d tensor is no exception -- the reference does not rank the operands before it looks at the
-dtypes -- so one rule serves every shape.
+dtypes -- so one rule serves every shape.  Where the check sits among an entry's others is the
+reference's order: ``solve`` and ``vecdot`` judge the dtypes before any shape, and
+``householder_product`` judges its shapes first.
 
 Neither list is a census of the ops that refuse.  The refusal sweeps
 (``lucid/test/unit/ops/test_bool_refusal_sweep.py`` and its integer twin) derive
@@ -324,7 +325,7 @@ _DECLARED: tuple[Row, ...] = (
     # Indices and masks: the reference wants int64 class indices and a bool mask.
     _row("one_hot", bool=INVALID_INT64, narrow=INVALID_INT64),
     # The reference reads the positions of ``take_along_dim`` and ``take`` as int64 and nothing
-    # narrower, and ``gather``'s index as int32 or int64 (a flat ``take_along_dim`` is a ``gather``).
+    # narrower, and ``gather``'s index as int32 or int64 (a flat ``take_along_dim`` is one).
     _row("take_along_dim", "indices", bool=GUARD_INT64, narrow=GUARD_INT64),
     _row("take", "index", bool=GUARD_INT64, narrow=GUARD_INT64),
     Row(
@@ -533,14 +534,16 @@ def _rule(op: str, role: str, code: int) -> Rule | None:
 
 
 def _refused_codes(op: str, role: str) -> frozenset[int]:
-    """The integral dtype codes ``op``'s ``role`` row turns away, which a call may repeat for free."""
+    """The integral dtype codes ``op``'s ``role`` row turns away; a repeated call pays no lookup."""
     try:
         return _REFUSED[(op, role)]
     except KeyError:
         base = op.removesuffix("_")
         row = ROWS.get((base, role)) or ROWS.get((base, ""))
         if row is None:
-            raise KeyError(f"{op} has no refusal row; add one to lucid._ops._bool_refusal") from None
+            raise KeyError(
+                f"{op} has no refusal row; add one to lucid._ops._bool_refusal"
+            ) from None
         return _REFUSED.setdefault((op, role), row.refused_codes())
 
 
@@ -878,10 +881,9 @@ def refuse_common(op: str, *operands: object) -> None:
 def refuse_unlike(op: str, first: object, second: object) -> None:
     """Raise ``op``'s refusal when two tensor operands do not share a dtype.
 
-    The reference's ``heaviside``, ``complex``, ``polar``, ``cdist``, ``grid_sample`` and
-    ``cross`` do not promote (nor do ``vecdot``, ``solve`` and ``householder_product``, which
-    are still on the linalg helper until step 6 of LCD-1075 moves them here): a pair of dtypes
-    that differ is a ``RuntimeError``, whatever the dtypes (a ``float16`` beside a
+    The reference's ``heaviside``, ``complex``, ``polar``, ``cdist``, ``grid_sample``,
+    ``cross``, ``vecdot``, ``solve`` and ``householder_product`` do not promote: a pair of
+    dtypes that differ is a ``RuntimeError``, whatever the dtypes (a ``float16`` beside a
     ``float32``) and whatever the shapes (a 0-d operand beside a vector).
     A number, ``None`` and anything else that is not a tensor passes: it takes the other
     operand's dtype, and no dtype is read from it.
