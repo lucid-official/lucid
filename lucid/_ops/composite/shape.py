@@ -11,6 +11,7 @@ from lucid import _promotion
 from lucid._C import engine as _C_engine
 from lucid._globals import get_default_device
 from lucid._types import DTypeLike, DeviceLike, Scalar
+from lucid._ops._bool_refusal import refuse
 from lucid._ops._dims import _dim_size, _require_real_axis, _to_axes, _wrap_dim
 from lucid._ops.composite._shared import _swap_dims
 from lucid._tensor._indexing import _broadcast_shape, broadcast_shapes, broadcast_tensors
@@ -853,11 +854,12 @@ def take_along_dim(input: Tensor, indices: Tensor, dim: int | None = None) -> Te
     input : Tensor
         Source tensor.
     indices : Tensor
-        Integer tensor of positions along ``dim``, with as many dims as
+        ``int64`` tensor of positions along ``dim``, with as many dims as
         ``input``.  Its shape must be broadcast-compatible with ``input`` on every
         axis other than ``dim``; the size along ``dim`` controls the size
         of the output along that axis.  A negative position counts from
-        the end.
+        the end.  With ``dim=None`` it is read as :func:`lucid.gather` reads
+        its index.
     dim : int, optional
         Axis along which to gather.  Negative values count from the end.
         ``None`` (default) reads ``input`` and ``indices`` flattened.
@@ -871,6 +873,9 @@ def take_along_dim(input: Tensor, indices: Tensor, dim: int | None = None) -> Te
 
     Raises
     ------
+    lucid._C.engine.DtypeMismatch
+        ``dim`` is given and ``indices`` is not ``int64``: a narrower integer
+        or a bool is refused, as the reference refuses it.
     lucid._C.engine.ShapeMismatch
         ``indices`` has another number of dims than ``input``.
     IndexError
@@ -902,6 +907,7 @@ def take_along_dim(input: Tensor, indices: Tensor, dim: int | None = None) -> Te
     """
     if dim is None:
         return lucid.gather(input.reshape(-1), 0, indices.reshape(-1))
+    refuse("take_along_dim", indices, "indices")
     if indices.ndim != input.ndim:
         raise _C_engine.ShapeMismatch(
             f"take_along_dim: input and indices should have the same number of "

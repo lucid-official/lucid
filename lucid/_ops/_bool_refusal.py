@@ -44,6 +44,13 @@ primary operand is the engine's (the ``attn_mask`` of attention, whose queries a
 engine checks).  The bypass is the caller's: a pipeline that resamples a mask casts it itself
 (``lucid.utils.transforms.functional._sampled``).
 
+A third kind of refusal is not about one operand's dtype but about two operands that differ
+(``PAIRS``, :func:`refuse_unlike`).  The reference's ``heaviside``, ``complex``, ``polar``,
+``vecdot`` and the two-operand solvers have no type promotion at all: a pair that does not share
+a dtype is a ``RuntimeError``, a float16 beside a float32 included, where an ordinary binary op
+promotes it.  A 0-d tensor is no exception -- the reference does not rank the operands before it
+looks at the dtypes -- so one rule serves every shape.
+
 Neither list is a census of the ops that refuse.  The refusal sweeps
 (``lucid/test/unit/ops/test_bool_refusal_sweep.py`` and its integer twin) derive
 their candidates from the audit's op census and compare Lucid's answer with the
@@ -112,7 +119,11 @@ _BOOL_MASK = "a bool dtype, e.g. mask.bool()"
 
 #: What a role is called in a message where it is not an operand's own name.
 _ROLE_PHRASE: Mapping[str, str] = MappingProxyType(
-    {"mixed": "operand beside another dtype", "global": "input of a global average"}
+    {
+        "mixed": "operand beside another dtype",
+        "global": "input of a global average",
+        "indices": "index tensor",
+    }
 )
 
 
@@ -136,6 +147,7 @@ GUARD_FLOATING = Rule(_GUARD, _FLOATING)
 GUARD_NUMBER = Rule(_GUARD, _NUMBER)
 GUARD_INTEGER = Rule(_GUARD, _INTEGER)
 GUARD_BOOL = Rule(_GUARD, _BOOL_MASK)
+GUARD_INT64 = Rule(_GUARD, _INT64)
 INVALID_FLOATING = Rule(_INVALID, _FLOATING)
 INVALID_INT64 = Rule(_INVALID, _INT64)
 
@@ -290,6 +302,8 @@ _DECLARED: tuple[Row, ...] = (
     _row("exponential", bool=GUARD_FLOATING, ints=GUARD_FLOATING),
     # Indices and masks: the reference wants int64 class indices and a bool mask.
     _row("one_hot", bool=INVALID_INT64, narrow=INVALID_INT64),
+    # The reference reads the positions of ``take_along_dim`` as int64 and nothing narrower.
+    _row("take_along_dim", "indices", bool=GUARD_INT64, narrow=GUARD_INT64),
     _row("masked_select", "mask", ints=GUARD_BOOL, floats=GUARD_BOOL, complexes=GUARD_BOOL),
     _row("scaled_dot_product_attention", "attn_mask", ints=GUARD_BOOL),
     # The engine op declares an embedding table's integers (``refuse_declared``); its bool
@@ -340,6 +354,48 @@ def _table(rows: tuple[Row, ...]) -> Mapping[tuple[str, str], Row]:
 
 #: ``(op, role)`` -> the row, for every refusal the Python entry points own.
 ROWS: Mapping[tuple[str, str], Row] = _table(_DECLARED)
+
+
+@dataclass(frozen=True, slots=True)
+class Pair:
+    """Two operands of one op that the reference refuses to promote: they must share a dtype.
+
+    Unlike a :class:`Row`, which judges one operand against the dtypes an op turns away, a pair
+    is judged as a pair -- ``float16`` beside ``float32`` is refused though neither is -- so it
+    has no dtype slots, only the names the message calls its two operands by.
+    """
+
+    #: The name the caller passes :func:`refuse_unlike` -- qualified (``linalg.vecdot``) where
+    #: the reference's message is.
+    op: str
+    #: What the message calls the first operand.
+    first: str = "input"
+    #: What the message calls the second operand.
+    second: str = "other"
+
+
+#: The ops that refuse a pair of tensors of two dtypes.  An in-place twin takes its out-of-place
+#: op's pair.
+_PAIRED: tuple[Pair, ...] = (
+    Pair("polar", "abs", "angle"),
+    Pair("cdist", "x1", "x2"),
+    Pair("linalg.cross"),
+    Pair("grid_sample", "input", "grid"),
+)
+
+
+def _pair_table(pairs: tuple[Pair, ...]) -> Mapping[str, Pair]:
+    """``pairs`` by op, refusing an op declared twice."""
+    table: dict[str, Pair] = {}
+    for pair in pairs:
+        if pair.op in table:
+            raise ValueError(f"{pair.op} is declared twice as a pair")
+        table[pair.op] = pair
+    return MappingProxyType(table)
+
+
+#: ``op`` -> the :class:`Pair`, for every op whose two operands must share a dtype.
+PAIRS: Mapping[str, Pair] = _pair_table(_PAIRED)
 
 #: The same rows compiled for the call: ``(op, role)`` -> the rule for each integral dtype,
 #: indexed by the dtype's engine code, then the rule for a float and for a complex.
@@ -752,10 +808,52 @@ def refuse_common(op: str, *operands: object) -> None:
         _check(op, common)
 
 
+def refuse_unlike(op: str, first: object, second: object) -> None:
+    """Raise ``op``'s refusal when two tensor operands do not share a dtype.
+
+    The reference's ``heaviside``, ``polar``, ``vecdot`` and the two-operand solvers do not
+    promote: a pair of dtypes that differ is a ``RuntimeError``, whatever the dtypes (a
+    ``float16`` beside a ``float32``) and whatever the shapes (a 0-d operand beside a vector).
+    A number, ``None`` and anything else that is not a tensor passes: it takes the other
+    operand's dtype, and no dtype is read from it.
+
+    Parameters
+    ----------
+    op : str
+        The refusing op's name, the ``op`` of a :class:`Pair` of ``PAIRS``.  A trailing
+        ``_`` (the in-place twin) reads the pair of the out-of-place op and is kept in the
+        message.
+    first, second : object
+        The two operands, as ``Tensor`` or as the engine's impl.
+
+    Raises
+    ------
+    DtypeMismatch
+        The two dtypes differ (a ``RuntimeError`` and a ``TypeError``, as the reference's).
+    KeyError
+        ``op`` has no pair; add one to ``PAIRS``.
+    """
+    impl_first, impl_second = _promotion.try_unwrap(first), _promotion.try_unwrap(second)
+    if impl_first is None or impl_second is None:
+        return
+    code_first, code_second = impl_first.dtype.value, impl_second.dtype.value
+    if code_first == code_second:
+        return
+    pair = PAIRS.get(op.removesuffix("_"))
+    if pair is None:
+        raise KeyError(f"{op} has no pair row; add one to lucid._ops._bool_refusal")
+    raise _GUARD(
+        f"{op}: expected {pair.first} and {pair.second} to have the same dtype, "
+        f"but found {_NAMES[code_first]} and {_NAMES[code_second]}"
+    )
+
+
 __all__ = [
     "BOOL_CODE",
     "BOOL_REFUSED",
     "LAST_INTEGRAL_CODE",
+    "PAIRS",
+    "Pair",
     "ROWS",
     "Row",
     "Rule",
@@ -771,4 +869,5 @@ __all__ = [
     "refuse_declared",
     "refuse_mixed",
     "refuse_unless_bool",
+    "refuse_unlike",
 ]

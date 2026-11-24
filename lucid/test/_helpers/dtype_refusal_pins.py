@@ -225,6 +225,11 @@ PINS: dict[str, Pin] = {
     # ── indices and masks ───────────────────────────────────────────────────────────────────────
     # The reference wants int64 class indices: a plain RuntimeError for the rest.
     "one_hot": pin("one_hot", lambda fw, x, m: functional(fw).one_hot(x, 2), kind="guard"),
+    # ``take_along_dim`` reads its positions as int64 when it is given a dim (flattened it is a
+    # ``gather``, which takes int32 too).
+    "take_along_dim-indices": pin(
+        "take_along_dim", lambda fw, x, m: fw.take_along_dim(x.float(), x, 0), role="indices"
+    ),
     "masked_select-mask": pin(
         "masked_select", lambda fw, x, m: fw.masked_select(x.float(), x), role="mask"
     ),

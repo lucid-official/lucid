@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING
 import lucid
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _float_input, _unwrap, _wrap
-from lucid._ops._bool_refusal import refuse
+from lucid._ops._bool_refusal import refuse, refuse_unlike
 from lucid._ops.composite._opmath import _promote_pair
 from lucid._types import TensorOrScalar
 
@@ -100,6 +100,12 @@ def polar(abs: TensorOrScalar, angle: TensorOrScalar) -> Tensor:
         ``complex64`` tensor whose shape is the broadcast shape of the two
         inputs.
 
+    Raises
+    ------
+    DtypeMismatch
+        If ``abs`` and ``angle`` are tensors of different dtypes, or either is a
+        bool or integer tensor.  The reference does not promote the pair.
+
     Notes
     -----
     Mathematical definition:
@@ -123,6 +129,7 @@ def polar(abs: TensorOrScalar, angle: TensorOrScalar) -> Tensor:
     """
     refuse("polar", abs)
     refuse("polar", angle)
+    refuse_unlike("polar", abs, angle)
     abs, angle = _promote_pair(abs, angle)
     return lucid.complex(abs * lucid.cos(angle), abs * lucid.sin(angle))
 

@@ -9,7 +9,7 @@ from lucid import _promotion
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _unwrap, _wrap
 from lucid._ops._autocast import _autocast_entry
-from lucid._ops._bool_refusal import refuse, refuse_bool, refuse_complex
+from lucid._ops._bool_refusal import refuse, refuse_bool, refuse_complex, refuse_unlike
 from lucid._types import DeviceLike, DTypeLike
 from lucid._ops.composite._euclidean import _euclidean_cdist
 from lucid._ops.composite.indexing import _scatter_add
@@ -107,7 +107,7 @@ def _nanquantile_along(
     last = lucid.maximum(counts - 1.0, zero)
 
     def _gather(pos: Tensor) -> Tensor:
-        return lucid.take_along_dim(sorted_x, pos.to(lucid.int32), dim=dim)
+        return lucid.take_along_dim(sorted_x, pos.to(lucid.int64), dim=dim)
 
     results = []
     for qi in q_list:
@@ -550,12 +550,9 @@ def cdist(
         _require_floating(_unwrap(operand), "cdist")
     with _autocast_entry("cdist", _unwrap(x1), _unwrap(x2)) as (x1i, x2i):
         x1, x2 = _wrap(x1i), _wrap(x2i)
-        if x1.dtype != x2.dtype:
-            # The difference form promotes and the matmul form refuses, so
-            # without this the form a mode picks decided what was accepted.
-            raise _C_engine.DtypeMismatch(
-                f"cdist: expected x1 and x2 to have the same dtype, got {x1.dtype} and {x2.dtype}"
-            )
+        # The difference form promotes and the matmul form refuses, so without
+        # this the form a mode picks decided what was accepted.
+        refuse_unlike("cdist", x1, x2)
         if p == 2.0:
             return _euclidean_cdist(x1, x2, compute_mode)
         return _minkowski_cdist(x1, x2, p)

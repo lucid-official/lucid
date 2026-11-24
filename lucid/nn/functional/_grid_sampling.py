@@ -38,6 +38,7 @@ import lucid as _lucid
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _unwrap, _wrap
 from lucid._dtype import _float32_or_wider
+from lucid._ops._bool_refusal import refuse_unlike
 
 if TYPE_CHECKING:
     from lucid._tensor.tensor import Tensor
@@ -565,8 +566,8 @@ def _check_operands(x: Tensor, grid: Tensor) -> None:
     ------
     ValueError
         Shapes or devices do not match.
-    TypeError
-        Dtypes do not match.
+    DtypeMismatch
+        Dtypes do not match (a ``TypeError`` and a ``RuntimeError``).
     """
     rank = x.ndim - 2
     if grid.ndim != x.ndim or int(grid.shape[-1]) != rank:
@@ -580,10 +581,7 @@ def _check_operands(x: Tensor, grid: Tensor) -> None:
         )
     if x.device != grid.device:
         raise ValueError(f"grid_sample: input is on {x.device} but grid is on {grid.device}")
-    if x.dtype != grid.dtype:
-        raise TypeError(
-            f"grid_sample: input and grid must have the same dtype, got {x.dtype} and {grid.dtype}"
-        )
+    refuse_unlike("grid_sample", x, grid)
 
 
 def composite_grid_sample(

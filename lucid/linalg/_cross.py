@@ -5,9 +5,9 @@ Re-exported by :mod:`lucid.linalg`.
 
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _unwrap, _wrap
+from lucid._ops._bool_refusal import refuse_unlike
 from lucid._ops._dims import _wrap_dim
 from lucid._tensor.tensor import Tensor
-from lucid.linalg._dtype_guard import _require_same_dtype
 
 
 def cross(input: Tensor, other: Tensor, *, dim: int = -1) -> Tensor:
@@ -59,7 +59,7 @@ def cross(input: Tensor, other: Tensor, *, dim: int = -1) -> Tensor:
     # where the engine's half-precision op-math would read a float32 operand as
     # a scalar and answer in float16: the dtypes are checked here, as the
     # reference does, rather than left to that.
-    _require_same_dtype("linalg.cross", input, other, ("input", "other"))
+    refuse_unlike("linalg.cross", input, other)
     xi, yi = _unwrap(input), _unwrap(other)
     if len(xi.shape) != len(yi.shape):
         raise _C_engine.ShapeMismatch(
