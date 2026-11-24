@@ -450,9 +450,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - a float64 `x` beside a float32 `y` answers float64, as in the reference;
   - `trapezoid` of a `y` with no sample answers in `y`'s own dtype, as the reference does (LCD-1075).
 
-- reset_classifier builds the head where the old one lived
-
-- give InceptionNeXt reset_classifier; guard aux heads
+- `reset_classifier(n)` on the zoo's classification models builds the new head with the old head's dtype and device, and updates `config.num_classes`. Before, a float16 or Metal model got a float32 CPU head, and the config still named the old class count. GoogLeNet's and Inception v3's auxiliary heads are resized with the main head. SENet, I-JEPA, V-JEPA, V-JEPA 2 and InceptionNeXt gain a working `reset_classifier`; before, it raised or left the head unchanged (LCD-1106).
 
 ### Added
 
@@ -673,6 +671,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `rsub` scales through the same `alpha` rule as `sub`: a float, complex or bool `alpha` on an integer tensor is refused as `sub` refuses it, where it used to be promoted or accepted. Its default `alpha` is `1`, not `1.0` (LCD-1076).
 - every engine forward checks that its result's storage holds its shape's bytes before handing it back; a short result is an error rather than a silent out-of-bounds read. Engine shape messages now spell a shape as `[2, 3]` (LCD-1072).
 - **Behaviour change:** `linalg.solve_triangular`, `linalg.lu_solve` and `linalg.ldl_solve` need a right-hand side `B` of at least two dimensions, as the reference does. A 1-D (or 0-d) `B` was solved as a vector and now raises: `ShapeMismatch` (a `RuntimeError` and a `ValueError`) reading `linalg.solve_triangular: The input tensor B must have at least 2 dimensions.` (`lu_solve` alike; `ldl_solve` raises the reference's `IndexError`). To migrate, pass one column: `lu_solve(LU, pivots, b.unsqueeze(-1))`, then `.squeeze(-1)` the answer. `linalg.solve`, `solve_ex` and `lstsq` still read a vector `B` (LCD-1083).
+- `reset_classifier(n)` raises `ValueError` for `n < 1`; it used to build a zero-width head (LCD-1106).
 
 - Half-precision `addmm`, `addbmm` and `baddbmm` multiply in float32, so a half GEMM becomes a float32 GEMM. That costs more memory and lower Metal throughput, and buys the reference's single rounding. `addbmm` rounds once, where the reference's CPU kernel rounds after each batch: 1-2 half ulp apart (LCD-1087).
 
