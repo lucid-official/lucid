@@ -103,6 +103,6 @@ def seq2seq_generate(
         else:
             logits = next_token_logits(tokens, cache)
         finished = _select_next_ondevice(logits, out_tokens, finished, sampling)
-        if sampling.eos_token_id is not None and bool(lucid.all(finished).item()):
+        if sampling.stops_early(finished):
             break
     return lucid.stack(out_tokens, dim=1).long()

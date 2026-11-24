@@ -950,7 +950,7 @@ class CausalLMMixin:
         for step in range(stop_len - T_prompt):
             last_logits = decoder.next_logits(step, model_input, out_tokens)
             finished = _select_next_ondevice(last_logits, out_tokens, finished, sampling)
-            if sampling.eos_token_id is not None and bool(lucid.all(finished).item()):
+            if sampling.stops_early(finished):
                 break
             model_input = out_tokens[-1].reshape(B, 1)
 

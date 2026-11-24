@@ -132,6 +132,18 @@ class _SamplingParams:
         _check_top_k(self.top_k)
         _check_top_p(self.top_p)
 
+    def stops_early(self, finished: Tensor) -> bool:
+        r"""Whether a decode loop may stop before its length cap, given the ``(B,)`` ``finished`` flags.
+
+        It may once an end-of-sequence id is set and every row has emitted it.
+        An empty batch has no row to wait for, and ``all`` of nothing is true, so
+        it never stops early: it runs to the cap, as it does with no EOS id, and
+        the shape of the result does not depend on whether one was given.
+        """
+        if self.eos_token_id is None or int(finished.shape[0]) == 0:
+            return False
+        return bool(lucid.all(finished).item())
+
 
 def _next_token(next_logits: Tensor, out_tokens: list[Tensor], params: _SamplingParams) -> Tensor:
     r"""Compute the ``(B,)`` next-token ids (before finish/pad masking), on device.
