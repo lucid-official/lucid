@@ -254,6 +254,14 @@ make_view_from_elements(const std::shared_ptr<lucid::TensorImpl>& base,
                                                       std::move(byte_stride),
                                                       static_cast<std::size_t>(offset * elem)));
 }
+
+// The Dtype enum's integer value as a plain int.  ``impl.dtype`` builds a pybind
+// enum object on every read (~0.23 us) and ``.dtype.value`` is a second lookup
+// on top; a Python fast path that only compares dtypes reads this instead
+// (~0.07 us, the floor of a pybind property).
+int dtype_code_of(const lucid::TensorImpl& t) {
+    return static_cast<int>(t.dtype());
+}
 }  // namespace
 
 namespace lucid::bindings {
@@ -345,10 +353,10 @@ void register_tensor_impl(py::module_& m) {
                  return out;
              }),
              py::arg("data"), py::arg("device") = Device::CPU, py::arg("requires_grad") = false)
-        // Shape and stride are returned as Python lists via py::cast.
         .def_property_readonly("shape", [](const TensorImpl& t) { return py::cast(t.shape()); })
         .def_property_readonly("stride", [](const TensorImpl& t) { return py::cast(t.stride()); })
         .def_property_readonly("dtype", [](const TensorImpl& t) { return t.dtype(); })
+        .def_property_readonly("dtype_code", &dtype_code_of, "``dtype.value``, as a plain int.")
         .def_property_readonly("device", [](const TensorImpl& t) { return t.device(); })
         .def_property_readonly("requires_grad", &TensorImpl::requires_grad)
         .def_property_readonly(

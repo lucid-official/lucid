@@ -600,6 +600,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - gamma family reads the positive-domain lgamma
 
+- TensorImpl.dtype_code, a cheap dtype read (LCD-1099)
+
 ### Tooling
 
 - record that 1055fa3b9 moves no binary interface
@@ -675,6 +677,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `linalg.vecdot` (a 0-d operand beside a vector included), `linalg.solve` and `linalg.householder_product` take the same pair rule from the same owner: two dtypes raise `DtypeMismatch`. Before, `vecdot(x_float16, 0-d float32)` answered in float16. `householder_product` checks its shapes before the dtypes, as the reference does, and judges the pair after the autocast cast. So a float32 input beside a float16 tau is accepted under CPU autocast and answers float32. `vecdot` moves to `lucid/linalg/_vecdot.py` and is re-exported from `lucid.linalg` (LCD-1075).
 - `take_along_dim(x, indices, dim)` and `take` read int64 positions only, as the reference does; a bool, int8, int16 or int32 index raises `DtypeMismatch`. `gather` reads int32 or int64. A bool, int8 or int16 index raises `DtypeMismatch`, and so does a flat `take_along_dim(x, indices)` with one. `gather` answers an index with no element whatever its dtype, as the reference does (LCD-1075).
 - `ldexp(input, other)` refuses a bool `other` beside a real floating `input` with `NotImplementedError`, as the reference does. An integer, bool or complex `input` still answers (LCD-1075).
+
 ---
 
 ## [3.16.4] — 2026-11-07
