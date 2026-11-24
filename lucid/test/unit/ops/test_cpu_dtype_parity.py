@@ -757,7 +757,10 @@ def test_integer_matmul_agrees_everywhere(dtype_name: str, device: str) -> None:
 
     BLAS has none, and MLX refuses outright — "[matmul] Only inexact types
     are supported" — while the product of two integer matrices is an
-    integer matrix. Both widen now, and both land on the exact answer.
+    integer matrix. Each now has an integer product of its own
+    (``backend/{cpu,gpu}/IntGemm.h``) that wraps at the dtype's width, so both
+    land on the exact answer; ``test_integer_matmul_exact.py`` holds it where it
+    overflows.
     """
     values = np.array([[1, 2], [3, 4]])
     x = lucid.tensor(values, dtype=getattr(lucid, dtype_name), device=device)

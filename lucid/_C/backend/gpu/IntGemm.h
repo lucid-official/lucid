@@ -23,9 +23,11 @@
 //
 // The broadcast product holds ``batch * M * K * N`` elements, so it is formed
 // a block of rows at a time (and, past one row's worth, a block of ``K`` at a
-// time, the partial sums added), each block no larger than ``kChunkElems``
-// elements.  The blocks of one product stay lazy and MLX evaluates them in
-// order, freeing each block's products once its sum is made.
+// time, the partial sums added), each block at most ``kIntGemmChunkElems``
+// elements — except that a block is never smaller than one ``K`` step of one
+// row, which holds ``batch * N`` of them.  The blocks of one product stay lazy
+// and MLX evaluates them in order, freeing each block's products once its sum
+// is made.
 #pragma once
 
 #include <algorithm>
