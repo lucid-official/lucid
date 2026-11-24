@@ -5,7 +5,7 @@ Re-exported by :mod:`lucid.linalg`.
 
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _unwrap, _wrap
-from lucid._ops._bool_refusal import refuse_unlike
+from lucid._ops._bool_refusal import refuse, refuse_unlike
 from lucid._ops._dims import _wrap_dim
 from lucid._tensor.tensor import Tensor
 
@@ -40,6 +40,9 @@ def cross(input: Tensor, other: Tensor, *, dim: int = -1) -> Tensor:
     DtypeMismatch
         If ``input`` and ``other`` have different dtypes, as the reference
         does.
+    NotImplementedError
+        If both are bool tensors: the reference has no bool kernel.  An
+        integer pair is answered.
 
     Notes
     -----
@@ -72,6 +75,7 @@ def cross(input: Tensor, other: Tensor, *, dim: int = -1) -> Tensor:
         raise _C_engine.ShapeMismatch(
             f"linalg.cross: inputs dimension {d} must have length 3, got {xi.shape[d]} and {yi.shape[d]}"
         )
+    refuse("cross", xi)
 
     def _idx(t: _C_engine.TensorImpl, i: int) -> _C_engine.TensorImpl:
         idx_shape = list(t.shape)

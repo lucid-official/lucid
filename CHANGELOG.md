@@ -470,6 +470,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `lerp` takes the reference's two forms by the weight: `start + weight * (end - start)` for `|weight| < 0.5`, `end - (end - start) * (1 - weight)` otherwise (a `NaN` weight takes the second). `lerp(a, b, 1) == b` now holds exactly (`lerp(1, 1e-8, 1)` was `0` in float32), and an infinite operand gives what its form gives (`lerp(0, inf, 0.5)` is `NaN`, was `inf`). A tensor weight picks the form on the device, with no host read. The gradient is the reference's whichever form the value took: `grad * (1 - weight)`, `grad * weight` and `grad * (end - start)` (LCD-1101).
 
+- refuse integral operands on every route (LCD-1105)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

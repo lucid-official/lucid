@@ -104,6 +104,56 @@ PINS: dict[str, Pin] = {
     "vecdot-first": pin("vecdot", lambda fw, x, m: fw.linalg.vecdot(x, x.float())),
     "vecdot-second": pin("vecdot", lambda fw, x, m: fw.linalg.vecdot(x.float(), x)),
     "vander": pin("vander", lambda fw, x, m: fw.linalg.vander(x)),
+    # ``householder_product`` has an engine route (one matrix, a reflector per column) and a
+    # composed one (a batch, fewer reflectors): the reference has no kernel for an integral
+    # dtype on any of them, so every route is a pin.
+    "householder_product": pin(
+        "householder_product", lambda fw, x, m: fw.linalg.householder_product(m.mT, x[:2])
+    ),
+    "householder_product-batched": pin(
+        "householder_product",
+        lambda fw, x, m: fw.linalg.householder_product(m.mT.unsqueeze(0), x[:2].unsqueeze(0)),
+    ),
+    "householder_product-fewer": pin(
+        "householder_product", lambda fw, x, m: fw.linalg.householder_product(m.mT, x[:1])
+    ),
+    "householder_product-none": pin(
+        "householder_product", lambda fw, x, m: fw.linalg.householder_product(m.mT, x[:0])
+    ),
+    # An integer pair of 3-vectors is answered; a bool pair is not.
+    "cross": pin("cross", lambda fw, x, m: fw.linalg.cross(m[0], m[1])),
+    # The integers of ``solve`` are the engine's schema (``refuse_declared``), the bool this table's:
+    # every dtype is refused, and the reference judges ``A``'s dtype before ``B``'s and before
+    # any shape.
+    "solve": pin(
+        "solve", lambda fw, x, m: fw.linalg.solve(m[:, :2], m[:, :2]), kind="guard", refused=ALL
+    ),
+    "solve-float-rhs": pin(
+        "solve",
+        lambda fw, x, m: fw.linalg.solve(m[:, :2], m[:, :2].float()),
+        kind="guard",
+        refused=ALL,
+    ),
+    "solve-not-square": pin(
+        "solve", lambda fw, x, m: fw.linalg.solve(m, m), kind="guard", refused=ALL
+    ),
+    "solve-left-false-vector": pin(
+        "solve",
+        lambda fw, x, m: fw.linalg.solve(m[:, :2], x[:2], left=False),
+        kind="guard",
+        refused=ALL,
+    ),
+    # An empty matrix is its own inverse and never reaches the engine; the reference refuses an
+    # integral one all the same.
+    "inv-empty": pin("inv", lambda fw, x, m: fw.linalg.inv(m[:0, :0]), kind="guard", refused=ALL),
+    # The ``hermitian`` route of both goes through ``eigh``, a kernel: the reference refuses it with
+    # its own guard first, on every route.
+    "pinv": pin("pinv", lambda fw, x, m: fw.linalg.pinv(m)),
+    "pinv-hermitian": pin("pinv", lambda fw, x, m: fw.linalg.pinv(m[:, :2], hermitian=True)),
+    "matrix_rank": pin("matrix_rank", lambda fw, x, m: fw.linalg.matrix_rank(m)),
+    "matrix_rank-hermitian": pin(
+        "matrix_rank", lambda fw, x, m: fw.linalg.matrix_rank(m[:, :2], hermitian=True)
+    ),
     "matrix_exp": pin("matrix_exp", lambda fw, x, m: fw.linalg.matrix_exp(m[:, :2])),
     "ldl_solve": pin(
         "ldl_solve",

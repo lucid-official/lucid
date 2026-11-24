@@ -18,7 +18,7 @@ from lucid._dispatch import _unwrap, _wrap
 from lucid._dtype import finfo as _finfo
 from lucid._engine_scope import untraced
 from lucid._ops._autocast import _autocast_entry
-from lucid._ops._bool_refusal import refuse_unlike
+from lucid._ops._bool_refusal import refuse, refuse_unlike
 from lucid._ops._dims import _wrap_dim
 from lucid._tensor._indexing import broadcast_shapes as _broadcast_batch
 from lucid._tensor.tensor import Tensor
@@ -1204,8 +1204,9 @@ def householder_product(input: Tensor, tau: Tensor) -> Tensor:
     Notes
     -----
     Raises ``DtypeMismatch`` if ``tau``'s dtype differs from ``input``'s,
-    and ``ValueError`` if ``input`` is wide (``m < n``) or ``tau`` is longer
-    than ``n``, as the reference does.
+    ``ValueError`` if ``input`` is wide (``m < n``) or ``tau`` is longer
+    than ``n``, and ``NotImplementedError`` if both are bool or integer
+    tensors, whatever their shapes, as the reference does.
 
     Backed by LAPACK ``orgqr``.  Cost is :math:`O(m k^2)`.  Useful
     when a routine returns the packed Householder form (cheaper to
@@ -1227,6 +1228,9 @@ def householder_product(input: Tensor, tau: Tensor) -> Tensor:
     )
     with _autocast_entry("householder_product", _unwrap(input), _unwrap(tau)) as (h_impl, t_impl):
         refuse_unlike("linalg.householder_product", h_impl, t_impl)
+        # Before the route is picked: the engine's ``orgqr`` refuses an integral dtype, and the
+        # ops a batch or fewer reflectors are composed from would answer it.
+        refuse("householder_product", h_impl)
         H_cast, tau_cast = _wrap(h_impl), _wrap(t_impl)
         use_ops = (
             H_cast.ndim > 2

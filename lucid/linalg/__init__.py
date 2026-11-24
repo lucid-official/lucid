@@ -10,12 +10,13 @@ from lucid._C import engine as _C_engine
 from lucid._dispatch import _unwrap, _wrap
 from lucid._dtype import _ENGINE_TO_DTYPE, to_engine_dtype
 from lucid._ops._autocast import _autocast_entry
-from lucid._ops._bool_refusal import refuse_bool as _refuse_bool, refuse_unlike as _refuse_unlike
+from lucid._ops._bool_refusal import refuse as _refuse, refuse_bool as _refuse_bool
 from lucid._ops._products import _dot_adapter, _inner_adapter, _outer_adapter
 from lucid._ops._reduce import _reduction_axes, _require_normable, _truth_mask
 from lucid._promotion import try_unwrap as _try_unwrap
 from lucid._tensor._indexing import broadcast_shapes as _broadcast_batch
 from lucid._tensor.tensor import Tensor
+from lucid.linalg._dtype_guard import _check_solve_operands, _checked_operand, _inverse_of_empty
 from lucid.linalg._norm_scale import _scaled, _scaled_p_norm
 from lucid.linalg._operand_guard import _check_ldl_solve_operands, _require_triangular_system
 
@@ -115,9 +116,7 @@ def inv(A: Tensor) -> Tensor:
     machine is asking.
     """
     if len(A.shape) >= 2 and A.shape[-1] == 0:
-        # Inversion preserves shape, and there are no elements to
-        # factorise, so the input *is* the answer.
-        return A
+        return _inverse_of_empty(A)
     return _la.inv(A)  # type: ignore[arg-type, return-value]
 
 
@@ -192,8 +191,8 @@ def solve(A: Tensor, B: Tensor, *, left: bool = True) -> Tensor:
     Raises
     ------
     DtypeMismatch
-        If ``A`` and ``B`` have different dtypes (a ``TypeError``), as the
-        reference does; so do :func:`solve_ex` and :func:`tensorsolve`.
+        If ``A`` is bool or integer (judged first) or ``A`` and ``B`` have different dtypes (a
+        ``TypeError``), as the reference does; so do :func:`solve_ex` and :func:`tensorsolve`.
 
     Notes
     -----
@@ -210,7 +209,7 @@ def solve(A: Tensor, B: Tensor, *, left: bool = True) -> Tensor:
     >>> solve(A, b)
     tensor([2., 3.])
     """
-    _refuse_unlike("linalg.solve", A, B)
+    _check_solve_operands(A, B)
     if not left:
         if B.ndim < 2 or tuple(B.shape) == tuple(A.shape[:-1]):
             raise _C_engine.ShapeMismatch(
@@ -1053,6 +1052,7 @@ def pinv(
         if atol is not None or rtol is not None:
             raise TypeError("pinv: rcond cannot be specified together with atol or rtol")
         rtol = rcond
+    _refuse("pinv", input)
     if atol is not None or rtol is not None or hermitian:
         return _pinv_with_tol(input, atol=atol, rtol=rtol, hermitian=hermitian)
     if input.requires_grad and _C_engine.grad_enabled():
@@ -1575,7 +1575,7 @@ def matrix_rank(
             raise ValueError("matrix_rank: tol cannot be specified together with atol or rtol")
         atol, rtol = tol, 0.0
     with _autocast_entry("matrix_rank", _unwrap(input)) as (a_impl,):
-        A_cast = _wrap(a_impl)
+        A_cast = _checked_operand("matrix_rank", a_impl)
         with lucid.no_grad():
             sv = eigvalsh(A_cast).abs() if hermitian else svdvals(A_cast)
             if sv.numel() == 0:

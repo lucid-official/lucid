@@ -36,10 +36,15 @@ class the reference raises and the cast to name -- or nothing, where the referen
 answers.
 
 The owner is one per ``(op, dtype)``: the engine's for the dtypes its schema declares and
-Python's for the rest (``rms_norm`` and ``embedding_bag`` are the engine's for integers and
-the entry's for bool).  An entry that reaches the engine op only on some of its paths asks the
-engine's declaration back with :func:`refuse_declared` instead of declaring it again
-(``grid_sample``, ``embedding_bag``, ``rms_norm``).  An op's *role* may be Python's where its
+Python's for the rest (``rms_norm``, ``embedding_bag``, ``solve`` and ``inv`` are the engine's
+for integers and the entry's for bool).  An entry that reaches the engine op only on some of its
+paths asks the engine's declaration back with :func:`refuse_declared` instead of declaring it
+again (``grid_sample``, ``embedding_bag``, ``rms_norm``); one that must judge both dtypes before
+the engine does -- ``solve`` reads ``A``'s dtype before any shape, ``inv`` answers an empty matrix
+without calling the engine -- asks both layers through :func:`refuse_integral`.  An op that has
+more than one route to its answer judges the dtype before it picks one, so that no route
+answers what another refuses (``householder_product``: the engine's ``orgqr`` for one matrix, ops
+composed in Python for a batch or fewer reflectors).  An op's *role* may be Python's where its
 primary operand is the engine's (the ``attn_mask`` of attention, whose queries and keys the
 engine checks).  The bypass is the caller's: a pipeline that resamples a mask casts it itself
 (``lucid.utils.transforms.functional._sampled``).
@@ -288,6 +293,23 @@ _DECLARED: tuple[Row, ...] = (
     _row("vander", bool=GUARD_NUMBER),
     _row("matrix_exp", bool=GUARD_FLOATING, ints=GUARD_FLOATING),
     _row("ldl_solve", bool=GUARD_FLOATING, ints=GUARD_FLOATING),
+    # ``householder_product`` has two routes: the engine's ``orgqr`` for one matrix whose
+    # reflectors fill the columns, and ops composed in Python for a batch, fewer reflectors
+    # or a tensor that needs a gradient.  The reference has no ``orgqr`` kernel for an
+    # integral dtype on any of them, so the entry judges the dtype before it picks a route.
+    _row("householder_product", bool=KERNEL_FLOATING, ints=KERNEL_FLOATING),
+    # ``cross`` answers an integer and has no bool kernel.
+    _row("cross", bool=KERNEL_NUMBER),
+    # ``pinv`` and ``matrix_rank`` take a ``hermitian`` input through ``eigh``/``eigvalsh``, which
+    # the reference has no integral kernel for; its own entry is a dtype guard on every route.
+    _row("pinv", bool=GUARD_FLOATING, ints=GUARD_FLOATING),
+    _row("matrix_rank", bool=GUARD_FLOATING, ints=GUARD_FLOATING),
+    # ``solve`` and ``inv`` are engine ops whose schema declares the integers but not bool, and
+    # whose entry reads the operand before the engine does (``solve`` judges ``A``'s dtype before
+    # any shape, ``inv`` hands an empty matrix back without calling the engine): the bool is the
+    # entry's, the integers the schema's, and :func:`refuse_integral` asks both.
+    _row("solve", bool=GUARD_FLOATING),
+    _row("inv", bool=GUARD_FLOATING),
     # Activations, dropout and normalisation composed from other ops.  ``rms_norm``'s
     # integers are the engine's (the schema declares them); only its bool is here.
     _row("celu", bool=KERNEL_FLOATING, ints=KERNEL_FLOATING),
@@ -760,6 +782,37 @@ def refuse_declared(op: str, operand: object) -> None:
         raise _error(op, code, "", rule, index=False, mismatch=False)
 
 
+def refuse_integral(op: str, operand: object) -> None:
+    """Raise ``op``'s refusal of a bool or integer ``operand``, whichever layer declares it.
+
+    For an entry that must judge an operand's dtype itself -- before a shape check of its own,
+    or on a path that never reaches the engine op -- where the engine's schema declares the
+    integers and not bool (``solve``, ``inv``).  The integers are asked of the schema
+    (:func:`refuse_declared`) so the rule stays the engine's, and the bool of the op's own row
+    (:func:`refuse`); the entry does not need to know which layer holds which dtype.  A float or
+    complex tensor, a non-tensor and an op with no schema pass at once.
+
+    Parameters
+    ----------
+    op : str
+        The refusing op's name: a row of :data:`ROWS` for the bool, and the op of the engine's
+        schema for the integers.
+    operand : object
+        The operand to look at.
+
+    Raises
+    ------
+    RuntimeError
+        The class :func:`refusal` builds for the row's bool, or the one the schema names for
+        an integer.
+    """
+    impl = operand if isinstance(operand, _IMPL) else _promotion.try_unwrap(operand)
+    if impl is None or impl.dtype_code > LAST_INTEGRAL_CODE:
+        return
+    refuse(op, impl)
+    refuse_declared(op, impl)
+
+
 def refuse_complex(op: str, operand: object, role: str = "") -> None:
     """Raise ``op``'s refusal when ``operand`` is a complex tensor its row turns away.
 
@@ -935,6 +988,7 @@ __all__ = [
     "refuse_common",
     "refuse_complex",
     "refuse_declared",
+    "refuse_integral",
     "refuse_mixed",
     "refuse_unless_bool",
     "refuse_unlike",
