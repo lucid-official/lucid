@@ -48,7 +48,7 @@ from lucid import _promotion
 from lucid._dispatch import _cannot_cast_inplace, _unwrap, _wrap
 from lucid._ops._autocast import _autocast_entry
 from lucid._ops._dims import _dim_size, _wrap_dim
-from lucid._scalar_cast import cast_scalar
+from lucid._scalar_cast import cast_scalar, scale_factors
 import lucid._C.engine as _C_engine
 from lucid._tensor._indexing import (
     _INDEX_DTYPES,
@@ -500,6 +500,7 @@ def index_fill(input: Tensor, dim: int, index: Tensor, value: float) -> Tensor:
     return lucid.where(mask, lucid.full_like(input, value), input)
 
 
+@scale_factors("alpha")
 def index_add(
     input: Tensor, dim: int, index: Tensor, source: Tensor, *, alpha: float = 1.0
 ) -> Tensor:
@@ -524,7 +525,8 @@ def index_add(
         ``input``'s dtype.  A 0-d ``source`` goes with a 0-d ``input``.
     alpha : float, optional
         Scalar multiplier applied to ``source`` before accumulation.
-        Default ``1.0``.
+        Default ``1.0``.  A 0-d tensor is the number it holds; one with a
+        dimension, or that requires grad, is a ``TypeError``.
 
     Returns
     -------

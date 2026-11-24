@@ -42,14 +42,23 @@ reference's ``addbmm`` rounds after each batch, and a product may be summed in a
 """
 
 import math
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from types import ModuleType
-from typing import Any, NamedTuple
+from typing import Any
 
 import pytest
 
 import lucid
 from lucid.test._fixtures.devices import device_dtype_params, devices_supporting
+from lucid.test.unit.ops._scale_factor_sweep import (
+    COMPLEX,
+    HALF,
+    HALF_RTOL,
+    OPS,
+    Side,
+    outcome,
+    same_values,
+)
 
 pytestmark = pytest.mark.parity
 
@@ -83,167 +92,19 @@ _SCALARS: dict[str, complex] = {
     "3.5e38": 3.5e38,
 }
 _ALL = tuple(_SCALARS)
-_INTS = ("int8", "int16", "int32", "int64")
-_HALF = ("float16", "bfloat16")
-#: One unit in the last place of each half type, relative: what a double rounding can cost.
-_HALF_RTOL = {"float16": 2.0**-10, "bfloat16": 2.0**-7}
-_FLOATS = (*_HALF, "float32", "float64")
-_COMPLEX = ("complex64", "complex128")
-# Metal holds neither float64 nor complex128 (``devices_supporting`` leaves those cells out).
-_ADD_DTYPES = (*_INTS, *_FLOATS, *_COMPLEX)
-_PRODUCT_DTYPES = (*_INTS, *_FLOATS, *_COMPLEX)
-
-
-class _Side:
-    """One library, one dtype and one device: builds the operands of a cell."""
-
-    def __init__(self, lib: Any, dtype: str, device: str) -> None:
-        self.dtype = getattr(lib, dtype)
-        self.lib = lib
-        self.kwargs: dict[str, Any] = {"device": device} if lib is lucid else {}
-
-    def ones(self, *shape: int) -> Any:
-        return self.lib.ones(shape, dtype=self.dtype, **self.kwargs)
-
-    def zeros(self, *shape: int) -> Any:
-        return self.lib.zeros(shape, dtype=self.dtype, **self.kwargs)
-
-    def positions(self, *values: int) -> Any:
-        return self.lib.tensor(list(values), **self.kwargs)
-
-
-class _Op(NamedTuple):
-    call: Callable[[_Side, Any], Any]
-    dtypes: tuple[str, ...]
-    #: Whether the reference accumulates a half tensor's scalar in float32 (see the docstring).
-    op_math: bool = False
-
-
-Shape = tuple[int, ...]
-
-
-def _spelling(
-    form: str, fn: str, shapes: Sequence[Shape], keyword: str | None = "alpha"
-) -> Callable[[_Side, Any], Any]:
-    """One spelling of ``fn`` over ones of ``shapes``, the scalar passed as ``keyword``.
-
-    ``form`` is the free function (``"free"``), the ``Tensor`` method (``"method"``) or its
-    in-place twin (``"inplace"``, which answers the tensor it wrote).  ``keyword=None`` passes
-    the scalar positionally, as ``lerp`` takes its ``weight``.
-    """
-
-    def call(side: _Side, scalar: Any) -> Any:
-        operands = [side.ones(*shape) for shape in shapes]
-        named = {} if keyword is None else {keyword: scalar}
-        positional = [scalar] if keyword is None else []
-        if form == "free":
-            return getattr(side.lib, fn)(*operands, *positional, **named)
-        head, *rest = operands
-        out = getattr(head, fn)(*rest, *positional, **named)
-        return head if form == "inplace" else out
-
-    return call
-
-
-def _beside_a_number(fn: str) -> Callable[[_Side, Any], Any]:
-    """``fn(ones(2), 2, alpha=scalar)``: the other operand is a Python number too."""
-
-    def call(side: _Side, scalar: Any) -> Any:
-        return getattr(side.lib, fn)(side.ones(2), 2, alpha=scalar)
-
-    return call
-
-
-def _index_add(side: _Side, scalar: Any) -> Any:
-    """Zeros take the source, so a bool tensor shows the scalar's truth, not a saturated ``True``."""
-    return side.lib.index_add(side.zeros(3), 0, side.positions(0, 1), side.ones(2), alpha=scalar)
-
-
-_PRODUCTS: dict[str, tuple[Shape, ...]] = {
-    "addmm": ((2, 2), (2, 2), (2, 2)),
-    "addmv": ((2,), (2, 2), (2,)),
-    "addbmm": ((2, 2), (3, 2, 2), (3, 2, 2)),
-    "baddbmm": ((3, 2, 2), (3, 2, 2), (3, 2, 2)),
-    "addr": ((2, 2), (2,), (2,)),
-}
-# ``addr`` takes a bool tensor, as ``add`` does; the other products have no bool kernel.
-_ACCUMULATING = ("addmm", "addbmm", "baddbmm")
-_VALUED = (*_INTS, *_FLOATS, *_COMPLEX)
-
-
-def _ops() -> dict[str, _Op]:
-    ops: dict[str, _Op] = {}
-    for fn in ("add", "sub", "rsub", "subtract"):
-        # a bool ``sub`` is refused by name, which the two spell differently
-        dtypes = ("bool", *_ADD_DTYPES) if fn == "add" else _ADD_DTYPES
-        ops[fn] = _Op(_spelling("free", fn, [(2,), (2,)]), dtypes)
-        ops[f"{fn}-number"] = _Op(_beside_a_number(fn), _ADD_DTYPES)
-    for fn in ("add", "sub"):
-        dtypes = ("bool", *_ADD_DTYPES) if fn == "add" else _ADD_DTYPES
-        ops[f"{fn}-method"] = _Op(_spelling("method", fn, [(2,), (2,)]), dtypes)
-        ops[f"{fn}_"] = _Op(_spelling("inplace", f"{fn}_", [(2,), (2,)]), dtypes)
-    for fn, shapes in _PRODUCTS.items():
-        for keyword in ("alpha", "beta"):
-            ops[f"{fn}-{keyword}"] = _Op(
-                _spelling("free", fn, shapes, keyword),
-                ("bool", *_PRODUCT_DTYPES) if fn == "addr" else _PRODUCT_DTYPES,
-                op_math=fn in _ACCUMULATING,
-            )
-    ops["addmm-method"] = _Op(
-        _spelling("method", "addmm", _PRODUCTS["addmm"], "beta"), _PRODUCT_DTYPES, op_math=True
-    )
-    ops["addmm_"] = _Op(
-        _spelling("inplace", "addmm_", _PRODUCTS["addmm"], "alpha"), _PRODUCT_DTYPES, op_math=True
-    )
-    ops["addr_"] = _Op(_spelling("inplace", "addr_", _PRODUCTS["addr"], "beta"), _PRODUCT_DTYPES)
-    for fn in ("addcmul", "addcdiv"):
-        dtypes = _VALUED if fn == "addcmul" else (*_FLOATS, *_COMPLEX)
-        ops[fn] = _Op(_spelling("free", fn, [(2,)] * 3, "value"), dtypes, op_math=True)
-        ops[f"{fn}_"] = _Op(
-            _spelling("inplace", f"{fn}_", [(2,)] * 3, "value"), dtypes, op_math=True
-        )
-    ops["lerp"] = _Op(_spelling("free", "lerp", [(2,), (2,)], None), _FLOATS, op_math=True)
-    ops["lerp_"] = _Op(_spelling("inplace", "lerp_", [(2,), (2,)], None), _FLOATS, op_math=True)
-    ops["index_add"] = _Op(_index_add, ("bool", *_INTS, *_FLOATS, *_COMPLEX))
-    return ops
-
-
-_OPS = _ops()
 
 
 def _cells() -> list[Any]:
     return [
         pytest.param(name, dtype, device, scalar, id=f"{name}-{dtype}-{device}-{scalar}")
-        for name, op in _OPS.items()
+        for name, op in OPS.items()
         for dtype in op.dtypes
         for device in devices_supporting(getattr(lucid, dtype))
         for scalar in _ALL
-        if not (dtype in _COMPLEX and math.isinf(complex(_SCALARS[scalar]).real))
+        if not (dtype in COMPLEX and math.isinf(complex(_SCALARS[scalar]).real))
     ]
 
 
-def _outcome(call: Callable[[], Any]) -> tuple[str, Any, Any]:
-    """``("raised", class, message)`` or ``("answered", dtype name, values)``."""
-    try:
-        out = call()
-    except (RuntimeError, TypeError, ValueError, OverflowError) as err:
-        return "raised", type(err), str(err)
-    return "answered", str(out.dtype).rsplit(".", 1)[-1], out.tolist()
-
-
-def _same_values(got: Any, want: Any, rtol: float = 0.0) -> bool:
-    """Equal nested lists of numbers to within ``rtol``, a NaN equal to a NaN (in a complex too)."""
-    if isinstance(got, list):
-        return (
-            isinstance(want, list)
-            and len(got) == len(want)
-            and all(_same_values(g, w, rtol) for g, w in zip(got, want, strict=True))
-        )
-    if isinstance(got, complex):
-        return _same_values(got.real, want.real, rtol) and _same_values(got.imag, want.imag, rtol)
-    if isinstance(got, float) and math.isnan(got):
-        return isinstance(want, float) and math.isnan(want)
-    return bool(got == want or abs(got - want) <= rtol * abs(want))
 
 
 @pytest.mark.parametrize(("name", "dtype", "device", "scalar"), _cells())
@@ -251,17 +112,17 @@ def test_scalar_is_read_as_the_reference_reads_it(
     name: str, dtype: str, device: str, scalar: str, ref: ModuleType
 ) -> None:
     value = _SCALARS[scalar]
-    op = _OPS[name]
-    got = _outcome(lambda: op.call(_Side(lucid, dtype, device), value))
-    want = _outcome(lambda: op.call(_Side(ref, dtype, device), value))
+    op = OPS[name]
+    got = outcome(lambda: op.call(Side(lucid, dtype, device), value))
+    want = outcome(lambda: op.call(Side(ref, dtype, device), value))
     assert got[0] == want[0], f"{got} vs {want}"
     if got[0] == "raised":
         assert got[1] is want[1]
         assert got[2] == want[2], f"{got[2]!r} vs {want[2]!r}"
         return
     assert got[1] == want[1]
-    rtol = _HALF_RTOL[dtype] if op.op_math and dtype in _HALF else 0.0
-    assert _same_values(got[2], want[2], rtol), f"{got[2]} vs {want[2]}"
+    rtol = HALF_RTOL[dtype] if op.op_math and dtype in HALF else 0.0
+    assert same_values(got[2], want[2], rtol), f"{got[2]} vs {want[2]}"
 
 
 # ── what the reference raises, pinned without the reference ──────────────────────────────────
@@ -479,17 +340,28 @@ def test_a_half_power_names_the_storage_type(device: str) -> None:
 @pytest.mark.parametrize("scalar", ["2", None, [2]], ids=["str", "none", "list"])
 @pytest.mark.parametrize("fn", ["add", "addmm", "addcmul", "index_add"])
 def test_a_scale_factor_that_is_not_a_number_is_refused_as_a_type_error(
-    fn: str, scalar: object
+    fn: str, scalar: object, ref: ModuleType
 ) -> None:
-    m = lucid.ones((2, 2))
-    calls = {
-        "add": lambda: lucid.add(m, m, alpha=scalar),
-        "addmm": lambda: lucid.addmm(m, m, m, beta=scalar),
-        "addcmul": lambda: lucid.addcmul(m, m, m, value=scalar),
-        "index_add": lambda: lucid.index_add(m, 0, lucid.tensor([0]), m[:1], alpha=scalar),
-    }
-    with pytest.raises(TypeError, match="expected Tensor or Number"):
-        calls[fn]()
+    """``add(): argument 'alpha' must be Number, not str``: the reference refuses it where it parses
+    the arguments.  ``addmm`` has several signatures there and lists them all; its class is held."""
+
+    def calls(lib: Any) -> dict[str, Callable[[], Any]]:
+        m = lib.ones((2, 2))
+        return {
+            "add": lambda: lib.add(m, m, alpha=scalar),
+            "addmm": lambda: lib.addmm(m, m, m, beta=scalar),
+            "addcmul": lambda: lib.addcmul(m, m, m, value=scalar),
+            "index_add": lambda: lib.index_add(m, 0, lib.tensor([0]), m[:1], alpha=scalar),
+        }
+
+    got = outcome(calls(lucid)[fn])
+    want = outcome(calls(ref)[fn])
+    assert got[0] == want[0] == "raised"
+    assert got[1] is want[1] is TypeError
+    if "invalid combination" in want[2]:
+        assert got[2].startswith(f"{fn}(): argument ")
+    else:
+        assert got[2] == want[2]
 
 
 # ── what still works: the scalar a tensor can hold ──────────────────────────────────────────

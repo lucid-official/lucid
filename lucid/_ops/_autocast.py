@@ -28,6 +28,7 @@ from contextlib import contextmanager
 from lucid import _promotion
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _wrap
+from lucid._scalar_cast import scale_factors
 
 
 @contextmanager
@@ -84,7 +85,10 @@ def _autocast_entry(
 
 
 def _amp_op[**P, R](
-    row: str, *, refuse: Callable[[Mapping[str, object]], None] | None = None
+    row: str,
+    *,
+    refuse: Callable[[Mapping[str, object]], None] | None = None,
+    scalars: tuple[str, ...] = (),
 ) -> Callable[[Callable[P, R]], Callable[P, R]]:
     """Decorate a composite with ``row``'s entry: :func:`_autocast_entry` around the call.
 
@@ -114,6 +118,12 @@ def _amp_op[**P, R](
         row has decided the operands' dtypes, and a row that keeps them leaves
         a float16 input beside a float32 target, which is the policy's doing
         and not the caller's.  A call that does not bind skips it.
+    scalars : tuple of str, optional
+        The keyword-only scale factors of the composite (``alpha``, ``beta``).
+        They are read as the numbers they stand for
+        (:func:`~lucid._scalar_cast.scale_factors`) before anything else,
+        so a 0-d tensor given for one is a number to the row and to the body,
+        never an operand the row casts to the autocast dtype.
 
     Returns
     -------
@@ -153,6 +163,6 @@ def _amp_op[**P, R](
                         bound.arguments[name] = out if was_impl else _wrap(out)
                 return fn(*bound.args, **bound.kwargs)
 
-        return at_entry
+        return scale_factors(*scalars)(at_entry) if scalars else at_entry
 
     return decorate

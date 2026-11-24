@@ -34,6 +34,7 @@ from lucid._ops.composite._opmath import _nan_quiet_pick, _promote_pair, _real
 from lucid._ops.composite._pow2 import _copysign, _frexp, _ldexp_dtype, _ldexp_to, _signbit
 from lucid._ops.composite._shared import _is_tensor
 from lucid._ops.composite._sinc import _sin_over
+from lucid._scalar_cast import scale_factors
 from lucid._types import Scalar, TensorOrScalar
 
 if TYPE_CHECKING:
@@ -77,6 +78,7 @@ def positive(input: Tensor) -> Tensor:
     return input
 
 
+@scale_factors("alpha")
 def rsub(input: Tensor, other: Tensor | Scalar, *, alpha: float = 1) -> Tensor:
     r"""Reverse subtraction: :math:`b - \alpha \cdot a`.
 
@@ -108,8 +110,8 @@ def rsub(input: Tensor, other: Tensor | Scalar, *, alpha: float = 1) -> Tensor:
     Equivalent to :func:`subtract` with the operands reversed (and ``alpha``
     re-attached to the new second argument), so ``alpha`` is held to the same
     rules: a float or complex ``alpha`` is refused for an integral result and a
-    complex one for a floating result. Gradient w.r.t. ``input`` is
-    :math:`-\alpha`; w.r.t. ``other`` is :math:`1`.
+    complex one for a floating result. A 0-d tensor ``alpha`` is the number it
+    holds. Gradient w.r.t. ``input`` is :math:`-\alpha`; w.r.t. ``other`` is :math:`1`.
 
     Examples
     --------

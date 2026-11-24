@@ -23,11 +23,20 @@ finite number past the largest value of a floating type is refused (infinity and
 not).  A bool tensor reads any scalar as ``value != 0`` and refuses none.
 
 Which type a *half* tensor's scalar is read as depends on the op (:class:`ScalarRead`).
+
+Both start from a Python number, and a scale factor does not always arrive as one.  The
+reference takes a 0-d tensor for a ``Scalar`` argument and reads it as the number it holds
+(``.item()``: a bool, int, float or complex of the tensor's own dtype), so ``alpha=tensor(2.5)``
+is refused for an integer tensor as ``alpha=2.5`` is.  :func:`scale_factor` is the one entry
+that makes that reading, at the top of every op that takes a scale factor: what the two rules
+above receive is always a number.
 """
 
 import abc
 import enum
+import functools
 import math
+from collections.abc import Callable, Iterable
 from typing import NoReturn, override
 
 from lucid import _promotion
@@ -220,6 +229,113 @@ def _negated(alpha: Scalar | complex) -> Scalar | complex:
     return alpha if isinstance(alpha, int) and alpha == -(1 << 63) else -alpha
 
 
+def scale_factor(factor: object, op: str, name: str) -> Scalar | complex:
+    """The Python number the scale factor ``name`` of ``op`` stands for.
+
+    A number (a NumPy scalar included) is itself.  A 0-d tensor that does not require grad
+    is the number it holds, of the kind its dtype has -- bool, int, float or complex -- so the
+    rules of :func:`check_alpha` and :func:`cast_scalar` judge it as they judge that number:
+    ``alpha=tensor(2.5)`` on an integer tensor is refused as ``alpha=2.5`` is, and
+    ``value=tensor(2.0)`` leaves an ``int32`` result ``int32``.  Reading it is a host read
+    (``item()``), taken only on this path; a number costs one type test.
+
+    Anything else is refused where the reference's argument parser refuses it, before any
+    other check of the op: a tensor with a dimension, one that requires grad, a ``str``,
+    ``None``, a list.
+
+    Parameters
+    ----------
+    factor : object
+        The argument as the caller passed it.
+    op : str
+        The op's name, as the refusal spells it.
+    name : str
+        The argument's name (``alpha``, ``beta``, ``value``).
+
+    Returns
+    -------
+    bool or int or float or complex
+        The number the argument is.
+
+    Raises
+    ------
+    TypeError
+        ``factor`` is neither a number nor a 0-d tensor that does not require grad.
+    """
+    number = _promotion.as_number(factor)
+    if isinstance(number, _promotion.NUMBER):
+        return number
+    impl = _promotion.try_unwrap(factor)
+    if impl is not None and not impl.shape and not impl.requires_grad:
+        return impl.item()
+    raise TypeError(f"{op}(): argument '{name}' must be Number, not {type(factor).__name__}")
+
+
+#: What a scale factor already is when it needs no reading: the four Python number types.
+_PLAIN = frozenset(_promotion.NUMBER)
+
+
+def read_scale_factors(op: str, kwargs: dict[str, object], names: Iterable[str]) -> None:
+    """Replace each scale factor of ``names`` in ``kwargs`` by the number it stands for.
+
+    The call arguments, by keyword: every op that takes a scale factor takes it keyword-only
+    (``alpha``, ``beta``, ``value``), so this reads all of them at the op's entry, before
+    anything else of the op is checked, as the reference's argument parser does.  A factor
+    that is already a Python number is left alone, which is the one type test the common
+    call pays.  See :func:`scale_factor`.
+
+    Parameters
+    ----------
+    op : str
+        The op's name, as a refusal spells it.
+    kwargs : dict
+        The call's keyword arguments; changed in place.
+    names : iterable of str
+        The scale factors of the op.
+
+    Raises
+    ------
+    TypeError
+        A scale factor is neither a number nor a 0-d tensor that does not require grad.
+    """
+    for name in names:
+        factor = kwargs.get(name, 1)
+        if type(factor) not in _PLAIN:
+            kwargs[name] = scale_factor(factor, op, name)
+
+
+def scale_factors[**P, R](*names: str) -> Callable[[Callable[P, R]], Callable[P, R]]:
+    """Decorate an op so its keyword-only scale factors ``names`` are read at entry.
+
+    The declaration of which arguments of an op are scale factors, for an op that has no
+    wrapper of its own to read them in (the products with a scaled accumulator are
+    ``_amp_op`` functions, which take the same names as ``scalars``).  The wrapped function
+    sees numbers only, and keeps its signature, name and docstring.
+
+    Parameters
+    ----------
+    *names : str
+        The scale factors of the op: keyword-only parameters, as in the reference.
+
+    Returns
+    -------
+    Callable
+        The decorator.
+    """
+
+    def decorate(fn: Callable[P, R]) -> Callable[P, R]:
+        op = fn.__name__
+
+        @functools.wraps(fn)
+        def at_entry(*args: P.args, **kwargs: P.kwargs) -> R:
+            read_scale_factors(op, kwargs, names)
+            return fn(*args, **kwargs)
+
+        return at_entry
+
+    return decorate
+
+
 def check_alpha(
     dtype: _C_engine.Dtype,
     alpha: Scalar | complex,
@@ -264,9 +380,7 @@ def check_alpha(
         raise RuntimeError(
             f"For non-complex input tensors, argument {name} must not be a complex number."
         )
-    # a 0-d tensor or a stray type is left for the operand path to take, or to refuse by name
-    if isinstance(alpha, _promotion.NUMBER):
-        _element(dtype, read).read(_negated(alpha) if subtracts else alpha)
+    _element(dtype, read).read(_negated(alpha) if subtracts else alpha)
 
 
 def cast_scalar(
@@ -308,9 +422,6 @@ def cast_scalar(
         in the element type of ``dtype`` (NaN or a float past its width on an integer
         tensor, a finite number past the largest value of a floating one).
     """
-    factor = _promotion.as_number(factor)
-    if not isinstance(factor, _promotion.NUMBER):  # as in `check_alpha`: not read here
-        return factor
     if by_type and (isinstance(factor, bool) or _promotion.is_integral(dtype)):
         return factor
     return _element(dtype, read).read(factor)

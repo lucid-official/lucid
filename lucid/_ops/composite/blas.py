@@ -11,7 +11,7 @@ from lucid._ops._adapters import _scale_by_alpha
 from lucid._ops._autocast import _amp_op, _autocast_entry, _autocast_suspended
 from lucid._ops._products import _require_vector
 from lucid._ops.composite._opmath import _in_float32_as
-from lucid._scalar_cast import ScalarRead, cast_scalar
+from lucid._scalar_cast import ScalarRead, cast_scalar, scale_factor, scale_factors
 import lucid.linalg as _la
 
 if TYPE_CHECKING:
@@ -83,7 +83,7 @@ def _contract(op: str, operand: Tensor) -> None:
     _contraction.require_summable(_unwrap(operand).dtype, op)
 
 
-@_amp_op("addmm")
+@_amp_op("addmm", scalars=("beta", "alpha"))
 def addmm(
     input: Tensor, mat1: Tensor, mat2: Tensor, *, beta: float = 1, alpha: float = 1
 ) -> Tensor:
@@ -136,7 +136,10 @@ def addmm(
     wrapping.  A float16 or bfloat16 call computes in float32 and rounds once, when
     the answer is stored, as the reference does: ``alpha`` and ``beta`` are read as
     ``float`` and the product, the two scales and the sum are never rounded to the
-    half type between one another.
+    half type between one another.  A 0-d tensor given for ``beta`` or ``alpha`` is the
+    number it holds (``alpha=lucid.tensor(2.5)`` is refused for an integer result as
+    ``alpha=2.5`` is, and a float64 one does not promote the result); a tensor with a
+    dimension, or one that requires grad, is a ``TypeError``.
 
     Examples
     --------
@@ -155,7 +158,7 @@ def addmm(
     )
 
 
-@_amp_op("addbmm")
+@_amp_op("addbmm", scalars=("beta", "alpha"))
 def addbmm(
     input: Tensor, batch1: Tensor, batch2: Tensor, *, beta: float = 1, alpha: float = 1
 ) -> Tensor:
@@ -217,7 +220,7 @@ def addbmm(
     return _scaled_add(input, beta, summed, alpha, op="addbmm", read=ScalarRead.OP_MATH)
 
 
-@_amp_op("baddbmm")
+@_amp_op("baddbmm", scalars=("beta", "alpha"))
 def baddbmm(
     input: Tensor, batch1: Tensor, batch2: Tensor, *, beta: float = 1, alpha: float = 1
 ) -> Tensor:
@@ -276,7 +279,7 @@ def baddbmm(
     )
 
 
-@_amp_op("addmv")
+@_amp_op("addmv", scalars=("beta", "alpha"))
 def addmv(input: Tensor, mat: Tensor, vec: Tensor, *, beta: float = 1, alpha: float = 1) -> Tensor:
     r"""Matrix-vector multiply with a scaled accumulator (BLAS-2 gemv).
 
@@ -328,7 +331,7 @@ def addmv(input: Tensor, mat: Tensor, vec: Tensor, *, beta: float = 1, alpha: fl
     return _scaled_add(input, beta, mv_out, alpha, op="addmv")
 
 
-@_amp_op("addr")
+@_amp_op("addr", scalars=("beta", "alpha"))
 def addr(input: Tensor, vec1: Tensor, vec2: Tensor, *, beta: float = 1, alpha: float = 1) -> Tensor:
     r"""Rank-1 update of a matrix by an outer product (BLAS-2 ger).
 
@@ -427,14 +430,18 @@ def _check_ternary_devices(op: str, input: Tensor, tensor1: Tensor, tensor2: Ten
         )
 
 
-def _lerp(input: Tensor, end: Tensor, weight: float | Tensor) -> Tensor:
+def _lerp(input: Tensor, end: Tensor, weight: float | complex | Tensor) -> Tensor:
     """Linearly interpolate ``input`` and ``end`` by ``weight``.
 
     ``input`` and ``end`` are floating and share a dtype, and so does a ``weight``
     tensor with a dimension.  A 0-d ``weight`` ranks below them as in
     ``input * weight``: it may differ, and the three compute at the dtype they
-    promote to (``lerp(f16[2], f16[2], f32_0d)`` is float16).
+    promote to (``lerp(f16[2], f16[2], f32_0d)`` is float16).  A weight that is not a
+    tensor is a number (:func:`~lucid._scalar_cast.scale_factor`), and the tensor weight
+    is an operand, not a scale factor: it is never read as a number.
     """
+    if not isinstance(weight, lucid.Tensor):
+        weight = scale_factor(weight, "lerp", "weight")
     if not (input.is_floating_point() and end.is_floating_point()):
         raise _C_engine.NotImplementedError(
             f"lerp expects floating-point tensors, got {input.dtype} and "
@@ -481,6 +488,7 @@ def _lerp(input: Tensor, end: Tensor, weight: float | Tensor) -> Tensor:
     return _wrap(_C_engine.add(input_impl, scaled))
 
 
+@scale_factors("value")
 def addcmul(input: Tensor, tensor1: Tensor, tensor2: Tensor, *, value: float = 1) -> Tensor:
     r"""Element-wise fused multiply-add with a scalar weight.
 
@@ -523,7 +531,8 @@ def addcmul(input: Tensor, tensor1: Tensor, tensor2: Tensor, *, value: float = 1
     in optimisers (e.g. running-mean / running-variance updates) where a
     bias-correction term is added to an existing accumulator.  A float16 or
     bfloat16 call computes in float32 and rounds once, as :func:`addmm` does:
-    ``value`` is read as ``float``, not rounded to the half type first.
+    ``value`` is read as ``float``, not rounded to the half type first.  A 0-d
+    tensor given for ``value`` is the number it holds, as for :func:`addmm`.
 
     Examples
     --------
@@ -551,6 +560,7 @@ def addcmul(input: Tensor, tensor1: Tensor, tensor2: Tensor, *, value: float = 1
         return input + (tensor1 * tensor2) * cast_scalar(common, value, read=ScalarRead.OP_MATH)
 
 
+@scale_factors("value")
 def addcdiv(input: Tensor, tensor1: Tensor, tensor2: Tensor, *, value: float = 1) -> Tensor:
     r"""Element-wise fused divide-add.
 

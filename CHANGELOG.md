@@ -452,6 +452,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `reset_classifier(n)` on the zoo's classification models builds the new head with the old head's dtype and device, and updates `config.num_classes`. Before, a float16 or Metal model got a float32 CPU head, and the config still named the old class count. GoogLeNet's and Inception v3's auxiliary heads are resized with the main head. SENet, I-JEPA, V-JEPA, V-JEPA 2 and InceptionNeXt gain a working `reset_classifier`; before, it raised or left the head unchanged (LCD-1106).
 
+- read a 0-d tensor scale factor as the number it holds
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call
