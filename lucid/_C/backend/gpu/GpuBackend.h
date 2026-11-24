@@ -88,7 +88,6 @@
 #include <vector>
 
 #include <mlx/array.h>
-#include <mlx/compile.h>
 #include <mlx/fast.h>
 #include <mlx/linalg.h>
 #include <mlx/ops.h>
