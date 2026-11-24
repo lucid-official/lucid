@@ -607,6 +607,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - The engine's duplicate `concat` binding is gone. ABI 59.
 - name ShapelessFused in AxisIndex, drop the alias
 - column_stack lifts a 0-d or 1-D input in one pass
+- Tensor.dot, lucid.linalg.dot and lucid.vdot refuse operands that are not 1-D with ShapeMismatch ("1D tensors expected, but got 2D and 2D tensors"), as the reference does. A pair of 2-D tensors used to be answered as a matrix product; use matmul or mm for that (LCD-1061).
+- outer, ger and addr refuse a vector that is not 1-D with ShapeMismatch ("Expected 1-D argument vec1, but got 2-D"), and addr refuses an accumulator of more than 2 dimensions. Before, they raised a LucidError or broadcast to a result of the wrong rank (LCD-1061).
+- block_diag ranks its operands as given, as the reference does: a 0-d int16 beside an int8 vector now answers int8, not int16 (LCD-1060).
 
 ---
 
