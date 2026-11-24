@@ -454,7 +454,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - A 0-d tensor passed as a scale factor (`alpha`, `beta`, `value`) is read as the number it holds, through the same rules as a Python number. This matches the reference for `add`, `sub`, `rsub`, `subtract`, `addmm`, `addmv`, `addbmm`, `baddbmm`, `addr`, `addcmul`, `addcdiv`, `index_add` and a non-tensor `lerp` weight, and for their method and in-place forms. Before, it was treated as an operand: a float64 0-d `alpha` could promote the result, and some ops raised. A tensor `lerp` weight is still an operand. The refusal message names the spelling used (`addcmul_()`, `index_add_()`), except `subtract`, which says `sub()` (LCD-1088).
 
-- accept float masks in generate, validate length early
+- A negative `max_new_tokens` raises `ValueError` on every `generate` that takes it, before the encoder runs. Before, decoder-only `generate` returned the prompt unchanged (LCD-1110).
 
 ### Added
 
@@ -568,7 +568,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `linalg.solve_triangular` accepts complex64 and complex128 on both devices, with the conjugate-transpose gradients (LCD-1070).
 
-- generate takes attention_mask and max_new_tokens
+- `generate()` of the decoder-only models (GPT, GPT-2) takes `attention_mask`, keyword-only and shaped like `input_ids`, of any dtype: a value above 0.5 is a real token, as `forward` reads a mask. A left-padded batch of unequal prompts now decodes each row as that prompt would alone. The mask grows one kept column per generated token, and rows are positioned by `cumsum(mask) - 1` with masked slots at 0, as the reference does. Refused: a mask on a model whose `forward` takes none (`TypeError`), a mask of the wrong shape or device (`ValueError`), and a mask with `cache_implementation="compiled"` (`NotImplementedError`) (LCD-1110).
+- `GPTModel`, `GPTLMHeadModel`, `GPT2Model` and `GPT2LMHeadModel` `forward` take `position_ids` (keyword-only), as the reference's do (LCD-1110).
+- `T5ForSeq2SeqLM.generate` and `TransformerForSeq2SeqLM.generate` take `max_new_tokens`, counting the tokens after the start token. It wins over `max_length`, as in decoder-only `generate` (LCD-1110).
 
 ### Performance
 
