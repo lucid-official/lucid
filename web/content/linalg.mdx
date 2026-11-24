@@ -40,11 +40,18 @@ When the **same** coefficient matrix is reused against many right-hand sides, fa
 
 ```python
 LU, piv = linalg.lu_factor(A)
-x1 = linalg.lu_solve(LU, piv, b1)
+b1 = lucid.tensor([[9.0], [8.0]])   # (n, 1): one column
+b2 = lucid.tensor([[1.0], [0.0]])
+
+x1 = linalg.lu_solve(LU, piv, b1)   # Tensor([[2.0], [3.0]])
 x2 = linalg.lu_solve(LU, piv, b2)   # reuses the same factorization
 ```
 
 If $A$ is already triangular, skip the factorization entirely and call `solve_triangular`, which substitutes directly. For the explicit $(P, L, U)$ triple — useful for inspection — call `lu`.
+
+<Callout variant="note">
+Unlike `solve`, the factored solvers `lu_solve`, `solve_triangular` and `ldl_solve` need $B$ to be at least 2-D. A vector right-hand side is refused, so turn it into one column first: `linalg.lu_solve(LU, piv, b.unsqueeze(-1))`.
+</Callout>
 
 <Callout variant="warning">
 `solve`, `inv`, and `det` raise a runtime error on a singular (non-invertible) matrix. In code paths where near-singular inputs are *expected* — trust-region steps, regularization sweeps — use the `_ex` variants (`solve_ex`, `inv_ex`, `cholesky_ex`). They return an extra integer `info` flag (`0` = success, non-zero = failure) instead of raising, so a failed factorization does not break control flow:
