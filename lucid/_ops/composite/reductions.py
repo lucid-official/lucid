@@ -643,6 +643,10 @@ def _align_trapezoid_x(name: str, yw: Tensor, x: Tensor, d: int) -> tuple[Tensor
     target_dt = lucid.result_type(yw, x)
     yw = yw.to(target_dt) if yw.dtype != target_dt else yw
     xw = x.to(target_dt) if x.dtype != target_dt else x
+    if xw.ndim == 0:
+        # One coordinate along ``dim``, as the reference views it: the spacings are an
+        # empty extent, which meets ``y``'s ``n - 1`` areas only where that is 0 or 1.
+        return yw, xw.reshape([1] * yw.ndim)
     if xw.ndim == 1 and xw.shape[0] == yw.shape[d]:
         shape = [int(xw.shape[0]) if i == d else 1 for i in range(yw.ndim)]
         return yw, xw.reshape(shape)
@@ -686,7 +690,8 @@ def _trapezoid_areas(
         return yw.narrow(d, 0, 0), d
     avg = (yw.narrow(d, 0, n - 1) + yw.narrow(d, 1, n - 1)) * 0.5
     if xw is not None:
-        return (xw.narrow(d, 1, n - 1) - xw.narrow(d, 0, n - 1)) * avg, d
+        spacings = int(xw.shape[d]) - 1
+        return (xw.narrow(d, 1, spacings) - xw.narrow(d, 0, spacings)) * avg, d
     return avg * (1.0 if dx is None else dx), d
 
 
@@ -700,7 +705,9 @@ def trapezoid(
     y : Tensor
         Function values sampled along ``dim``.
     x : Tensor or None, optional
-        Abscissa coordinates matching ``y`` along ``dim``.
+        Abscissa coordinates matching ``y`` along ``dim``.  A 0-d ``x`` is one
+        coordinate, which has no spacing: the integral is ``0`` where ``y`` has
+        two samples or fewer along ``dim`` and a shape mismatch beyond.
     dx : float or None, optional
         Uniform step width used when ``x`` is ``None`` (defaults to ``1.0``).
     dim : int, optional
@@ -731,7 +738,8 @@ def cumulative_trapezoid(
     y : Tensor
         Samples to integrate cumulatively.
     x : Tensor or None, optional
-        Grid coordinates along ``dim``; mutually exclusive with ``dx``.
+        Grid coordinates along ``dim``; mutually exclusive with ``dx``.  A 0-d
+        ``x`` reads as in :func:`lucid.trapezoid`.
     dx : float or None, optional
         Constant grid spacing when ``x`` is omitted.
     dim : int, optional

@@ -444,6 +444,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - On float16 / bfloat16 tensors, `addmm`, `addbmm`, `baddbmm`, `addcmul`, `addcdiv` and `lerp` (free functions, `Tensor` methods and in-place twins) compute in float32 and round once, as the reference does. Before, they rounded the scalar, each product and each sum to the half type: `addmm(bfloat16, alpha=300.7)` is now 604 (was 600), and `lerp(float16, weight=70000)` is now 1.0 (was NaN). Gradients still reach each operand in its own dtype. float32 and float64 are unchanged (LCD-1087).
 
+- a 0-d x of trapezoid is one coordinate along dim (LCD-1075)
 
 ### Added
 
