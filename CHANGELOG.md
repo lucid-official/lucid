@@ -438,9 +438,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `sub` and `rsub` range-check the negated `alpha`, as the reference does: `128` is an int8 alpha for `sub`, and `-128` is refused (LCD-1078).
 - The in-place pow overflow refusal names the reference's C++ type (`int8_t`, `c10::Half`) instead of the engine enum (`I8`, `F16`) (LCD-1078).
 
-- complex pow answers std::pow at a zero base (LCD-1082)
+- `pow` of a complex64 tensor on Metal answers `std::pow`'s special values at a zero base, as the CPU and the reference do. `0 ** 0` is `nan+nanj` and `0 ** -1` is `inf+nanj`, where MLX gave 0 for every exponent. This covers the tensor, scalar-exponent and scalar-base forms and the zero-base gradient, which had been a finite 0 where the reference is NaN. The patch costs one extra pass over `mx::power` (about 1.5-1.7x the bare op); lanes with a non-zero base are unchanged (LCD-1082).
 
-- complex pow zero base sees a d*pi overflow as infinite
 
 ### Added
 
