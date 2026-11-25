@@ -315,9 +315,6 @@ def test_every_config_with_a_patch_field_has_a_stated_answer() -> None:
     )
 
 
-@pytest.mark.xfail(
-    strict=True, reason="LCD-1115: Swin stem drops a non-multiple border; the reference pads"
-)
 def test_swin_stem_pads_a_non_multiple_like_the_reference() -> None:
     lucid.manual_seed(0)
     model = M.create_model(
