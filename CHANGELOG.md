@@ -468,9 +468,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ViT, I-JEPA and CLIP's image tower refuse any image that is not `image_size` squared, with one `ValueError` naming the built grid and the size received. Before, ViT's check floor-divided, so any side from N to N+patch-1 passed: the patch conv dropped the border and a 47x47 image answered as its 32x32 crop. I-JEPA and CLIP had no check; they answered 47 the same way and failed at 48 or 64 with an engine ShapeMismatch naming neither size. The reference embeddings refuse the same sizes unless position interpolation is requested (LCD-1107).
 - The DiT, MeanFlow, TVM and Drifting latent-size messages gain the "not a multiple of the patch" case. One shared `check_patch_grid` now backs both the vision towers and the generative `check_latent_size` (LCD-1107).
 
-- lerp takes the reference's two forms by the weight
-
-- lerp review fixes (small-tensor cost, tests, docs)
+- `lerp` takes the reference's two forms by the weight: `start + weight * (end - start)` for `|weight| < 0.5`, `end - (end - start) * (1 - weight)` otherwise (a `NaN` weight takes the second). `lerp(a, b, 1) == b` now holds exactly (`lerp(1, 1e-8, 1)` was `0` in float32), and an infinite operand gives what its form gives (`lerp(0, inf, 0.5)` is `NaN`, was `inf`). A tensor weight picks the form on the device, with no host read. The gradient is the reference's whichever form the value took: `grad * (1 - weight)`, `grad * weight` and `grad * (end - start)` (LCD-1101).
 
 ### Added
 
@@ -701,6 +699,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `reset_classifier(n)` raises `ValueError` for `n < 1`; it used to build a zero-width head (LCD-1106).
 - **Behaviour change:** a negative block count (`depth`, `depths`, encoder/decoder layer counts, `block_config`, …) or an unknown CSPNet `stem_pool`/`block_type` raises `ValueError` when the config is constructed; before, it built a model with an empty stack or the other layout (LCD-1113).
 - **Behaviour change:** ViT, I-JEPA and CLIP raise `ValueError` for an image whose side is not exactly `image_size`; before, a side up to `patch_size - 1` larger was silently cropped (LCD-1107).
+- **Behaviour change:** `lerp` on Metal answers as the reference's CPU kernel does, not its `mps` one, which uses the single formula for every weight; one op now gives the same answer on both devices. A tensor-valued weight costs eight elementwise ops instead of four (1M float32 on CPU: 0.56 ms to 1.6 ms); a Python-number weight is as fast or faster (1024 float32 on CPU: 12 µs to 9 µs) (LCD-1101).
 - **Behaviour change:** `num_classes` and `in_channels` must be at least 1 on every vision, detection and segmentation config. Before, `num_classes=0` built a zero-width head and a negative value raised an engine `InvalidArgument`. EfficientNet, MobileNet, UNet, AttentionUNet, VGG and others also refuse non-positive widths, including a `width_mult` or `depth_mult` of 0, which used to be silently floored. `MobileNetV3Config.variant`, `UNetConfig.dim` and `block`, `AttentionUNetConfig.spatial_dims`, `SENetConfig.block_type` and `SKNetConfig.block_type` and `FCNConfig.backbone` refuse an unknown value. Before, an unknown value silently selected the other layout (LCD-1109).
 
 - Half-precision `addmm`, `addbmm` and `baddbmm` multiply in float32, so a half GEMM becomes a float32 GEMM. That costs more memory and lower Metal throughput, and buys the reference's single rounding. `addbmm` rounds once, where the reference's CPU kernel rounds after each batch: 1-2 half ulp apart (LCD-1087).
