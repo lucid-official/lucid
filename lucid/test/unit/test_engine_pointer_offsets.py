@@ -39,9 +39,9 @@ REVIEWED: dict[str, tuple[int, str]] = {
         "``gather``'s coordinate walk, over the output's elements after the index is checked",
     ),
     "backend/cpu/methods/Layout.cpp": (
-        15,
+        4,
         "offsets are products with the tensor's own extents (0 when it is empty) or sit in loops "
-        "over its elements; ``roll`` returns for an empty tensor first",
+        "over its elements; remaining layout ops use ``offset_or_null`` (LCD-1119)",
     ),
     "backend/cpu/methods/Sequence.cpp": (
         4,
