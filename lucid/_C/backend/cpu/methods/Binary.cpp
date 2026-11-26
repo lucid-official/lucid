@@ -560,85 +560,13 @@ std::pair<Storage, Storage> CpuBackend::expand_and_multiply(const Storage& mask,
         return detail::back_to_f16(expand_and_multiply(detail::as_f32(mask), detail::as_f32(x),
                                                        mask_shape, x_shape, Dtype::F32),
                                    dt);
-    const std::size_t B_sz = static_cast<std::size_t>(x_shape[0]);
-
-    const bool is_channel_mask = (mask_shape.size() >= 2 && mask_shape[1] > 1);
-    const std::size_t C_sz = is_channel_mask ? static_cast<std::size_t>(mask_shape[1])
-                                             : static_cast<std::size_t>(x_shape[1]);
-    std::size_t spatial = 1;
-    for (std::size_t i = 2; i < x_shape.size(); ++i)
-        spatial *= static_cast<std::size_t>(x_shape[i]);
-
     const std::size_t numel = shape_numel(x_shape);
     CpuStorage exp_out = alloc_cpu(numel, dt);
     const auto& m_cpu = std::get<CpuStorage>(mask);
     const auto& x_cpu = std::get<CpuStorage>(x);
     CpuStorage y_out = alloc_cpu(numel, dt);
-
-    if (is_channel_mask) {
-        if (dt == Dtype::F32) {
-            const float* mp = reinterpret_cast<const float*>(m_cpu.ptr.get());
-            const float* xp = reinterpret_cast<const float*>(x_cpu.ptr.get());
-            float* ep = reinterpret_cast<float*>(exp_out.ptr.get());
-            float* yp = reinterpret_cast<float*>(y_out.ptr.get());
-            for (std::size_t b = 0; b < B_sz; ++b)
-                for (std::size_t c = 0; c < C_sz; ++c) {
-                    const float v = mp[b * C_sz + c];
-                    for (std::size_t s = 0; s < spatial; ++s) {
-                        const std::size_t idx = (b * C_sz + c) * spatial + s;
-                        ep[idx] = v;
-                        yp[idx] = xp[idx] * v;
-                    }
-                }
-        } else if (dt == Dtype::F64) {
-            const double* mp = reinterpret_cast<const double*>(m_cpu.ptr.get());
-            const double* xp = reinterpret_cast<const double*>(x_cpu.ptr.get());
-            double* ep = reinterpret_cast<double*>(exp_out.ptr.get());
-            double* yp = reinterpret_cast<double*>(y_out.ptr.get());
-            for (std::size_t b = 0; b < B_sz; ++b)
-                for (std::size_t c = 0; c < C_sz; ++c) {
-                    const double v = mp[b * C_sz + c];
-                    for (std::size_t s = 0; s < spatial; ++s) {
-                        const std::size_t idx = (b * C_sz + c) * spatial + s;
-                        ep[idx] = v;
-                        yp[idx] = xp[idx] * v;
-                    }
-                }
-        } else {
-            ErrorBuilder("cpu_backend::expand_and_multiply").not_implemented("dtype not supported");
-        }
-    } else {
-        const std::size_t per = detail::safe_extent_div(numel, B_sz);
-        if (dt == Dtype::F32) {
-            const float* mp = reinterpret_cast<const float*>(m_cpu.ptr.get());
-            const float* xp = reinterpret_cast<const float*>(x_cpu.ptr.get());
-            float* ep = reinterpret_cast<float*>(exp_out.ptr.get());
-            float* yp = reinterpret_cast<float*>(y_out.ptr.get());
-            for (std::size_t b = 0; b < B_sz; ++b) {
-                const float v = mp[b];
-                for (std::size_t s = 0; s < per; ++s) {
-                    const std::size_t idx = b * per + s;
-                    ep[idx] = v;
-                    yp[idx] = xp[idx] * v;
-                }
-            }
-        } else if (dt == Dtype::F64) {
-            const double* mp = reinterpret_cast<const double*>(m_cpu.ptr.get());
-            const double* xp = reinterpret_cast<const double*>(x_cpu.ptr.get());
-            double* ep = reinterpret_cast<double*>(exp_out.ptr.get());
-            double* yp = reinterpret_cast<double*>(y_out.ptr.get());
-            for (std::size_t b = 0; b < B_sz; ++b) {
-                const double v = mp[b];
-                for (std::size_t s = 0; s < per; ++s) {
-                    const std::size_t idx = b * per + s;
-                    ep[idx] = v;
-                    yp[idx] = xp[idx] * v;
-                }
-            }
-        } else {
-            ErrorBuilder("cpu_backend::expand_and_multiply").not_implemented("dtype not supported");
-        }
-    }
+    detail::expand_and_multiply_cpu(m_cpu.ptr.get(), x_cpu.ptr.get(), exp_out.ptr.get(),
+                                    y_out.ptr.get(), mask_shape, x_shape, dt);
     return {Storage{std::move(exp_out)}, Storage{std::move(y_out)}};
 }
 

@@ -757,8 +757,67 @@ inline void copy_bytes_if_nonempty(void* dst, const void* src, std::size_t nb) n
         std::memcpy(dst, src, nb);
 }
 
-inline std::size_t safe_extent_div(std::size_t num, std::size_t den) noexcept {
-    return den == 0 ? 0 : num / den;
+template <typename T>
+inline void expand_and_multiply_typed(const T* mp,
+                                      const T* xp,
+                                      T* ep,
+                                      T* yp,
+                                      const Shape& mask_shape,
+                                      const Shape& x_shape,
+                                      std::size_t numel) {
+    const std::size_t B_sz = static_cast<std::size_t>(x_shape[0]);
+    const bool is_channel_mask = (mask_shape.size() >= 2 && mask_shape[1] > 1);
+    if (is_channel_mask) {
+        const std::size_t C_sz = static_cast<std::size_t>(mask_shape[1]);
+        std::size_t spatial = 1;
+        for (std::size_t i = 2; i < x_shape.size(); ++i)
+            spatial *= static_cast<std::size_t>(x_shape[i]);
+        for (std::size_t b = 0; b < B_sz; ++b) {
+            for (std::size_t c = 0; c < C_sz; ++c) {
+                const T v = mp[b * C_sz + c];
+                for (std::size_t s = 0; s < spatial; ++s) {
+                    const std::size_t idx = (b * C_sz + c) * spatial + s;
+                    ep[idx] = v;
+                    yp[idx] = xp[idx] * v;
+                }
+            }
+        }
+        return;
+    }
+    const std::size_t per = numel / B_sz;
+    for (std::size_t b = 0; b < B_sz; ++b) {
+        const T v = mp[b];
+        for (std::size_t s = 0; s < per; ++s) {
+            const std::size_t idx = b * per + s;
+            ep[idx] = v;
+            yp[idx] = xp[idx] * v;
+        }
+    }
+}
+
+inline void expand_and_multiply_cpu(const void* m_ptr,
+                                    const void* x_ptr,
+                                    void* exp_ptr,
+                                    void* y_ptr,
+                                    const Shape& mask_shape,
+                                    const Shape& x_shape,
+                                    Dtype dt) {
+    if (dt != Dtype::F32 && dt != Dtype::F64)
+        ErrorBuilder("cpu_backend::expand_and_multiply").not_implemented("dtype not supported");
+    const std::size_t numel = shape_numel(x_shape);
+    if (numel == 0)
+        return;
+    if (dt == Dtype::F32) {
+        expand_and_multiply_typed(reinterpret_cast<const float*>(m_ptr),
+                                  reinterpret_cast<const float*>(x_ptr),
+                                  reinterpret_cast<float*>(exp_ptr),
+                                  reinterpret_cast<float*>(y_ptr), mask_shape, x_shape, numel);
+    } else {
+        expand_and_multiply_typed(reinterpret_cast<const double*>(m_ptr),
+                                  reinterpret_cast<const double*>(x_ptr),
+                                  reinterpret_cast<double*>(exp_ptr),
+                                  reinterpret_cast<double*>(y_ptr), mask_shape, x_shape, numel);
+    }
 }
 
 // Copy an input tensor into the interior of a pre-filled pad output buffer.

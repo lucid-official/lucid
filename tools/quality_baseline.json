@@ -1176,7 +1176,7 @@
     "lucid/_C/backend/cpu/Pool.cpp": 23,
     "lucid/_C/backend/cpu/Pool.h": 15,
     "lucid/_C/backend/cpu/methods/Activation.cpp": 2,
-    "lucid/_C/backend/cpu/methods/Binary.cpp": 5,
+    "lucid/_C/backend/cpu/methods/Binary.cpp": 4,
     "lucid/_C/backend/cpu/methods/Conv.cpp": 20,
     "lucid/_C/backend/cpu/methods/Factory.cpp": 1,
     "lucid/_C/backend/cpu/methods/Indexing.cpp": 2,
@@ -1621,7 +1621,7 @@
   "lizard": {
    "function-ccn": {
     "lucid/_C/backend/cpu/Pool.cpp": 2,
-    "lucid/_C/backend/cpu/methods/Binary.cpp": 4,
+    "lucid/_C/backend/cpu/methods/Binary.cpp": 3,
     "lucid/_C/backend/cpu/methods/Conv.cpp": 1,
     "lucid/_C/backend/cpu/methods/Factory.cpp": 6,
     "lucid/_C/backend/cpu/methods/Indexing.cpp": 2,
@@ -1717,7 +1717,7 @@
    },
    "function-ccn-excess": {
     "lucid/_C/backend/cpu/Pool.cpp": 2,
-    "lucid/_C/backend/cpu/methods/Binary.cpp": 19,
+    "lucid/_C/backend/cpu/methods/Binary.cpp": 14,
     "lucid/_C/backend/cpu/methods/Conv.cpp": 1,
     "lucid/_C/backend/cpu/methods/Factory.cpp": 53,
     "lucid/_C/backend/cpu/methods/Indexing.cpp": 14,

@@ -17,7 +17,7 @@ gate runs every layout op across shapes that place a zero extent in every axis
 position, plus 0-d ``F.pad``, on CPU and Metal.
 """
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 
 import pytest
 
@@ -116,7 +116,7 @@ def test_pad_scalar_empty_spec_returns_copy(device: str, dtype: lucid.dtype) -> 
 
 
 #: Sibling layout ops that must handle zero extents at every axis without UB.
-_LAYOUT_OPS: dict[str, Callable[[Tensor], Tensor | tuple[Tensor, ...]]] = {
+_LAYOUT_OPS: dict[str, Callable[[Tensor], Tensor | Sequence[Tensor]]] = {
     "cat_empty": lambda x: lucid.cat([x, x], dim=0),
     "cat_last": lambda x: lucid.cat([x, x], dim=-1),
     "stack_0": lambda x: lucid.stack([x, x], dim=0),
@@ -147,7 +147,7 @@ def test_sibling_layout_ops_handle_every_empty_position(
     """Every layout op forward and backward survives a zero extent at any axis."""
     x = _empty(shape, lucid.float32, device, grad=True)
     out = _LAYOUT_OPS[op_name](x)
-    tensors = out if isinstance(out, tuple) else (out,)
+    tensors: Sequence[Tensor] = out if isinstance(out, (list, tuple)) else (out,)
     for t in tensors:
         assert t.numel() == 0
     if tensors:
@@ -181,16 +181,23 @@ def test_diagonal_and_unfold_empty_extents(device: str, shape: Shape) -> None:
     d.sum().backward()
     assert x.grad is not None and tuple(x.grad.shape) == shape
 
-    x2 = _empty(shape, lucid.float32, device, grad=True)
-    u = x2.unfold(0, 0, 1)
-    assert u.numel() == 0
+    non_empty_axis = next((i for i, extent in enumerate(shape) if extent > 0), None)
+    if non_empty_axis is not None:
+        x2 = _empty(shape, lucid.float32, device, grad=True)
+        u = x2.unfold(non_empty_axis, 1, 1)
+        assert u.numel() == 0
+        u.sum().backward()
+        assert x2.grad is not None and tuple(x2.grad.shape) == shape
 
 
 @pytest.mark.parametrize("device", _DEVICES)
-def test_dropout_empty_batch_no_divide_by_zero(device: str) -> None:
-    """Empty-batch dropout / channel-mask multiply avoids B_sz == 0 division."""
-    x = _empty((0, 4), lucid.float32, device, grad=True)
-    y = F.dropout(x, p=0.5, training=True)
-    assert tuple(y.shape) == (0, 4)
+@pytest.mark.parametrize(
+    "shape", [(0, 1, 3), (0, 4, 3), (2, 0, 3), (2, 4, 0)], ids=lambda s: "x".join(map(str, s))
+)
+def test_dropout_nd_empty_extents_no_ub(device: str, shape: Shape) -> None:
+    """Empty-batch, empty-channel and empty-spatial dropout1d hit expand_and_multiply cleanly."""
+    x = _empty(shape, lucid.float32, device, grad=True)
+    y = F.dropout1d(x, p=0.5, training=True)
+    assert tuple(y.shape) == shape
     y.sum().backward()
-    assert x.grad is not None and tuple(x.grad.shape) == (0, 4)
+    assert x.grad is not None and tuple(x.grad.shape) == shape

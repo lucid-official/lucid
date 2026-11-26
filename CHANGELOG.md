@@ -488,6 +488,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - guard empty extents and 0-d inputs in layout kernels
 
+- review fixes for expand_and_multiply and layout guard
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call
