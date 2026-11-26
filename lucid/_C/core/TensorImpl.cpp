@@ -413,16 +413,18 @@ bool TensorImpl::write_into_shared(const TensorImpl& src) {
                               return true;
                           },
                           [&](const SharedStorage& s) {
+                              if (src.storage_offset() != 0 || !src.is_contiguous())
+                                  return false;
                               gpu::settle_buffer_readers(*sh);
                               if (s.cpu_ptr != sh->cpu_ptr)
-                                  std::memcpy(dst, s.cpu_ptr, sh->nbytes);
+                                  std::memmove(dst, s.cpu_ptr, sh->nbytes);
                               return true;
                           },
                           // No values to lay in; the callers refuse a phantom
                           // source before a real target gets here.
                           [&](const PhantomStorage&) { return false; },
                       },
-                      src.storage());
+                      src.readable());
 }
 
 namespace {
@@ -850,6 +852,20 @@ void check_cpu_write_through_target(const TensorImpl& dst,
         refuse_write_to_leaf_view(dst, name);
 }
 
+std::vector<std::byte> snapshot_cpu_source(const TensorImpl& src,
+                                           const CpuStorage& from,
+                                           const TensorImpl& dst_impl,
+                                           const CpuStorage& dst,
+                                           std::size_t n) {
+    if (!src.is_dense())
+        return contig_snapshot_cpu(from, src.shape(), src.stride(), src.storage_offset());
+    if (!dst_impl.is_dense() && buffers_overlap(from, dst) && n > 0) {
+        const std::byte* base = from.ptr.get();
+        return {base, offset_or_null(base, n)};
+    }
+    return {};
+}
+
 void write_cpu_buffer(const TensorImpl& dst_impl,
                       CpuStorage& dst,
                       const TensorImpl& src,
@@ -873,16 +889,14 @@ void write_cpu_buffer(const TensorImpl& dst_impl,
     }
     // The source packed, then laid into this tensor's own elements — at its
     // offset and through its strides, which a dense tensor has trivially.
-    std::vector<std::byte> packed;
-    const std::byte* bytes = from.ptr.get();
-    if (!src.is_dense()) {
-        packed = contig_snapshot_cpu(from, src.shape(), src.stride(), src.storage_offset());
-        bytes = packed.data();
-    }
+    // A dense source overlapping a strided destination (``x.t().copy_(x)``,
+    // ``x[::2].copy_(x[:5])``) must also snapshot before scatter writes over it.
+    std::vector<std::byte> packed = snapshot_cpu_source(src, from, dst_impl, dst, n);
+    const std::byte* bytes = packed.empty() ? from.ptr.get() : packed.data();
     settle_before_host_write(shared, dst_impl.raw_storage());
     if (dst_impl.is_dense()) {
         if (n > 0)
-            std::memcpy(dst.ptr.get(), bytes, n);
+            std::memmove(dst.ptr.get(), bytes, n);
     } else {
         scatter_contig_to_strided(bytes, dst, dst_impl.shape(), dst_impl.stride(),
                                   dst_impl.storage_offset());
@@ -1095,6 +1109,35 @@ void TensorImpl::write_through(const TensorImpl& src, const char* name) {
     write_cpu_buffer(*this, dst, src, from, shared_);
 }
 
+namespace {
+
+void commit_gpu_member_root(GpuStorage& root,
+                            const std::optional<SharedStorage>& shared,
+                            Dtype dst_dtype,
+                            const TensorImpl& src,
+                            const GpuStorage& value,
+                            ::mlx::core::array next,
+                            const gpu_strided::Geometry& g,
+                            bool raw,
+                            bool graph) {
+    if ((raw || !graph) && root_is_shared_buffer(shared, root, root.dtype)) {
+        copy_into_shared(*shared, next);
+    } else if (src.shared_buffer() != nullptr) {
+        // ``src`` aliases a mutable Metal shared buffer: isolate with an explicit
+        // copy so later CPU writes to the shared buffer cannot mutate this family.
+        root.arr = gpu::wrap_mlx_array(::mlx::core::copy(next), root.dtype).arr;
+    } else if (root.dtype == dst_dtype && g.covers(static_cast<std::int64_t>(root.arr->size())) &&
+               value.arr->shape() == root.arr->shape()) {
+        // The whole value in the root's shape: the root is the value itself,
+        // as a slot swap would have made it.
+        root.arr = value.arr;
+    } else {
+        root.arr = gpu::wrap_mlx_array(std::move(next), root.dtype).arr;
+    }
+}
+
+}  // namespace
+
 void TensorImpl::write_gpu_member(const TensorImpl& src, const char* name, bool raw) {
     if (src.device() != Device::GPU)
         throw DeviceMismatch(std::string(device_name(meta_.device)),
@@ -1112,20 +1155,7 @@ void TensorImpl::write_gpu_member(const TensorImpl& src, const char* name, bool 
     ::mlx::core::array next =
         gpu_strided::write(*root.arr, *value.arr, meta_.shape, meta_.stride, offset_);
     trace_gpu_member_write(*this, src, *root.arr, *value.arr, next, g);
-    // The family was built over a Metal shared buffer that the root still
-    // reads.  With no graph to protect — a node's snapshot reads the same
-    // bytes — the values go into that buffer, so its CPU alias sees them as
-    // well (take_storage_from's rule), and the root stays the buffer.
-    if ((raw || !graph) && root_is_shared_buffer(shared_, root, root.dtype)) {
-        copy_into_shared(*shared_, next);
-    } else if (root.dtype == meta_.dtype && g.covers(static_cast<std::int64_t>(root.arr->size())) &&
-               value.arr->shape() == root.arr->shape()) {
-        // The whole value in the root's shape: the root is the value itself,
-        // as a slot swap would have made it.
-        root.arr = value.arr;
-    } else {
-        root.arr = gpu::wrap_mlx_array(std::move(next), root.dtype).arr;
-    }
+    commit_gpu_member_root(root, shared_, meta_.dtype, src, value, std::move(next), g, raw, graph);
     rebind_gpu_grad_slot(family_, root.arr);
     drop_family_caches();
     if (raw)
@@ -2331,7 +2361,7 @@ void copy_storage_values(Storage& dst_storage,
                            ErrorBuilder("copy_from").fail("nbytes mismatch");
                        }
                        if (dst.nbytes > 0) {
-                           std::memcpy(dst.ptr.get(), src.ptr.get(), dst.nbytes);
+                           std::memmove(dst.ptr.get(), src.ptr.get(), dst.nbytes);
                        }
                    },
                    [&](GpuStorage& dst, const GpuStorage& src) {
@@ -2498,6 +2528,7 @@ void TensorImpl::assign_from(const TensorImpl& other, const char* name) {
         set_grad_fn(other.grad_fn());
         set_grad_output_nr(other.grad_output_nr());
         set_requires_grad(true);
+        set_leaf(false);
     } else if (grad_fn()) {
         set_grad_fn(nullptr);
         set_grad_output_nr(0);

@@ -2946,8 +2946,8 @@ class Tensor:
         Parameters
         ----------
         other : Tensor
-            Source tensor. Made contiguous before the copy to guarantee
-            a stride-compatible memory layout.
+            Source tensor. Views pack directly into ``self`` (overlapping
+            self-copies such as ``x.copy_(x.t())`` snapshot automatically).
         non_blocking : bool, optional
             Accepted for the reference's signature; a copy here is
             synchronous.  Default ``False``.
@@ -2959,16 +2959,9 @@ class Tensor:
 
         Notes
         -----
-        Unlike :meth:`clone`, ``copy_`` does not allocate a new tensor —
-        only ``self``'s storage is written. The autograd graph *is*
-        extended: after the copy ``self`` depends on ``other``, not on
-        whatever produced ``self``, so a backward pass through ``self``
-        deposits its gradient on ``other``. Element-wise:
-
-        .. math::
-
-            \text{self}_i \leftarrow \text{cast}_{\text{self.dtype}}(\text{other}_i),
-
+        Unlike :meth:`clone`, ``copy_`` writes ``self``'s storage without allocating a new tensor.
+        The autograd graph *is* extended so a backward pass through ``self`` deposits its gradient
+        on ``other``. Element-wise: $\text{self}_i \leftarrow \text{cast}_{\text{self.dtype}}(\text{other}_i)$,
         with right-aligned broadcasting from ``other.shape`` to ``self.shape``.
 
         Examples
@@ -2990,7 +2983,11 @@ class Tensor:
             src = _C_engine.to_device(src, dst.device)
         if list(src.shape) != list(dst.shape):
             src = _C_engine.broadcast_to(src, list(dst.shape))
-        src = _C_engine.contiguous(src)
+        if src.requires_grad:
+            if not _C_engine.grad_enabled():
+                src = src.clone_with_grad(False)
+            elif src is other._impl:
+                src = _C_engine.contiguous(src)
         if dst.is_aliased():
             _C_engine.assign_inplace(dst, src, "copy_")
         else:

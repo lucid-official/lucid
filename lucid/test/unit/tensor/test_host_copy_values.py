@@ -352,3 +352,149 @@ def test_assigning_a_view_keeps_every_dtype(dtype: type) -> None:
     x = lucid.zeros(6, 4, device="cpu", dtype=lucid.tensor(src, device="cpu").dtype)
     x.copy_(lucid.tensor(src, device="cpu").t())
     np.testing.assert_array_equal(x.numpy(), src.T)
+
+
+@pytest.mark.parametrize("device", ["cpu", "metal"])
+def test_copy_handles_overlap_broadcast_strided_dst_and_source_isolation(device: str) -> None:
+    if device == "metal" and not lucid.metal.is_available():
+        pytest.skip("Metal not available")
+    sq = np.arange(25, dtype=np.float32).reshape(5, 5)
+    # Self-overlap with live view: engine buffers_overlap snapshots safely without Python contiguous.
+    x = lucid.tensor(sq.copy(), device=device)
+    view = x[1:3]
+    x.copy_(x.t())
+    np.testing.assert_array_equal(x.numpy(), sq.T)
+    np.testing.assert_array_equal(view.numpy(), sq.T[1:3])
+
+    # Strided destination <- strided source.
+    rect = np.arange(20, dtype=np.float32).reshape(4, 5)
+    dst = lucid.zeros(4, 5, device=device)
+    dst.t().copy_(lucid.tensor(rect, device=device).t())
+    np.testing.assert_array_equal(dst.numpy(), rect)
+
+    # Broadcast source (broadcast_to allocates once; copy_ adds no second copy).
+    row = lucid.arange(5, dtype=lucid.float32, device=device)
+    b = lucid.zeros(4, 5, device=device)
+    b.copy_(row)
+    np.testing.assert_array_equal(
+        b.numpy(), np.broadcast_to(np.arange(5, dtype=np.float32), (4, 5))
+    )
+
+    # Overlapping strided dst <- dense src (must snapshot before scattering).
+    sq3 = np.arange(9, dtype=np.float32).reshape(3, 3)
+    m = lucid.tensor(sq3.copy(), device=device)
+    m.t().copy_(m)
+    np.testing.assert_array_equal(m.numpy(), sq3.T)
+
+    vec = np.arange(10, dtype=np.float32)
+    v1 = lucid.tensor(vec.copy(), device=device)
+    v1[::2].copy_(v1[:5])
+    expected_v1 = vec.copy()
+    expected_v1[::2] = vec[:5]
+    np.testing.assert_array_equal(v1.numpy(), expected_v1)
+
+    v2 = lucid.tensor(vec.copy(), device=device)
+    v2.reshape(2, 5).t().copy_(v2.reshape(5, 2))
+    expected_v2 = vec.copy().reshape(2, 5)
+    expected_v2.T[:] = vec.reshape(5, 2)
+    np.testing.assert_array_equal(v2.numpy(), expected_v2.reshape(-1))
+
+    # Overlapping dense block views & identical self-copy (memmove, no memcpy-param-overlap UB).
+    fwd = lucid.tensor(vec.copy(), device=device)
+    fwd[1:].copy_(fwd[:-1])
+    expected_fwd = vec.copy()
+    expected_fwd[1:] = vec[:-1]
+    np.testing.assert_array_equal(fwd.numpy(), expected_fwd)
+
+    bwd = lucid.tensor(vec.copy(), device=device)
+    bwd[:-1].copy_(bwd[1:])
+    expected_bwd = vec.copy()
+    expected_bwd[:-1] = vec[1:]
+    np.testing.assert_array_equal(bwd.numpy(), expected_bwd)
+
+    same = lucid.tensor(vec.copy(), device=device)
+    same.copy_(same)
+    np.testing.assert_array_equal(same.numpy(), vec)
+
+    # Mutating source after copy_ must not affect destination.
+    src = lucid.tensor(rect.copy(), device=device)
+    out = lucid.zeros(5, 4, device=device)
+    out.copy_(src.t())
+    src.fill_(99.0)
+    np.testing.assert_array_equal(out.numpy(), rect.T)
+
+
+@needs_metal
+def test_copy_from_metal_shared_tensor_isolates_aliased_destination_and_self_transpose() -> None:
+    arr = np.arange(20, dtype=np.float32).reshape(4, 5)
+    s_cpu = lucid.metal.shared_tensor((4, 5), dtype=lucid.float32)
+    s_cpu.copy_(lucid.tensor(arr, device="cpu"))
+    s_gpu = s_cpu.to("metal")
+
+    for src in (s_gpu, s_gpu[:]):
+        dst = lucid.zeros(4, 5, device="metal")
+        view = dst[0:2]
+        dst.copy_(src)
+        s_cpu.fill_(99.0)
+        np.testing.assert_array_equal(dst.numpy(), arr)
+        np.testing.assert_array_equal(view.numpy(), arr[0:2])
+        s_cpu.copy_(lucid.tensor(arr, device="cpu"))
+
+    # Self-transpose of a shared CPU tensor must snapshot before scattering.
+    sq = np.arange(16, dtype=np.float32).reshape(4, 4)
+    sh_sq = lucid.metal.shared_tensor((4, 4), dtype=lucid.float32)
+    sh_sq.copy_(lucid.tensor(sq, device="cpu"))
+    sh_sq.t().copy_(sh_sq)
+    np.testing.assert_array_equal(sh_sq.numpy(), sq.T)
+
+
+@pytest.mark.parametrize("device", ["cpu", "metal"])
+def test_copy_preserves_autograd_for_leaf_and_strided_sources(device: str) -> None:
+    if device == "metal" and not lucid.metal.is_available():
+        pytest.skip("Metal not available")
+    arr = np.arange(12, dtype=np.float32).reshape(3, 4)
+
+    leaf = lucid.tensor(arr, device=device, requires_grad=True)
+    dst = lucid.zeros(3, 4, device=device)
+    dst.copy_(leaf)
+    assert dst.requires_grad
+    dst.sum().backward()
+    assert leaf.grad is not None
+    np.testing.assert_array_equal(leaf.grad.numpy(), np.ones((3, 4), dtype=np.float32))
+
+    leaf2 = lucid.tensor(arr, device=device, requires_grad=True)
+    dst2 = lucid.zeros(4, 3, device=device)
+    dst2.copy_(leaf2.t())
+    assert dst2.requires_grad
+    dst2.sum().backward()
+    assert leaf2.grad is not None
+    np.testing.assert_array_equal(leaf2.grad.numpy(), np.ones((3, 4), dtype=np.float32))
+
+    # Non-leaf source isolation: hooks, retain_grad, and autograd.grad must not alias y's node.
+    x = lucid.tensor(arr, device=device, requires_grad=True)
+    y = x * 2.0
+    other = lucid.zeros(3, 4, device=device) * 1.0
+    other.copy_(y)
+    other.register_hook(lambda g: g * 10.0)
+    y.sum().backward()
+    assert x.grad is not None
+    np.testing.assert_array_equal(x.grad.numpy(), np.full((3, 4), 2.0, dtype=np.float32))
+
+    x2 = lucid.tensor(arr, device=device, requires_grad=True)
+    y2 = x2 * 2.0
+    y2.retain_grad()
+    other2 = lucid.zeros(3, 4, device=device) * 1.0
+    other2.copy_(y2)
+    other2.retain_grad()
+    assert lucid.autograd.grad(y2.sum(), other2, allow_unused=True, retain_graph=True) == (None,)
+    other2.sum().backward()
+    assert y2.grad is not None and other2.grad is not None
+    np.testing.assert_array_equal(y2.grad.numpy(), np.ones((3, 4), dtype=np.float32))
+    np.testing.assert_array_equal(other2.grad.numpy(), np.ones((3, 4), dtype=np.float32))
+
+    # Copying a grad-requiring source under no_grad detaches without tracking grad.
+    ng_dst = lucid.zeros(3, 4, device=device)
+    with lucid.no_grad():
+        ng_dst.copy_(y2)
+    assert not ng_dst.requires_grad
+    np.testing.assert_array_equal(ng_dst.numpy(), arr * 2.0)

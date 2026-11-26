@@ -72,6 +72,27 @@ def test_a_dense_cpu_to_metal_move_allocates_no_host_buffer() -> None:
     assert kept[0].tolist() == x.tolist()
 
 
+def test_copy_of_a_transposed_view_allocates_no_host_buffer() -> None:
+    x = lucid.zeros(_BIG[1], _BIG[0], device="cpu")
+    y = lucid.randn(*_BIG, device="cpu")
+    above = _peak(_CPU, lambda: x.copy_(y.t()))
+    assert above <= _MB, f"{above / _MB:.1f} MB of host memory made for copy_(y.t())"
+    keep = x[0:2]
+    above_aliased = _peak(_CPU, lambda: x.copy_(y.t()))
+    assert (
+        above_aliased <= _MB
+    ), f"{above_aliased / _MB:.1f} MB of host memory made for aliased copy_(y.t())"
+    assert keep.shape == (2, _BIG[0])
+    np.testing.assert_array_equal(x.numpy(), y.t().numpy())
+
+    sh = lucid.metal.shared_tensor((_BIG[1], _BIG[0]), dtype=lucid.float32)
+    above_shared = _peak(_CPU, lambda: sh.copy_(y.t()))
+    assert (
+        above_shared <= _MB
+    ), f"{above_shared / _MB:.1f} MB of host memory made for shared_tensor.copy_(y.t())"
+    np.testing.assert_array_equal(sh.numpy(), y.t().numpy())
+
+
 def test_a_strided_cpu_to_metal_move_packs_through_one_temporary_block() -> None:
     x = lucid.randn(*_BIG, device="cpu")
     nbytes = x.numel() * 4
@@ -314,6 +335,19 @@ _SNAPSHOT_CASES: dict[str, tuple[str, str, float]] = {
         _SETUP_F32_LIVE_VIEW,
         "x[:] = y.t()",
         0.0,
+    ),
+    "copy_ of a transposed view": (_SETUP_F32, "x.copy_(y.t())", 0.0),
+    "copy_ of a transposed view to a tensor with a live view": (
+        _SETUP_F32_LIVE_VIEW,
+        "x.copy_(y.t())",
+        0.0,
+    ),
+    # ``broadcast_to`` allocates one full-size tensor; dropping Python ``contiguous``
+    # avoids a second 64 MiB copy on top of it (128 MB -> 64 MB).
+    "copy_ of a broadcast view": (
+        "x = lucid.ones(N, N, device='cpu'); y = lucid.ones(1, N, device='cpu')",
+        "x.copy_(y)",
+        64.0,
     ),
 }
 
