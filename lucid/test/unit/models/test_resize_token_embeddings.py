@@ -46,6 +46,19 @@ _FAMILIES: dict[str, dict[str, object]] = {
     "roformer": dict(_SHARED, max_position_embeddings=16),
     "t5": dict(_SHARED, num_decoder_layers=1, head_dim=8),
     "transformer": dict(_SHARED, num_decoder_layers=1, max_position_embeddings=16),
+    "clip": dict(
+        image_size=32,
+        patch_size=16,
+        vision_layers=1,
+        vision_width=_H,
+        vision_heads=2,
+        context_length=8,
+        vocab_size=_V,
+        text_width=_H,
+        text_heads=2,
+        text_layers=1,
+        embed_dim=_H,
+    ),
 }
 # The config field that is the standard deviation a family draws its embeddings from.
 _INIT_STD = {
@@ -114,8 +127,8 @@ def test_the_table_names_every_family_with_a_vocabulary() -> None:
         and entry.model_class.config_class is not None
         and "vocab_size" in {f.name for f in dataclasses.fields(entry.model_class.config_class)}
     }
-    assert with_vocab == set(_FAMILIES) | {"clip"}  # CLIP: see the xfail below
-    assert len(_CLASSES) >= 25
+    assert with_vocab == set(_FAMILIES)
+    assert len(_CLASSES) >= 27
 
 
 @pytest.mark.parametrize(("cls", "factory"), _CLASSES, ids=lambda v: getattr(v, "__name__", v))
@@ -142,7 +155,10 @@ def test_a_model_reports_the_table_and_the_head_it_has(
 def test_resize_moves_the_table_the_head_and_every_config_together(
     cls: type[PretrainedModel], factory: str, new_n: int, tie: bool
 ) -> None:
-    model = _build(factory, tie_word_embeddings=tie)
+    has_tie = cls.config_class is not None and any(
+        f.name == "tie_word_embeddings" for f in dataclasses.fields(cls.config_class)
+    )
+    model = _build(factory, **({"tie_word_embeddings": tie} if has_tie else {}))
     old = model.get_input_embeddings()
     assert isinstance(old, nn.Embedding)
     before = old.weight.tolist()
@@ -435,30 +451,37 @@ def test_a_model_with_no_vocabulary_refuses_to_resize(name: str) -> None:
         model.resize_token_embeddings(10)
 
 
-# ── families this file cannot yet hold ─────────────────────────────────────────
+# ── CLIP (multimodal text tower) ──────────────────────────────────────────────
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="CLIP token table follows after LCD-1107 lands: clip/_model.py is claimed by that "
-    "branch, and CLIPModel needs `_input_embeddings = 'textual.token_embedding'` there.  Remove "
-    "this mark with it; `[EOS]` is found as the argmax of the ids, so ids added past it break "
-    "the pooling, which the docstring has to say.",
-)
-def test_clip_resizes_its_token_table() -> None:
-    model = create_model(
-        "clip_vit_base_32",
-        image_size=32,
-        patch_size=16,
-        vision_layers=1,
-        vision_width=32,
-        vision_heads=2,
-        context_length=8,
-        vocab_size=64,
-        text_width=32,
-        text_heads=2,
-        text_layers=1,
-        embed_dim=16,
-    )
-    table = model.resize_token_embeddings(70)
-    assert tuple(table.weight.shape) == (70, 32) and model.config.vocab_size == 70
+@pytest.mark.parametrize("factory", ["clip_vit_base_32", "clip_vit_base_32_zero_shot"])
+def test_clip_resizes_its_token_table(factory: str, tmp_path: Path) -> None:
+    """CLIPModel and its zero-shot wrapper resize, init at std=0.02, encode, and round-trip."""
+    lucid.manual_seed(0)
+    model = _build(factory)
+    old = model.get_input_embeddings()
+    assert isinstance(old, nn.Embedding)
+    before = old.weight.tolist()
+
+    table = model.resize_token_embeddings(_V + 400, mean_resizing=False)
+    assert tuple(table.weight.shape) == (_V + 400, _H)
+    assert {m.config.vocab_size for m in model._config_chain()} == {_V + 400}
+    assert table.weight[:_V].tolist() == before
+    # New rows follow CLIP's std=0.02 initialiser, not the framework's unit normal.
+    new_rows = table.weight[_V:]
+    assert abs(float(new_rows.std().item()) / 0.02 - 1.0) < 0.15
+    assert abs(float(new_rows.mean().item())) < 0.01
+
+    images = lucid.randn((2, 3, 32, 32))
+    # Keep the highest id at the end so CLIP's argmax [EOS] pooling stays at that position.
+    captions = lucid.tensor([[1, 2, _V + 399, 0, 0, 0, 0, 0], [3, 4, _V + 399, 0, 0, 0, 0, 0]])
+    out = model(images, captions)
+    expected = out.get("logits", out.get("logits_per_image"))
+    assert expected is not None
+
+    model.save_pretrained(str(tmp_path))
+    loaded = type(model).from_pretrained(str(tmp_path)).eval()
+    assert loaded.config == model.config
+    reloaded = loaded(images, captions)
+    got = reloaded.get("logits", reloaded.get("logits_per_image"))
+    assert got is not None and got.tolist() == expected.tolist()

@@ -34,6 +34,7 @@ from lucid.models._base import PretrainedModel
 from lucid.models._tasks import ImageClassificationModel
 from lucid.models._output import ModelOutput
 from lucid.models._utils._patch_grid import check_patch_grid
+from lucid.models._utils._text import init_text_module_weights
 from lucid.models.multimodal.clip._towers import _TransformerTower
 from lucid.models.multimodal.clip._config import CLIPConfig
 
@@ -295,6 +296,13 @@ class CLIPModel(PretrainedModel):
     the useful entry points for retrieval, where one side is indexed once
     and the other is queried repeatedly.
 
+    When resizing the text vocabulary with :meth:`resize_token_embeddings`
+    or :meth:`set_input_embeddings`, keep ``[EOS]`` as the highest token id
+    in every caption passed to :meth:`encode_text`: the text tower locates
+    ``[EOS]`` via ``input_ids.argmax(dim=-1)``, so introducing token ids
+    greater than ``[EOS]`` causes pooling to read the new token instead of
+    the sentinel.
+
     Examples
     --------
     >>> import lucid
@@ -312,6 +320,7 @@ class CLIPModel(PretrainedModel):
 
     config_class: ClassVar[type[CLIPConfig]] = CLIPConfig
     base_model_prefix = "clip"
+    _input_embeddings: ClassVar[str] = "textual.token_embedding"
 
     def __init__(self, config: CLIPConfig) -> None:
         """Initialise the model. See the class docstring for parameters."""
@@ -321,6 +330,11 @@ class CLIPModel(PretrainedModel):
         self.textual = _TextTransformer(config)
         self.logit_scale = nn.Parameter(lucid.zeros((1,)))
         self._init_weights()
+
+    @override
+    def _init_token_table(self, table: nn.Embedding | nn.Linear) -> None:
+        """Initialise a newly allocated token table at CLIP's ``std=0.02``."""
+        init_text_module_weights(table, 0.02)
 
     def _init_weights(self) -> None:
         r"""Apply the released initialisation, which is not the default.

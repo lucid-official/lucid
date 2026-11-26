@@ -609,6 +609,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `PretrainedModel.get_output_embeddings()`: the `Linear` that scores the vocabulary (`lm_head`, BERT's `cls.predictions.decoder`), or `None` (LCD-1111).
 - `from_pretrained(name_or_path, *, strict=True, ignore_mismatched_sizes=False, **config_overrides)` on `PretrainedModel` and every `AutoModelFor*` class: keywords change config fields (only fields: an unknown one raises `TypeError`); `ignore_mismatched_sizes=True` keeps a mismatched weight's fresh initialisation and a warning names it. A registered name given overrides builds the model at that config and takes the published weights that fit (LCD-1111).
 
+- support token embedding resize on CLIPModel (LCD-1120)
+
 ### Performance
 
 - pool the MAE sets without rank-6 views
