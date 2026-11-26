@@ -488,7 +488,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Guarded empty-extent and 0-d layout kernels against division by zero, null-pointer `memset`/`memcpy`, null pointer-offset arithmetic, and 0-d underflow: `CpuBackend::pad` (and `GpuBackend::pad` for 0-d scalars), `fill_pad_buffer`, `reverse_along_axis`, `slice_axis`, `insert_axis_slice`, `concatenate`, `stack`, `repeat`, `repeat_backward`, `tile_backward`, and `CpuBackend::expand_and_multiply` (`F.dropout1d`/`2d`/`3d` and `drop_path`) now pass ASan+UBSan cleanly across empty dimensions in every axis position (LCD-1119).
 
-- validate remaining zoo configs (LCD-1118)
+- Remaining vision, multimodal, and generative model configs now refuse negative counts, zero widths, and non-divisible attention heads at construction via the shared helpers in `lucid.models._utils._common`: `DETRConfig`, `MaskFormerConfig`, and `Mask2FormerConfig` check `d_model % n_head` and `num_queries > 0`; `FasterRCNNConfig`, `MaskRCNNConfig`, `FastRCNNConfig`, and `RCNNConfig` validate RPN/RoI counts (sharing `vision/_common/_rcnn.validate_fpn_rcnn_config` while keeping `context_pad=0` and `roi_sampling_ratio=0` accepted); and `CLIPConfig`, `ScoreSDEConfig`, `StableDiffusionConfig`, `DIAMONDConfig`, and `check_patch_grid` refuse negative/zero depths, widths, and divisors (LCD-1118).
 
 ### Added
 
