@@ -2928,11 +2928,11 @@
     },
     {
       "kind": "module",
-      "module": "lucid.models._meta"
+      "module": "lucid.models._checkpoint"
     },
     {
       "kind": "module",
-      "module": "lucid.models._mixins"
+      "module": "lucid.models._meta"
     },
     {
       "kind": "module",
@@ -3163,6 +3163,10 @@
     {
       "kind": "module",
       "module": "lucid.models._auto"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.models._checkpoint"
     },
     {
       "kind": "module",
@@ -13036,6 +13040,10 @@
     },
     {
       "kind": "module",
+      "module": "lucid.models._embeddings"
+    },
+    {
+      "kind": "module",
       "module": "lucid.models._mixins"
     },
     {
@@ -14223,6 +14231,10 @@
     {
       "kind": "module",
       "module": "lucid.models.text.transformer._model"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.models.vision._common._padding"
     },
     {
       "kind": "module",
