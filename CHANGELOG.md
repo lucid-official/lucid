@@ -618,6 +618,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Performance
 
+- Drop the redundant Python `contiguous` call in `Tensor.copy_` so non-contiguous views pack straight into dense destinations (64 MiB `x.copy_(y.t())` peak rise drops from 64.16 MB to 0.11 MB on Mac Studio, and broadcast `x.copy_(y)` from 128.16 MB to 64.14 MB), while hardening overlapping CPU strided copies, `memmove` self-copies, Metal `SharedStorage` isolation, `write_into_shared` packing, and `assign_from` leaf tracking, and correcting six stale GPU-private engine comments (LCD-1016).
 - pool the MAE sets without rank-6 views
 - group_norm works at rank 2, not (N, G, C/G, H, W)
 - run rank-5+ elementwise ops behind rank<=4 views
