@@ -470,7 +470,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `lerp` takes the reference's two forms by the weight: `start + weight * (end - start)` for `|weight| < 0.5`, `end - (end - start) * (1 - weight)` otherwise (a `NaN` weight takes the second). `lerp(a, b, 1) == b` now holds exactly (`lerp(1, 1e-8, 1)` was `0` in float32), and an infinite operand gives what its form gives (`lerp(0, inf, 0.5)` is `NaN`, was `inf`). A tensor weight picks the form on the device, with no host read. The gradient is the reference's whichever form the value took: `grad * (1 - weight)`, `grad * weight` and `grad * (end - start)` (LCD-1101).
 
-- refuse integral operands on every route (LCD-1105)
+- `linalg.householder_product` refused a bool or integer input on its 2-D, one-reflector-per-column path only. A batch, fewer reflectors than columns, and no reflectors at all computed the answer in the input's dtype. The reference has no `orgqr` kernel for an integral dtype, and every route now raises `NotImplementedError`, on CPU and Metal, before it picks a route (LCD-1105).
+- `linalg.solve` judged shapes before `A`'s dtype, so a bool or integer `A` of the wrong shape, or `left=False` with a 1-D `B`, raised `ShapeMismatch` or `InvalidArgument`, and an integer `A` beside a float `B` raised a dtype-pair error. The reference reports `A`'s dtype first ("Expected a floating point or complex tensor"), and so does Lucid now, for `solve`, `solve_ex` and `tensorsolve`. A bool `A` raises a dtype guard (`DtypeMismatch`) instead of the engine's `NotImplementedError` (LCD-1105).
+- `linalg.inv` of an empty integral or bool matrix returned the input unchanged where the reference refuses; it now raises `DtypeMismatch`. A bool square matrix of any size is now `DtypeMismatch` too, where a non-empty one was the engine's `NotImplementedError` (so `inv_ex` and `tensorinv` follow). A non-square input is still a shape error first, as the reference's (LCD-1105).
+- `linalg.cross` of two bool tensors computed a bool cross product; the reference has no bool kernel, and Lucid raises `NotImplementedError`. An integer pair is still answered (LCD-1105).
+- `linalg.pinv(..., hermitian=True)` and `linalg.matrix_rank(..., hermitian=True)` refused an integral input with the `eigh` kernel's `NotImplementedError`; the reference's `pinv` and `matrix_rank` are a dtype guard on every route, and Lucid now raises `DtypeMismatch` for them on every route, bool included (LCD-1105).
+- `linalg.lstsq` of a bool or integer operand raised `DtypeMismatch` whatever the call; the reference raises a dtype guard for a plain call and `NotImplementedError` ("linalg_lstsq_cpu") once `rcond` is given. Lucid now does the same, judged after the shapes (LCD-1105).
 
 ### Added
 
@@ -711,7 +716,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `take_along_dim(x, indices, dim)` and `take` read int64 positions only, as the reference does; a bool, int8, int16 or int32 index raises `DtypeMismatch`. `gather` reads int32 or int64. A bool, int8 or int16 index raises `DtypeMismatch`, and so does a flat `take_along_dim(x, indices)` with one. `gather` answers an index with no element whatever its dtype, as the reference does (LCD-1075).
 - `ldexp(input, other)` refuses a bool `other` beside a real floating `input` with `NotImplementedError`, as the reference does. An integer, bool or complex `input` still answers (LCD-1075).
 - **Behaviour change:** a scale factor that is a tensor with a dimension, a tensor that requires grad, or a value that is not a number (a str, None or a list) raises `TypeError: <op>(): argument '<name>' must be Number, not <type>`, as the reference does. Before, such values were accepted or gave `expected Tensor or Number`. To migrate a learnable 0-d scale, multiply by it explicitly (`x + alpha * y`) (LCD-1088).
-- review fixes for the integral refusals (LCD-1105)
+- **Behaviour change:** `linalg.householder_product` (batched, fewer reflectors, or zero reflectors), `linalg.inv` (empty square integral/bool matrix), and `linalg.cross` (bool pair) now refuse bool/integral operands rather than computing a result, matching the reference; `linalg.solve`, `linalg.inv`, `linalg.pinv(..., hermitian=True)`, `linalg.matrix_rank(..., hermitian=True)`, and `linalg.lstsq(..., rcond=...)` match the reference's refusal class (`DtypeMismatch` vs `NotImplementedError`) and check order (LCD-1105).
 
 ---
 
