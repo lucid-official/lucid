@@ -18,8 +18,8 @@
 //   served directly by posix_memalign; they are freed with std::free.
 //
 //   GPU-device allocations (device == Device::GPU) also bypass the pool — the
-//   pool only handles ordinary virtual-memory pages; GPU-private MLX buffers
-//   would be mishandled if placed here.
+//   pool only handles ordinary host blocks; MLX manages its own Metal
+//   shared-mode buffers separately.
 
 #include "Allocator.h"
 

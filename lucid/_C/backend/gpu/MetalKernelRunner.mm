@@ -14,7 +14,7 @@
 //   argument.  SharedStorage provides a pre-existing MTLBuffer at zero cost.
 //   GpuStorage must be eval()'d first (to materialise the lazy graph), then
 //   a *copy* into a shared buffer is made via newBufferWithBytes — not
-//   newBufferWithBytesNoCopy — because MLX GPU-private allocations are not
+//   newBufferWithBytesNoCopy — because MLX-managed Metal allocations are not
 //   guaranteed to be page-aligned, which is a requirement of the no-copy API.
 //   CpuStorage takes the same copy path.  is_temp==true buffers are created
 //   inline and must not be released by the caller.

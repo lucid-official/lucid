@@ -42,10 +42,10 @@ namespace lucid {
 //     The CPU stream also services the linalg carve-out where MLX is run
 //     against CPU storage (MLX-on-CPU).
 // GPU : Device
-//     MLX lazy graph node executing on the Metal GPU.  Buffers are
-//     GPU-private — dereferencing the underlying pointer from the CPU
-//     before graph evaluation causes a SIGBUS.  See :func:`TensorImpl::eval`
-//     for the explicit materialisation entry point.
+//     MLX lazy graph node executing on the Metal GPU.  MLX allocates Metal
+//     shared-mode unified memory (CPU-readable once evaluated), but the lazy
+//     graph must be materialised via :func:`TensorImpl::eval` before reading
+//     ``data()`` from the CPU.
 //
 // Notes
 // -----

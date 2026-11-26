@@ -17,12 +17,12 @@
 //      which is a significant cost for the short-lived intermediate
 //      tensors produced by ML workloads.
 //
-// MLX GPU allocations (``GpuStorage``) are managed by the MLX runtime
-// and must not be served through this allocator — they live in
-// GPU-private memory and would raise a ``SIGBUS`` if accessed via a CPU
-// pointer.  The :class:`Device` parameter on :func:`allocate_aligned_bytes`
-// exists primarily to (a) update the correct :class:`MemoryTracker`
-// counter bank and (b) opt out of the pool path for non-CPU devices.
+// MLX GPU allocations (``GpuStorage``) are managed by MLX's own Metal
+// shared-mode allocator (not this host slab pool), so they must not be
+// served through this allocator.  The :class:`Device` parameter on
+// :func:`allocate_aligned_bytes` exists primarily to (a) update the correct
+// :class:`MemoryTracker` counter bank and (b) opt out of the pool path for
+// non-CPU devices.
 //
 // See Also
 // --------

@@ -306,7 +306,7 @@ pool_window_argmax_small(const ::mlx::core::array& wins_flat,
 //
 //     // BackendInit.cpp triggers GpuBackendRegistrar at process start.
 //     auto t = lucid::tensor({1,2,3}, lucid::Device::GPU);
-//     // → routed to GpuBackend::from_cpu → mlx::core::copy.
+//     // → routed to GpuBackend::from_cpu → gpu::upload_cpu_to_gpu.
 //
 // See Also
 // --------
@@ -333,11 +333,11 @@ public:
     Device device() const noexcept override { return Device::GPU; }
 
     // ── Construction / cross-device ────────────────────────────────────────
-    // Upload a CPU storage to GPU-private memory.
+    // Upload a CPU storage to an MLX-owned Metal shared-mode buffer.
     //
-    // Delegates to :func:`gpu::upload_cpu_to_gpu`, which uses
-    // ``mlx::core::copy`` to obtain a fresh GPU-private allocation
-    // (the raw CPU pointer cannot be aliased on Metal).
+    // Delegates to :func:`gpu::upload_cpu_to_gpu`, which copies into a fresh
+    // MLX-allocated buffer (Metal shared-mode unified memory, CPU-readable
+    // once evaluated; the source CPU block is not retained).
     //
     // Parameters
     // ----------

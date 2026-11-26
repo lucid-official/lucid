@@ -14,8 +14,8 @@
 //
 // Note on wrap_existing: uses newBufferWithBytesNoCopy which requires the
 // memory to be page-aligned and at least page-size bytes.  Use this only for
-// MTLResourceStorageModeShared buffers you already own; MLX GPU-private arrays
-// are NOT page-aligned and must not be passed here.
+// MTLResourceStorageModeShared buffers you already own; MLX-managed arrays
+// are NOT guaranteed to be page-aligned and must not be passed here.
 
 #pragma once
 
@@ -135,9 +135,9 @@ void deallocate_shared(MetalBuffer& buf) noexcept;
 //
 // Warns
 // -----
-// Do **not** pass MLX GPU-private array data here — MLX arrays are
-// not page-aligned and ``newBufferWithBytesNoCopy:`` will silently
-// produce undefined behaviour.
+// Do **not** pass MLX-managed array data here — MLX buffers are not
+// guaranteed to be page-aligned and ``newBufferWithBytesNoCopy:`` will
+// silently produce undefined behaviour.
 //
 // See Also
 // --------
