@@ -486,6 +486,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Swin zero-pads the right and bottom of an image whose side is not a multiple of `patch_size`, as the reference does, instead of dropping the border: a 35x35 input now sees 9x9 patches, not the 8x8 of its 32x32 crop. Inputs that are already a multiple are bit-identical to before. The Mask2Former Swin backbone shares the same padding helper (LCD-1115).
 
+- guard empty extents and 0-d inputs in layout kernels
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

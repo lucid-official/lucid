@@ -608,7 +608,7 @@ std::pair<Storage, Storage> CpuBackend::expand_and_multiply(const Storage& mask,
             ErrorBuilder("cpu_backend::expand_and_multiply").not_implemented("dtype not supported");
         }
     } else {
-        const std::size_t per = numel / B_sz;
+        const std::size_t per = detail::safe_extent_div(numel, B_sz);
         if (dt == Dtype::F32) {
             const float* mp = reinterpret_cast<const float*>(m_cpu.ptr.get());
             const float* xp = reinterpret_cast<const float*>(x_cpu.ptr.get());

@@ -346,6 +346,8 @@ Storage GpuBackend::pad(const Storage& a,
                         const std::vector<std::pair<std::int64_t, std::int64_t>>& pad_width,
                         double constant) {
     const auto& gs = std::get<GpuStorage>(a);
+    if (pad_width.empty())
+        return Storage{gpu::wrap_mlx_array(::mlx::core::copy(*gs.arr), dt)};
     std::vector<std::pair<int, int>> mlx_pad;
     mlx_pad.reserve(pad_width.size());
     for (const auto& [lo, hi] : pad_width)

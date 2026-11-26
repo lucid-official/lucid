@@ -18,8 +18,9 @@ Storage CpuBackend::reverse_along_axis(const Storage& a, const Shape& shape, int
     const std::size_t L = static_cast<std::size_t>(shape[static_cast<std::size_t>(axis)]);
     for (std::size_t o = 0; o < outer; ++o) {
         for (std::size_t k = 0; k < L; ++k) {
-            std::memcpy(ptr.get() + ((o * L + k) * inner) * elem,
-                        cs.ptr.get() + ((o * L + (L - 1 - k)) * inner) * elem, inner * elem);
+            detail::copy_bytes_if_nonempty(
+                offset_or_null(ptr.get(), ((o * L + k) * inner) * elem),
+                offset_or_null(cs.ptr.get(), ((o * L + (L - 1 - k)) * inner) * elem), inner * elem);
         }
     }
     return Storage{CpuStorage{ptr, cs.nbytes, dt}};
@@ -301,11 +302,10 @@ Storage CpuBackend::slice_axis(const Storage& a,
         static_cast<std::size_t>(slice_shape[static_cast<std::size_t>(axis)]);
     const std::size_t copy_bytes = slice_axis * inner_bytes;
     for (std::size_t o = 0; o < outer; ++o) {
-        const auto* src_ptr =
-            as.ptr.get() + (o * src_axis + static_cast<std::size_t>(offset)) * inner_bytes;
-        auto* dst_ptr = ptr.get() + o * copy_bytes;
-        if (copy_bytes > 0)
-            std::memcpy(dst_ptr, src_ptr, copy_bytes);
+        const auto* src_ptr = offset_or_null(
+            as.ptr.get(), (o * src_axis + static_cast<std::size_t>(offset)) * inner_bytes);
+        auto* dst_ptr = offset_or_null(ptr.get(), o * copy_bytes);
+        detail::copy_bytes_if_nonempty(dst_ptr, src_ptr, copy_bytes);
     }
     return Storage{CpuStorage{ptr, out_nbytes, dt}};
 }
@@ -319,7 +319,7 @@ Storage CpuBackend::insert_axis_slice(const Storage& a,
     const auto& as = std::get<CpuStorage>(a);
     std::size_t out_nbytes = shape_numel(dst_shape) * dtype_size(dt);
     auto ptr = allocate_aligned_bytes(out_nbytes, Device::CPU);
-    std::memset(ptr.get(), 0, out_nbytes);
+    detail::zero_bytes(ptr.get(), out_nbytes);
     const std::size_t elem = dtype_size(dt);
     std::size_t outer = 1;
     for (int d = 0; d < axis; ++d)
@@ -333,10 +333,10 @@ Storage CpuBackend::insert_axis_slice(const Storage& a,
         static_cast<std::size_t>(src_shape[static_cast<std::size_t>(axis)]);
     const std::size_t copy_bytes = src_axis * inner_bytes;
     for (std::size_t o = 0; o < outer; ++o) {
-        const auto* src_ptr = as.ptr.get() + o * copy_bytes;
-        auto* dst_ptr = ptr.get() + (o * dst_axis + static_cast<std::size_t>(offset)) * inner_bytes;
-        if (copy_bytes > 0)
-            std::memcpy(dst_ptr, src_ptr, copy_bytes);
+        const auto* src_ptr = offset_or_null(as.ptr.get(), o * copy_bytes);
+        auto* dst_ptr = offset_or_null(
+            ptr.get(), (o * dst_axis + static_cast<std::size_t>(offset)) * inner_bytes);
+        detail::copy_bytes_if_nonempty(dst_ptr, src_ptr, copy_bytes);
     }
     return Storage{CpuStorage{ptr, out_nbytes, dt}};
 }
@@ -368,8 +368,8 @@ Storage CpuBackend::concatenate(const std::vector<Storage>& xs,
             const std::size_t L =
                 static_cast<std::size_t>(shapes[i][static_cast<std::size_t>(axis)]);
             const std::size_t bytes = L * inner_per_unit;
-            std::memcpy(dst, cs.ptr.get() + o * bytes, bytes);
-            dst += bytes;
+            detail::copy_bytes_if_nonempty(dst, offset_or_null(cs.ptr.get(), o * bytes), bytes);
+            dst = offset_or_null(dst, bytes);
         }
     }
     return Storage{CpuStorage{ptr, out_nbytes, dt}};
@@ -392,8 +392,9 @@ CpuBackend::stack(const std::vector<Storage>& xs, const Shape& input_shape, int 
     for (std::size_t idx = 0; idx < xs.size(); ++idx) {
         const auto& cs = std::get<CpuStorage>(xs[idx]);
         for (std::size_t o = 0; o < outer; ++o) {
-            std::memcpy(ptr.get() + o * block_bytes + idx * inner_bytes,
-                        cs.ptr.get() + o * inner_bytes, inner_bytes);
+            detail::copy_bytes_if_nonempty(
+                offset_or_null(ptr.get(), o * block_bytes + idx * inner_bytes),
+                offset_or_null(cs.ptr.get(), o * inner_bytes), inner_bytes);
         }
     }
     return Storage{CpuStorage{ptr, out_nbytes, dt}};
@@ -449,7 +450,7 @@ Storage CpuBackend::repeat_backward(const Storage& grad_out,
     const auto& g = std::get<CpuStorage>(grad_out);
     std::size_t out_nbytes = shape_numel(input_shape) * dtype_size(dt);
     auto ptr = allocate_aligned_bytes(out_nbytes, Device::CPU);
-    std::memset(ptr.get(), 0, out_nbytes);
+    detail::zero_bytes(ptr.get(), out_nbytes);
 
     const std::size_t ndim = output_shape.size();
     Stride out_stride(ndim), in_stride(ndim);
@@ -548,7 +549,7 @@ Storage CpuBackend::tile_backward(const Storage& grad_out,
     const auto& g = std::get<CpuStorage>(grad_out);
     std::size_t out_nbytes = shape_numel(input_shape) * dtype_size(dt);
     auto ptr = allocate_aligned_bytes(out_nbytes, Device::CPU);
-    std::memset(ptr.get(), 0, out_nbytes);
+    detail::zero_bytes(ptr.get(), out_nbytes);
 
     const std::size_t ndim = output_shape.size();
     Stride out_stride(ndim), padded_stride(ndim);
@@ -792,10 +793,10 @@ CpuBackend::repeat(const Storage& a, const Shape& shape, Dtype dt, std::int64_t 
     auto* dst = ptr.get();
     for (std::size_t o = 0; o < outer; ++o) {
         for (std::size_t k = 0; k < L; ++k) {
-            const auto* src = cs.ptr.get() + (o * L + k) * inner;
+            const auto* src = offset_or_null(cs.ptr.get(), (o * L + k) * inner);
             for (std::int64_t r = 0; r < repeats; ++r) {
-                std::memcpy(dst, src, inner);
-                dst += inner;
+                detail::copy_bytes_if_nonempty(dst, src, inner);
+                dst = offset_or_null(dst, inner);
             }
         }
     }
@@ -879,40 +880,7 @@ Storage CpuBackend::pad(const Storage& a,
     std::size_t nb = shape_numel(out_shape) * dtype_size(dt);
     auto ptr = allocate_aligned_bytes(nb, Device::CPU);
     detail::fill_pad_buffer(ptr.get(), nb, shape_numel(out_shape), dt, constant);
-
-    const std::size_t elem = dtype_size(dt);
-    Stride in_stride(ndim), out_stride(ndim);
-    if (ndim > 0) {
-        in_stride.back() = 1;
-        out_stride.back() = 1;
-        for (std::ptrdiff_t d = static_cast<std::ptrdiff_t>(ndim) - 2; d >= 0; --d) {
-            in_stride[static_cast<std::size_t>(d)] =
-                in_stride[static_cast<std::size_t>(d) + 1] * shape[static_cast<std::size_t>(d) + 1];
-            out_stride[static_cast<std::size_t>(d)] = out_stride[static_cast<std::size_t>(d) + 1] *
-                                                      out_shape[static_cast<std::size_t>(d) + 1];
-        }
-    }
-    const std::size_t row_in = static_cast<std::size_t>(shape.back());
-    const std::size_t row_bytes = row_in * elem;
-    const std::size_t in_numel = shape_numel(shape);
-    const std::size_t rows = in_numel / row_in;
-
-    std::vector<std::int64_t> coord(ndim - 1, 0);
-    for (std::size_t r = 0; r < rows; ++r) {
-        std::size_t out_off = static_cast<std::size_t>(pad_width.back().first);
-        for (std::size_t d = 0; d + 1 < ndim; ++d)
-            out_off += static_cast<std::size_t>(coord[d] + pad_width[d].first) *
-                       static_cast<std::size_t>(out_stride[d]);
-        std::size_t in_off = 0;
-        for (std::size_t d = 0; d + 1 < ndim; ++d)
-            in_off += static_cast<std::size_t>(coord[d]) * static_cast<std::size_t>(in_stride[d]);
-        std::memcpy(ptr.get() + out_off * elem, cs.ptr.get() + in_off * elem, row_bytes);
-        for (std::ptrdiff_t d = static_cast<std::ptrdiff_t>(ndim) - 2; d >= 0; --d) {
-            if (++coord[static_cast<std::size_t>(d)] < shape[static_cast<std::size_t>(d)])
-                break;
-            coord[static_cast<std::size_t>(d)] = 0;
-        }
-    }
+    detail::copy_pad_interior(ptr.get(), cs.ptr.get(), shape, out_shape, pad_width, dtype_size(dt));
     return Storage{CpuStorage{ptr, nb, dt}};
 }
 

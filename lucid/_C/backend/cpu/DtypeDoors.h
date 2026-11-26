@@ -22,6 +22,7 @@
 #include "../../core/Allocator.h"
 #include "../../core/ErrorBuilder.h"
 #include "../../core/Half.h"
+#include "../../core/PointerOffset.h"
 #include "../../core/Shape.h"
 #include "../IBackend.h"
 #include "Parallel.h"
@@ -710,6 +711,8 @@ inline void fill_pad_typed(void* raw, std::size_t n, double value) {
 
 inline void
 fill_pad_buffer(void* ptr, std::size_t nb, std::size_t out_numel, Dtype dt, double constant) {
+    if (nb == 0 || out_numel == 0)
+        return;
     if (constant == 0.0) {
         std::memset(ptr, 0, nb);
         return;
@@ -738,6 +741,73 @@ fill_pad_buffer(void* ptr, std::size_t nb, std::size_t out_numel, Dtype dt, doub
         break;
     default:
         ErrorBuilder("cpu_backend::pad").not_implemented("dtype not supported");
+    }
+}
+
+// Null-safe zero-byte wrappers: an empty CPU tensor holds a null buffer, and
+// passing nullptr to std::memset / std::memcpy is undefined behaviour even
+// when count == 0.
+inline void zero_bytes(void* dst, std::size_t nb) noexcept {
+    if (nb > 0)
+        std::memset(dst, 0, nb);
+}
+
+inline void copy_bytes_if_nonempty(void* dst, const void* src, std::size_t nb) noexcept {
+    if (nb > 0)
+        std::memcpy(dst, src, nb);
+}
+
+inline std::size_t safe_extent_div(std::size_t num, std::size_t den) noexcept {
+    return den == 0 ? 0 : num / den;
+}
+
+// Copy an input tensor into the interior of a pre-filled pad output buffer.
+// Empty inputs return at once (fill-only path, avoiding in_numel / 0 when the
+// trailing extent is zero); 0-d inputs copy their single element directly.
+inline void copy_pad_interior(std::byte* dst,
+                              const std::byte* src,
+                              const Shape& shape,
+                              const Shape& out_shape,
+                              const std::vector<std::pair<std::int64_t, std::int64_t>>& pad_width,
+                              std::size_t elem) {
+    const std::size_t in_numel = shape_numel(shape);
+    if (in_numel == 0)
+        return;
+    const std::size_t ndim = shape.size();
+    if (ndim == 0) {
+        copy_bytes_if_nonempty(dst, src, elem);
+        return;
+    }
+
+    Stride in_stride(ndim), out_stride(ndim);
+    in_stride.back() = 1;
+    out_stride.back() = 1;
+    for (std::ptrdiff_t d = static_cast<std::ptrdiff_t>(ndim) - 2; d >= 0; --d) {
+        in_stride[static_cast<std::size_t>(d)] =
+            in_stride[static_cast<std::size_t>(d) + 1] * shape[static_cast<std::size_t>(d) + 1];
+        out_stride[static_cast<std::size_t>(d)] = out_stride[static_cast<std::size_t>(d) + 1] *
+                                                  out_shape[static_cast<std::size_t>(d) + 1];
+    }
+
+    const std::size_t row_in = static_cast<std::size_t>(shape.back());
+    const std::size_t row_bytes = row_in * elem;
+    const std::size_t rows = in_numel / row_in;
+
+    std::vector<std::int64_t> coord(ndim - 1, 0);
+    for (std::size_t r = 0; r < rows; ++r) {
+        std::size_t out_off = static_cast<std::size_t>(pad_width.back().first);
+        for (std::size_t d = 0; d + 1 < ndim; ++d)
+            out_off += static_cast<std::size_t>(coord[d] + pad_width[d].first) *
+                       static_cast<std::size_t>(out_stride[d]);
+        std::size_t in_off = 0;
+        for (std::size_t d = 0; d + 1 < ndim; ++d)
+            in_off += static_cast<std::size_t>(coord[d]) * static_cast<std::size_t>(in_stride[d]);
+        std::memcpy(dst + out_off * elem, src + in_off * elem, row_bytes);
+        for (std::ptrdiff_t d = static_cast<std::ptrdiff_t>(ndim) - 2; d >= 0; --d) {
+            if (++coord[static_cast<std::size_t>(d)] < shape[static_cast<std::size_t>(d)])
+                break;
+            coord[static_cast<std::size_t>(d)] = 0;
+        }
     }
 }
 

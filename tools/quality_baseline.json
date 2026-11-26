@@ -1180,7 +1180,7 @@
     "lucid/_C/backend/cpu/methods/Conv.cpp": 20,
     "lucid/_C/backend/cpu/methods/Factory.cpp": 1,
     "lucid/_C/backend/cpu/methods/Indexing.cpp": 2,
-    "lucid/_C/backend/cpu/methods/Layout.cpp": 19,
+    "lucid/_C/backend/cpu/methods/Layout.cpp": 18,
     "lucid/_C/backend/cpu/methods/Linalg.cpp": 2,
     "lucid/_C/backend/cpu/methods/Loss.cpp": 7,
     "lucid/_C/backend/cpu/methods/Matmul.cpp": 1,
