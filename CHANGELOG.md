@@ -663,6 +663,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Tooling
 
+- Extract CI crash-report parsing into `tools/ci_crash_report.py` (with unit tests in `lucid/test/unit/test_ci_crash_report.py`) and wire it into `phase-gate` in `.github/workflows/ci.yml`: always print hex `imageOffset` alongside symbol names, print the main thread's top 15 frames when a non-main thread faults, and upload every `.ips` written during the job as a 7-day CI artifact on failure (LCD-1022).
 - record that 1055fa3b9 moves no binary interface
 
 - The footprint tests in `test_cache_memory.py` no longer fail about half the time on a loaded machine. The cache did evict; Metal returned the memory of the released executables 2–13 s later, after the tests' fixed 3 s sleep. They now wait until the release the assertion needs has arrived, against the lowest footprint seen, with the threshold unchanged and larger graphs (LCD-1112).
