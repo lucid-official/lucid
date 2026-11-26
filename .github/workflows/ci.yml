@@ -65,6 +65,8 @@ jobs:
 
       - name: Enforce Apple Silicon runner
         run: |
+          mkdir -p build
+          touch build/.ci-start-marker
           python - <<'PY'
           import platform
 
@@ -123,37 +125,34 @@ jobs:
       - name: Run the gate's ${{ matrix.part }} part
         run: ./scripts/ci_full.sh "${{ matrix.part }}"
 
-      # A test that dies by signal inside Core ML leaves no Python traceback,
-      # and pytest's capture discards whatever the framework printed along
-      # with the process. macOS still writes a crash report; the crashed
-      # thread's frames are the only account of where the trap came from.
+      # A test that dies by signal inside Core ML or the C++ engine leaves no
+      # Python traceback, and pytest's capture discards whatever the framework
+      # printed along with the process. macOS still writes .ips crash reports;
+      # print the faulting thread with imageOffset plus the main thread's top
+      # frames (to surface exit-time teardown races such as LCD-1019) and
+      # stage every .ips written during this job for upload (LCD-1022).
       - name: Crash report (on failure)
+        id: crash-report
         if: failure()
+        continue-on-error: true
         run: |
-          for _ in 1 2 3 4 5 6; do
-            f=$(ls -t ~/Library/Logs/DiagnosticReports/*.ips /Library/Logs/DiagnosticReports/*.ips 2>/dev/null | head -1)
-            [ -n "$f" ] && break
-            sleep 5
-          done
-          if [ -z "$f" ]; then echo "no crash report was written"; exit 0; fi
-          echo "== $f"
-          python - "$f" <<'PY' || head -120 "$f"
-          import json, sys
-          header, _, body = open(sys.argv[1]).read().partition("\n")
-          report = json.loads(body)
-          print("process:", json.loads(header).get("app_name"), "|", report.get("exception"))
-          images = report.get("usedImages", [])
-          threads = report.get("threads")
-          if not threads:
-              # A JetsamEvent or similar: a report, but not of a crash.
-              print("not a crash report — no threads to unwind")
-              sys.exit(0)
-          thread = threads[report.get("faultingThread", 0)]
-          for frame in thread.get("frames", [])[:30]:
-              index = frame.get("imageIndex")
-              image = images[index].get("name", "?") if index is not None and index < len(images) else "?"
-              print(f"  {image:36s} {frame.get('symbol', hex(frame.get('imageOffset', 0)))}")
-          PY
+          if [ ! -f tools/ci_crash_report.py ] || ! command -v python >/dev/null 2>&1; then
+            echo "crash report helper unavailable (failure occurred before checkout/python setup)"
+            exit 0
+          fi
+          safe_part=$(printf '%s' "${{ matrix.part }}" | tr ':/ ' '---')
+          echo "artifact=crash-reports-${safe_part}-${{ github.run_id }}-${{ github.run_attempt }}" >> "$GITHUB_OUTPUT"
+          python tools/ci_crash_report.py \
+            --since build/.ci-start-marker \
+            --copy-to build/crash-reports
+
+      - uses: actions/upload-artifact@v4
+        if: failure() && steps.crash-report.outputs.artifact != ''
+        with:
+          name: ${{ steps.crash-report.outputs.artifact }}
+          path: build/crash-reports/*.ips
+          if-no-files-found: ignore
+          retention-days: 7
 
       # The checks part's publish gate (`scripts/ci_publish.sh`) already
       # builds + verifies the wheel into `dist/`, so we just upload it here.
