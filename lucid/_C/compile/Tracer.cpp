@@ -16,6 +16,7 @@
 #include "Tracer.h"
 
 #include <algorithm>
+#include <exception>
 #include <set>
 
 #include "../autograd/Node.h"
@@ -23,6 +24,7 @@
 #include "../backend/Dispatcher.h"
 #include "../core/GradMode.h"
 #include "../core/OffThread.h"
+#include "../core/Profiler.h"
 #include "../core/StridedCopy.h"
 #include "../core/TensorImpl.h"
 
@@ -32,6 +34,17 @@ namespace {
 // Per-thread active Tracer.  nullptr means "no tracing" for this thread —
 // the OpScopeFull hook does nothing.
 thread_local Tracer* g_current = nullptr;
+
+// Tracks an open OpScopeFull that appended a pending node into a Tracer on
+// this thread.  If the scope unwinds via exception before on_op_io wires that
+// node, on_scope_exit pops it so a refused op leaves no dangling placeholder.
+struct PendingScope {
+    const void* scope;
+    Tracer* tracer;
+    TensorId out_id;
+    int uncaught;
+};
+thread_local std::vector<PendingScope> g_pending_scopes;
 
 // A copy of ``impl``'s current values, owned by no one else.
 TensorImplPtr snapshot(const TensorImplPtr& impl) {
@@ -103,6 +116,12 @@ Tracer::Tracer() : first_node_(next_sequence_nr()) {}
 
 Tracer::~Tracer() {
     set_refuse_off_thread_values(false);
+    g_pending_scopes.erase(
+        std::remove_if(g_pending_scopes.begin(), g_pending_scopes.end(),
+                       [this](const PendingScope& entry) { return entry.tracer == this; }),
+        g_pending_scopes.end());
+    if (g_pending_scopes.empty())
+        lucid::detail::set_op_scope_exit_hook(nullptr);
 }
 
 void Tracer::set_refuse_off_thread_values(bool on) {
@@ -1081,5 +1100,71 @@ void Tracer::commit_vjp_region(std::size_t fwd_begin,
     }
     graph_.vjp_regions.push_back(std::move(region));
 }
+
+namespace detail {
+
+struct ScopeAccess {
+    static void abort_unwired(Tracer& trc, TensorId out_id) noexcept {
+        auto& ops = trc.graph_.ops;
+        for (auto it = ops.end(); it != ops.begin();) {
+            --it;
+            if (it->outputs.size() != 1 || it->outputs[0].id != out_id)
+                continue;
+            if (!it->inputs.empty())
+                return;
+            for (const auto& kv : trc.impl_to_id_) {
+                if (kv.second == out_id)
+                    return;
+            }
+            if (it + 1 == ops.end())
+                ops.pop_back();
+            else
+                ops.erase(it);
+            if (out_id + 1 == trc.graph_.next_id)
+                trc.graph_.next_id = out_id;
+            return;
+        }
+    }
+};
+
+namespace {
+
+void on_scope_exit(const OpScope* scope) noexcept {
+    for (auto it = g_pending_scopes.end(); it != g_pending_scopes.begin();) {
+        --it;
+        if (it->scope != scope)
+            continue;
+        const PendingScope entry = *it;
+        if (it + 1 == g_pending_scopes.end())
+            g_pending_scopes.pop_back();
+        else
+            g_pending_scopes.erase(it);
+        if (g_pending_scopes.empty())
+            lucid::detail::set_op_scope_exit_hook(nullptr);
+        if (std::uncaught_exceptions() > entry.uncaught)
+            ScopeAccess::abort_unwired(*entry.tracer, entry.out_id);
+        return;
+    }
+}
+
+}  // namespace
+
+void on_scope_enter(const void* scope,
+                    Tracer* tracer,
+                    std::string_view name,
+                    Device device,
+                    Dtype dtype,
+                    Shape shape) {
+    g_pending_scopes.reserve(g_pending_scopes.size() + 1);
+    tracer->on_op_enter(name, device, dtype, std::move(shape));
+    const auto& ops = tracer->graph().ops;
+    if (ops.empty() || ops.back().outputs.empty())
+        return;
+    g_pending_scopes.push_back(
+        PendingScope{scope, tracer, ops.back().outputs[0].id, std::uncaught_exceptions()});
+    lucid::detail::set_op_scope_exit_hook(&on_scope_exit);
+}
+
+}  // namespace detail
 
 }  // namespace lucid::compile

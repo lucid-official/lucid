@@ -21,7 +21,17 @@ namespace lucid {
 namespace {
 // Per-thread active Profiler.  nullptr means "no profiling" for this thread.
 thread_local Profiler* g_current = nullptr;
+// Per-thread exit hook for active traced OpScopeFull frames.
+thread_local detail::OpScopeExitHook g_exit_hook = nullptr;
 }  // namespace
+
+namespace detail {
+
+void set_op_scope_exit_hook(OpScopeExitHook fn) noexcept {
+    g_exit_hook = fn;
+}
+
+}  // namespace detail
 
 Profiler* current_profiler() {
     return g_current;
@@ -78,6 +88,8 @@ OpScope::OpScope(std::string_view name, Device device, Dtype dtype, Shape shape)
 
 // Finalises timing and memory fields and forwards the event to the Profiler.
 OpScope::~OpScope() {
+    if (g_exit_hook)
+        g_exit_hook(this);
     if (!sink_)
         return;
     const auto now = std::chrono::steady_clock::now();

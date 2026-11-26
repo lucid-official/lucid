@@ -118,9 +118,10 @@ public:
         // 3.5 Phase 1.1: lucid.compile() tracer hook.  Outside any _tracing()
         // scope this is a single TLS load + null check (zero allocations,
         // no shape copy beyond the one OpScope already needs).  Inside one,
-        // the op's entry feeds the active TraceGraph.  See compile/Tracer.h.
+        // the op's entry feeds the active TraceGraph, and unwinding on an
+        // exception before on_op_io pops the pending node.  See compile/Tracer.h.
         if (auto* t = lucid::compile::current_tracer()) {
-            t->on_op_enter(name, device, dtype, std::move(shape));
+            lucid::compile::detail::on_scope_enter(&op_, t, name, device, dtype, std::move(shape));
         }
     }
 

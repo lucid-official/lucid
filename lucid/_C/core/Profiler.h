@@ -373,4 +373,15 @@ private:
     std::size_t start_memory_bytes_;
 };
 
+namespace detail {
+
+// Internal per-thread exit hook invoked at the start of
+// :func:`OpScope::~OpScope` before profiler recording.  Installed by
+// :class:`compile::Tracer` while an :class:`OpScopeFull` has a pending trace
+// node so an exception unwind pops it without a ``core/ -> compile/`` include.
+using OpScopeExitHook = void (*)(const OpScope*) noexcept;
+void set_op_scope_exit_hook(OpScopeExitHook fn) noexcept;
+
+}  // namespace detail
+
 }  // namespace lucid

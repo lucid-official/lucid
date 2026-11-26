@@ -61,6 +61,10 @@
 
 namespace lucid::compile {
 
+namespace detail {
+struct ScopeAccess;
+}  // namespace detail
+
 // Thread-local op recorder consumed by :class:`OpScopeFull`.
 //
 // Constructing a Tracer is cheap — the underlying :class:`TraceGraph`
@@ -551,6 +555,8 @@ public:
                            std::size_t bwd_begin);
 
 private:
+    friend struct detail::ScopeAccess;
+
     // ``on_op_io`` for an op the recording keeps.
     void record_io(const std::vector<TensorImplPtr>& inputs, const TensorImplPtr& output);
     // With folding on, whether this ``on_op_io`` call is absorbed: every
@@ -838,5 +844,19 @@ inline void traced_literal(const TensorImplPtr& out) {
     if (auto* trc = current_tracer())
         trc->on_literal(out);
 }
+
+namespace detail {
+
+// Records an entering :class:`OpScopeFull` on ``tracer`` and tracks ``scope``
+// so an exception unwind before :func:`Tracer::on_op_io` pops its pending
+// placeholder node.
+void on_scope_enter(const void* scope,
+                    Tracer* tracer,
+                    std::string_view name,
+                    Device device,
+                    Dtype dtype,
+                    Shape shape);
+
+}  // namespace detail
 
 }  // namespace lucid::compile

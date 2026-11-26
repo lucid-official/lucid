@@ -493,6 +493,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - coerce integer tensor args via _as_int (LCD-1064)
 
+- pop dangling trace node on OpScopeFull unwind (LCD-1045)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call
