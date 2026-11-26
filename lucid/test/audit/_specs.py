@@ -62,6 +62,15 @@ def _rebuild(original: Any, array: Any, *, keep_integer: bool = False) -> Any:
         return lucid.tensor(np.asarray(array, dtype=bool), dtype=lucid.bool)
     if keep_integer and "int" in text:
         return _probe.tensor_of(np.asarray(array, dtype=np.int64), dtype)
+    if keep_integer and (
+        (isinstance(original, int) and not isinstance(original, bool))
+        or (
+            isinstance(original, (tuple, list))
+            and bool(original)
+            and all(isinstance(v, int) and not isinstance(v, bool) for v in original)
+        )
+    ):
+        return _probe.tensor_of(np.asarray(array, dtype=np.int64), lucid.int64)
     return _probe.as_f64(array)
 
 

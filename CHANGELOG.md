@@ -490,6 +490,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Remaining vision, multimodal, and generative model configs now refuse negative counts, zero widths, and non-divisible attention heads at construction via the shared helpers in `lucid.models._utils._common`: `DETRConfig`, `MaskFormerConfig`, and `Mask2FormerConfig` check `d_model % n_head` and `num_queries > 0`; `FasterRCNNConfig`, `MaskRCNNConfig`, `FastRCNNConfig`, and `RCNNConfig` validate RPN/RoI counts (sharing `vision/_common/_rcnn.validate_fpn_rcnn_config` while keeping `context_pad=0` and `roi_sampling_ratio=0` accepted); and `CLIPConfig`, `ScoreSDEConfig`, `StableDiffusionConfig`, `DIAMONDConfig`, and `check_patch_grid` refuse negative/zero depths, widths, and divisors (LCD-1118).
 
+- coerce integer tensor args via _as_int (LCD-1064)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

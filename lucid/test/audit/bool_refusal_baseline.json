@@ -68,11 +68,6 @@
       "owner": "out-of-batch",
       "reason": "NotImplementedError('expected real floating'); the reference raises a RuntimeError"
     },
-    "lucid.eye": {
-      "kind": "over-accept",
-      "owner": "probe-artifact",
-      "reason": "the probe rebuilds a size or range argument (eye's n, randint's low) as a bool tensor; it is not an operand"
-    },
     "lucid.linalg.cholesky": {
       "kind": "class",
       "owner": "out-of-batch",
@@ -142,11 +137,6 @@
       "kind": "class",
       "owner": "out-of-batch",
       "reason": "the factorisation raises NotImplementedError('only F32/F64'); the reference raises a plain RuntimeError for a bool"
-    },
-    "lucid.randint": {
-      "kind": "over-accept",
-      "owner": "probe-artifact",
-      "reason": "the probe rebuilds a size or range argument (eye's n, randint's low) as a bool tensor; it is not an operand"
     },
     "lucid.topk": {
       "kind": "class",

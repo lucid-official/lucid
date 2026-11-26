@@ -59,11 +59,6 @@
       "reason": "Lucid refuses every integer max_pool1d form; the reference refuses max_pool1d at integer widths yet answers max_pool1d_with_indices",
       "cpu": {"int8": "over-refuse", "int16": "over-refuse", "int32": "over-refuse", "int64": "over-refuse"},
       "metal": {"int8": "over-refuse", "int16": "over-refuse", "int32": "over-refuse", "int64": "over-refuse"}
-    },
-    "lucid.randperm": {
-      "reason": "the probe hands n as an integer tensor: the reference accepts it, Lucid refuses int8/16/32 with a misleading InvalidArgument (\"n=7 is too large for lucid.int64\") while int64 works -- a probe-shaped case, found rather than designed",
-      "cpu": {"int8": "over-refuse", "int16": "over-refuse", "int32": "over-refuse"},
-      "metal": {"int8": "over-refuse", "int16": "over-refuse", "int32": "over-refuse"}
     }
   }
 }

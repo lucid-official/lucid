@@ -24,6 +24,7 @@ from enum import Enum, auto
 from typing import SupportsIndex
 
 from lucid import _promotion
+from lucid._C import engine as _C_engine
 
 
 class SlotKind(Enum):
@@ -60,8 +61,19 @@ def is_int(value: object) -> bool:
     """An integer — anything that indexes, but a bool is a flag, not a count.
 
     The check behind an integer :class:`Slot` such as ``randint``'s ``high``.
+    Single-element integer and bool tensors pass so the factory's ``_as_int``
+    coerces integers and refuses bool tensors with ``RuntimeError`` (matching
+    the reference), while floating, complex, or multi-element tensors miss the
+    overload and raise ``TypeError``.
     """
-    return isinstance(value, SupportsIndex) and not isinstance(value, bool)
+    if isinstance(value, bool):
+        return False
+    impl = _promotion.try_unwrap(value)
+    if impl is not None:
+        return impl.numel() == 1 and (
+            _promotion.is_integer(impl.dtype) or impl.dtype == _C_engine.Bool
+        )
+    return isinstance(value, SupportsIndex)
 
 
 def is_extent(value: object) -> bool:

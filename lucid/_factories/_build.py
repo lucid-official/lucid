@@ -19,8 +19,10 @@ Pure Python + the engine: no external imports (H4).
 
 import functools
 import math
+import operator
 import struct
 from collections.abc import Sequence, Set
+from typing import SupportsIndex
 
 from lucid import _promotion
 from lucid._C import engine as _C_engine
@@ -100,6 +102,44 @@ def _is_scalar_leaf(value: object) -> bool:
     if _is_numpy_scalar(value):
         return str(getattr(value, "dtype", "")) in _NUMPY_SCALAR_DTYPE
     return isinstance(value, _PY_SCALAR_TYPES)
+
+
+def _as_int(op: str, name: str, value: object) -> int:
+    r"""Coerce a factory count, bound, or dimension ``value`` to a plain Python ``int``.
+
+    Single owner for every factory that accepts an integer argument (which may
+    arrive as a Python ``int``, a NumPy integer scalar, or a single-element
+    integer tensor of any width, ``int8`` through ``int64``).  Extracting to a
+    Python ``int`` before bounds checks prevents narrow-width tensor arithmetic
+    from wrapping comparisons against 64-bit limits.
+
+    Raises
+    ------
+    TypeError
+        For Python ``bool``, floats, complex values, floating/complex tensors,
+        multi-element tensors, or non-indexable objects.
+    lucid._C.engine.InvalidArgument
+        For a single-element ``bool`` tensor (a ``RuntimeError``, matching the
+        reference's integral-tensor check).
+    """
+    if type(value) is int:
+        return value
+    if isinstance(value, bool):
+        raise TypeError(f"{op}(): argument '{name}' must be int, not bool")
+    impl = _promotion.try_unwrap(value)
+    if impl is not None:
+        if impl.numel() != 1:
+            raise TypeError(f"{op}(): argument '{name}' must be int, not Tensor")
+        if impl.dtype == _D.Bool:
+            raise _C_engine.InvalidArgument(
+                f"{op}(): argument '{name}' must be an integer tensor, not lucid.bool"
+            )
+        if not _promotion.is_integer(impl.dtype):
+            raise TypeError(f"{op}(): argument '{name}' must be int, not Tensor")
+        return int(impl.item())
+    if not isinstance(value, SupportsIndex):
+        raise TypeError(f"{op}(): argument '{name}' must be int, not {type(value).__name__}")
+    return operator.index(value)
 
 
 def _python_scalar(value: object) -> PyScalar:

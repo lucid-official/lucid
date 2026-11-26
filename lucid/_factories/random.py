@@ -4,17 +4,16 @@ the ``*_like`` forms, and the draws behind ``Tensor.normal_`` / ``uniform_``.
 """
 
 import math
-import operator
 import os
 import warnings
 from collections.abc import Callable
-from typing import TYPE_CHECKING, SupportsIndex
+from typing import TYPE_CHECKING
 from lucid._ctx import check_random_allowed as _check_random
 
 from lucid._C import engine as _C_engine
 from lucid._dispatch import normalize_factory_kwargs, _wrap
 from lucid._ops._bool_refusal import refuse
-from lucid._factories._build import _leaf
+from lucid._factories._build import _as_int, _leaf
 from lucid._factories._overloads import (
     Overloads,
     Slot,
@@ -499,7 +498,7 @@ def rand(
     """
     _check_random()
     _dt, _dev, _ = normalize_factory_kwargs(dtype, device)
-    shape = _size_to_list(*size)
+    shape = _size_to_list("rand", *size)
     impl = _C_engine.rand(shape, _dt, _dev, generator)
     return _wrap(_leaf(impl, requires_grad))
 
@@ -587,7 +586,7 @@ def randn(
     """
     _check_random()
     _dt, _dev, _ = normalize_factory_kwargs(dtype, device)
-    shape = _size_to_list(*size)
+    shape = _size_to_list("randn", *size)
     impl = _C_engine.randn(shape, _dt, _dev, generator)
     return _wrap(_leaf(impl, requires_grad))
 
@@ -685,12 +684,14 @@ def randint(
     >>> mask = lucid.randint(0, 2, (3, 4))  # values in {0, 1}
     """
     _check_random()
+    lo, hi = _int_bounds("randint", low, high)
+    shape = _size_to_list("randint", size)
     _dt, _dev, _ = normalize_factory_kwargs(dtype if dtype is not None else int64, device)
-    _require_holds("randint", low, high, _dt, stacklevel=4)  # past the spelling reader
+    _require_holds("randint", lo, hi, _dt, stacklevel=4)  # past the spelling reader
     draw_dt = (
         _C_engine.I64 if _dev == _C_engine.Device.CPU and not _promotion.is_integer(_dt) else _dt
     )
-    impl = _C_engine.randint(list(size), low, high, draw_dt, _dev, generator)
+    impl = _C_engine.randint(shape, lo, hi, draw_dt, _dev, generator)
     return _wrap(_leaf(_C_engine.astype(impl, _dt) if draw_dt != _dt else impl, requires_grad))
 
 
@@ -933,7 +934,7 @@ def normal(
     """
     _check_random()
     _dt, _dev, _ = normalize_factory_kwargs(dtype, device)
-    shape = list(size)
+    shape = _size_to_list("normal", size)
     impl = _C_engine.normal(shape, mean, std, _dt, _dev, generator)
     return _wrap(_leaf(impl, requires_grad))
 
@@ -1077,12 +1078,8 @@ def randn_like(
 
 def _int_bounds(op: str, low: object, high: object) -> tuple[int, int]:
     """``low`` and ``high`` as ints with ``low < high``, or refused under ``op``."""
-    bounds = []
-    for what, bound in (("low", low), ("high", high)):
-        if isinstance(bound, bool) or not isinstance(bound, SupportsIndex):
-            raise TypeError(f"{op}(): {what} must be an int, got {type(bound).__name__}")
-        bounds.append(operator.index(bound))
-    lo, hi = bounds
+    lo = _as_int(op, "low", low)
+    hi = _as_int(op, "high", high)
     if lo >= hi:
         raise _C_engine.InvalidArgument(
             f"{op}(): low must be less than high, got low={lo} >= high={hi}"
@@ -1347,16 +1344,17 @@ def randperm(
     [0]
     """
     _check_random()
-    if n < 0:
+    count = _as_int("randperm", "n", n)
+    if count < 0:
         raise _C_engine.InvalidArgument(
-            f"randperm: Trying to create tensor with negative dimension {n}: [{n}]"
+            f"randperm: Trying to create tensor with negative dimension {count}: [{count}]"
         )
     _dt, _dev, _ = normalize_factory_kwargs(dtype, device)
-    _require_permutable(n, _dt)
-    if n == 0:
+    _require_permutable(count, _dt)
+    if count == 0:
         impl = _C_engine.zeros([0], _dt, _dev)
         return _wrap(_leaf(impl, requires_grad))
-    keys_impl = _C_engine.randint([n], -(2**63), 2**63 - 1, _C_engine.I64, _dev, generator)
+    keys_impl = _C_engine.randint([count], -(2**63), 2**63 - 1, _C_engine.I64, _dev, generator)
     perm_impl = _C_engine.argsort(keys_impl, -1)
     if perm_impl.dtype != _dt:
         perm_impl = _C_engine.astype(perm_impl, _dt)

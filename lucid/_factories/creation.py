@@ -7,18 +7,28 @@ from collections.abc import Sequence
 from typing import TYPE_CHECKING, SupportsFloat
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _default_dtype_enum_cached, normalize_factory_kwargs, _unwrap, _wrap
-from lucid._factories._build import _fill, _leaf, _python_scalar, _scalar_dtype
+from lucid._factories._build import _as_int, _fill, _leaf, _python_scalar, _scalar_dtype
 from lucid._types import DeviceLike, DTypeLike
 
 if TYPE_CHECKING:
     from lucid._tensor.tensor import Tensor
 
 
-def _size_to_list(*size: int | tuple[int, ...]) -> list[int]:
+def _int_sequence(op: str, name: str, value: object) -> tuple[int, ...]:
+    """Coerce a sequence of integer arguments for ``op`` through :func:`_as_int`."""
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
+        raise TypeError(
+            f"{op}(): argument '{name}' must be a sequence of ints, not {type(value).__name__}"
+        )
+    return tuple(_as_int(op, name, item) for item in value)
+
+
+def _size_to_list(op: str, *size: int | Sequence[int]) -> list[int]:
     r"""Normalize size args: zeros(2,3) or zeros((2,3)) → [2, 3]."""
-    if len(size) == 1 and isinstance(size[0], (list, tuple)):
-        return list(size[0])
-    return list(size)  # type: ignore[arg-type]
+    dims: Sequence[object] = (
+        size[0] if len(size) == 1 and isinstance(size[0], (list, tuple)) else size
+    )
+    return [_as_int(op, "size", d) for d in dims]
 
 
 def zeros(
@@ -92,7 +102,7 @@ def zeros(
     ...     acc = acc + lucid.tensor(x) ** 2
     """
     _dt, _dev, _rg = normalize_factory_kwargs(dtype, device, requires_grad)
-    shape = _size_to_list(*size)
+    shape = _size_to_list("zeros", *size)
     impl = _C_engine.zeros(shape, _dt, _dev)
     return _wrap(_leaf(impl, _rg))
 
@@ -162,7 +172,7 @@ def ones(
     [3.0, 7.0]
     """
     _dt, _dev, _rg = normalize_factory_kwargs(dtype, device, requires_grad)
-    shape = _size_to_list(*size)
+    shape = _size_to_list("ones", *size)
     impl = _C_engine.ones(shape, _dt, _dev)
     return _wrap(_leaf(impl, _rg))
 
@@ -233,7 +243,7 @@ def empty(
     [0.0, 1.0, 2.0, 3.0, 4.0]
     """
     _dt, _dev, _rg = normalize_factory_kwargs(dtype, device, requires_grad)
-    shape = _size_to_list(*size)
+    shape = _size_to_list("empty", *size)
     impl = _C_engine.empty(shape, _dt, _dev)
     return _wrap(_leaf(impl, _rg))
 
@@ -273,10 +283,8 @@ def empty_strided(
     >>> (t.shape, t.stride())
     ((2, 3), (3, 1))
     """
-    from lucid._ops._adapters import _integers
-
-    sz = _integers("size", size)
-    st = _integers("stride", stride)
+    sz = _int_sequence("empty_strided", "size", size)
+    st = _int_sequence("empty_strided", "stride", stride)
     if len(sz) != len(st):
         raise RuntimeError(
             f"dimensionality of sizes ({len(sz)}) must match dimensionality of strides ({len(st)})"
@@ -382,7 +390,7 @@ def full(
     val = _python_scalar(fill_value)
     _dt_arg = _scalar_dtype(val, _default_dtype_enum_cached()) if dtype is None else dtype
     _dt, _dev, _rg = normalize_factory_kwargs(_dt_arg, device, requires_grad)
-    shape = list(size) if isinstance(size, (list, tuple)) else [size]
+    shape = _size_to_list("full", size)
     return _wrap(_leaf(_fill(shape, val, _dt, _dev), _rg))
 
 
@@ -465,8 +473,9 @@ def eye(
     tensor(0.)
     """
     _dt, _dev, _rg = normalize_factory_kwargs(dtype, device, requires_grad)
-    _m = m if m is not None else n
-    impl = _C_engine.eye(n, _m, 0, _dt, _dev)
+    rows = _as_int("eye", "n", n)
+    cols = _as_int("eye", "m", m) if m is not None else rows
+    impl = _C_engine.eye(rows, cols, 0, _dt, _dev)
     return _wrap(_leaf(impl, _rg))
 
 
@@ -723,7 +732,8 @@ def linspace(
     [3.0]
     """
     _dt, _dev, _rg = normalize_factory_kwargs(dtype, device, requires_grad)
-    return _wrap(_leaf(_C_engine.linspace(start, end, steps, _dt, _dev), _rg))
+    count = _as_int("linspace", "steps", steps)
+    return _wrap(_leaf(_C_engine.linspace(start, end, count, _dt, _dev), _rg))
 
 
 def zeros_like(
@@ -1108,5 +1118,6 @@ def logspace(
     >>> inv_freq = lucid.logspace(0, -1, d_model // 2, base=10000.0)
     """
     _dt, _dev, _rg = normalize_factory_kwargs(dtype, device, requires_grad)
-    impl = _C_engine.logspace(start, end, steps, base, _dt, _dev)
+    count = _as_int("logspace", "steps", steps)
+    impl = _C_engine.logspace(start, end, count, base, _dt, _dev)
     return _wrap(_leaf(impl, _rg))

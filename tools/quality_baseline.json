@@ -1068,7 +1068,6 @@
    },
    "type-ignore[arg-type]": {
     "lucid/__init__.py": 3,
-    "lucid/_factories/creation.py": 1,
     "lucid/_ops/_adapters.py": 1,
     "lucid/_tensor/_methods.py": 1,
     "lucid/amp/grad_scaler.py": 2,
