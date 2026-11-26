@@ -5,10 +5,8 @@ from typing import ClassVar
 
 from lucid.models._base import ModelConfig
 from lucid.models._meta import model_family_meta
-from lucid.models._utils._common import check_positive, check_residual_layers
-
-# P2-P5 from the FPN plus its max-pooled P6.
-_FPN_LEVELS = 5
+from lucid.models._utils._common import check_positive
+from lucid.models.vision._common._rcnn import validate_fpn_rcnn_config
 
 
 @model_family_meta(
@@ -186,27 +184,9 @@ class FasterRCNNConfig(ModelConfig):
         object.__setattr__(self, "rpn_anchor_sizes", tuple(self.rpn_anchor_sizes))
         object.__setattr__(self, "rpn_anchor_ratios", tuple(self.rpn_anchor_ratios))
         object.__setattr__(self, "bbox_reg_weights", tuple(self.bbox_reg_weights))
-        # The anchor generator pairs these with the FPN outputs level by
-        # level; any other count fails mid-forward as a zip length error.
-        if len(self.rpn_anchor_sizes) != _FPN_LEVELS:
-            raise ValueError(
-                f"{type(self).__name__}: rpn_anchor_sizes holds one anchor size "
-                f"per FPN level and the backbone emits {_FPN_LEVELS} (P2-P6); "
-                f"got {len(self.rpn_anchor_sizes)}: {self.rpn_anchor_sizes}"
-            )
-
-        for name in ("rpn", "roi"):
-            fg = getattr(self, f"{name}_fg_iou_thresh")
-            bg = getattr(self, f"{name}_bg_iou_thresh")
-            if bg > fg:
-                raise ValueError(
-                    f"{name}_bg_iou_thresh ({bg}) must not exceed "
-                    f"{name}_fg_iou_thresh ({fg}); the band between them is "
-                    "the ignore region, and inverting them would make every "
-                    "prediction either a positive or a negative with no "
-                    "ambiguous zone."
-                )
-        owner = type(self).__name__
-        check_positive(owner, num_classes=self.num_classes, in_channels=self.in_channels)
-        check_positive(owner, fpn_out_channels=self.fpn_out_channels)
-        check_residual_layers(owner, backbone_layers=self.backbone_layers)
+        validate_fpn_rcnn_config(self)
+        check_positive(
+            type(self).__name__,
+            roi_size=self.roi_size,
+            roi_representation_size=self.roi_representation_size,
+        )

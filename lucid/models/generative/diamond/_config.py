@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from typing import ClassVar, override
 
 from lucid.models._meta import model_family_meta
+from lucid.models._utils._common import check_non_negative, check_positive
 from lucid.models.generative._common._config import (
     GenerativeModelConfig,
     check_sample_space_channels,
@@ -361,6 +362,7 @@ class DIAMONDConfig(GenerativeModelConfig):
                 f"got upsampling_factor={self.upsampling_factor}"
             )
 
+        owner = type(self).__name__
         stacks: tuple[str, ...] = ("unet", "reward", "actor")
         if self.upsampler_channels is not None:
             stacks += ("upsampler",)
@@ -374,18 +376,18 @@ class DIAMONDConfig(GenerativeModelConfig):
                 )
             if not channels:
                 raise ValueError(f"{name}_channels must name at least one stage")
+            check_positive(owner, **{f"{name}_channels": channels, f"{name}_layers": layers})
+        check_non_negative(owner, attn_depths=self.attn_depths)
         # The U-Net reads one flag per stage; a short tuple failed with an
         # IndexError mid-build and a long one was silently cut.
-        if (
-            self.upsampler_channels is not None
-            and self.upsampler_attn_depths is not None
-            and len(self.upsampler_attn_depths) != len(self.upsampler_channels)
-        ):
-            raise ValueError(
-                f"upsampler_attn_depths names one flag per upsampler resolution, "
-                f"got {len(self.upsampler_attn_depths)} for "
-                f"{len(self.upsampler_channels)} stages"
-            )
+        if self.upsampler_channels is not None and self.upsampler_attn_depths is not None:
+            if len(self.upsampler_attn_depths) != len(self.upsampler_channels):
+                raise ValueError(
+                    f"upsampler_attn_depths names one flag per upsampler resolution, "
+                    f"got {len(self.upsampler_attn_depths)} for "
+                    f"{len(self.upsampler_channels)} stages"
+                )
+            check_non_negative(owner, upsampler_attn_depths=self.upsampler_attn_depths)
 
         self._check_world_model_scalars()
         self._check_agent_scalars()
@@ -406,6 +408,14 @@ class DIAMONDConfig(GenerativeModelConfig):
 
     def _check_world_model_scalars(self) -> None:
         """Refuse a denoiser or reward-model knob outside its domain."""
+        check_positive(
+            type(self).__name__,
+            cond_dim=self.cond_dim,
+            reward_cond_dim=self.reward_cond_dim,
+            reward_lstm_dim=self.reward_lstm_dim,
+            actor_lstm_dim=self.actor_lstm_dim,
+            attention_head_dim=self.attention_head_dim,
+        )
         if self.conditioning_frames < 1:
             raise ValueError(
                 f"conditioning_frames is the history the denoiser sees and "

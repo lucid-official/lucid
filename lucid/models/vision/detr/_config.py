@@ -5,7 +5,12 @@ from typing import ClassVar
 
 from lucid.models._base import ModelConfig
 from lucid.models._meta import model_family_meta
-from lucid.models._utils._common import check_non_negative, check_positive, check_residual_layers
+from lucid.models._utils._common import (
+    check_divisible,
+    check_non_negative,
+    check_positive,
+    check_residual_layers,
+)
 
 
 @model_family_meta(
@@ -145,7 +150,16 @@ class DETRConfig(ModelConfig):
         owner = type(self).__name__
         check_positive(owner, num_classes=self.num_classes, in_channels=self.in_channels)
         # A box MLP of ``n`` layers is ``n`` linears; below one it builds one.
-        check_positive(owner, num_queries=self.num_queries, num_bbox_layers=self.num_bbox_layers)
+        check_positive(
+            owner,
+            num_queries=self.num_queries,
+            num_bbox_layers=self.num_bbox_layers,
+            d_model=self.d_model,
+            n_head=self.n_head,
+            dim_feedforward=self.dim_feedforward,
+            bbox_hidden_dim=self.bbox_hidden_dim,
+        )
+        check_divisible(owner, "d_model", self.d_model, "n_head", self.n_head)
         check_non_negative(
             owner,
             num_encoder_layers=self.num_encoder_layers,

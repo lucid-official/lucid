@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import ClassVar, override
 
 from lucid.models._meta import model_family_meta
+from lucid.models._utils._common import check_non_negative, check_positive
 from lucid.models.generative._common._config import (
     BetaSchedule,
     DiffusionModelConfig,
@@ -210,6 +211,25 @@ class StableDiffusionConfig(DiffusionModelConfig):
         )
         object.__setattr__(self, "vae_block_out_channels", tuple(self.vae_block_out_channels))
         object.__setattr__(self, "unet_block_out_channels", tuple(self.unet_block_out_channels))
+        owner = type(self).__name__
+        if not self.vae_block_out_channels:
+            raise ValueError(f"{owner}: vae_block_out_channels must not be empty")
+        if not self.unet_block_out_channels:
+            raise ValueError(f"{owner}: unet_block_out_channels must not be empty")
+        check_positive(
+            owner,
+            latent_channels=self.latent_channels,
+            downsample_factor=self.downsample_factor,
+            vae_block_out_channels=self.vae_block_out_channels,
+            vae_layers_per_block=self.vae_layers_per_block,
+            unet_block_out_channels=self.unet_block_out_channels,
+            unet_layers_per_block=self.unet_layers_per_block,
+            attention_head_dim=self.attention_head_dim,
+            cross_attention_dim=self.cross_attention_dim,
+            context_length=self.context_length,
+            norm_num_groups=self.norm_num_groups,
+        )
+        check_non_negative(owner, steps_offset=self.steps_offset)
 
         expected = 2 ** (len(self.vae_block_out_channels) - 1)
         if self.downsample_factor != expected:
@@ -221,7 +241,7 @@ class StableDiffusionConfig(DiffusionModelConfig):
             )
         if not isinstance(self.sample_size, int):
             raise TypeError(
-                f"sample_size must be a square int for this family, got " f"{self.sample_size}"
+                f"sample_size must be a square int for this family, got {self.sample_size}"
             )
         if self.sample_size % self.downsample_factor != 0:
             raise ValueError(
@@ -238,8 +258,6 @@ class StableDiffusionConfig(DiffusionModelConfig):
             ("vae_block_out_channels", self.vae_block_out_channels),
             ("unet_block_out_channels", self.unet_block_out_channels),
         ):
-            if not widths:
-                raise ValueError(f"{name} must not be empty")
             bad = [w for w in widths if w % self.norm_num_groups != 0]
             if bad:
                 raise ValueError(
@@ -249,12 +267,9 @@ class StableDiffusionConfig(DiffusionModelConfig):
         _check_unet_widths(self.unet_block_out_channels, self.attention_head_dim)
         if self.beta_schedule not in ("linear", "scaled_linear"):
             raise ValueError(
-                f"beta_schedule must be 'linear' or 'scaled_linear', got " f"{self.beta_schedule!r}"
+                f"beta_schedule must be 'linear' or 'scaled_linear', got {self.beta_schedule!r}"
             )
         if not 0.0 < self.beta_start < self.beta_end < 1.0:
             raise ValueError(
-                f"betas must satisfy 0 < start < end < 1, got "
-                f"{self.beta_start} and {self.beta_end}"
+                f"betas must satisfy 0 < start < end < 1, got {self.beta_start} and {self.beta_end}"
             )
-        if self.context_length < 1:
-            raise ValueError(f"context_length must be positive, got {self.context_length}")

@@ -34,6 +34,12 @@ import pytest
 import lucid.models as models
 from lucid.models._base import ModelConfig
 from lucid.models._registry import _REGISTRY
+from lucid.models.generative.diamond import DIAMONDConfig
+from lucid.models.generative.dit import DiTConfig
+from lucid.models.generative.mean_flow import MeanFlowConfig
+from lucid.models.generative.score_sde import ScoreSDEConfig
+from lucid.models.generative.stable_diffusion import StableDiffusionConfig
+from lucid.models.multimodal.clip import CLIPConfig
 from lucid.models.vision.attention_unet import AttentionUNetConfig
 from lucid.models.vision.coatnet import CoAtNetConfig
 from lucid.models.vision.crossvit import CrossViTConfig
@@ -45,6 +51,7 @@ from lucid.models.vision.detr import DETRConfig
 from lucid.models.vision.efficientdet import EfficientDetConfig
 from lucid.models.vision.efficientformer import EfficientFormerConfig
 from lucid.models.vision.efficientnet import EfficientNetConfig
+from lucid.models.vision.fast_rcnn import FastRCNNConfig
 from lucid.models.vision.faster_rcnn import FasterRCNNConfig
 from lucid.models.vision.fcn import FCNConfig
 from lucid.models.vision.inception_next import InceptionNeXtConfig
@@ -56,6 +63,7 @@ from lucid.models.vision.mobilenet import MobileNetConfig
 from lucid.models.vision.mobilenet_v2 import MobileNetV2Config
 from lucid.models.vision.mobilenet_v3 import MobileNetV3Config
 from lucid.models.vision.pvt import PVTConfig
+from lucid.models.vision.rcnn import RCNNConfig
 from lucid.models.vision.resnest import ResNeStConfig
 from lucid.models.vision.resnet import ResNetConfig
 from lucid.models.vision.resnext import ResNeXtConfig
@@ -265,6 +273,158 @@ _STRUCTURAL: list[tuple[type[ModelConfig], dict[str, Any], str]] = [
     (UNetConfig, {"block": "resnet"}, r"block must be one of \('basic', 'res'\)"),
     (AttentionUNetConfig, {"depth": 0}, r"depth must be positive, got 0"),
     (AttentionUNetConfig, {"spatial_dims": 4}, r"spatial_dims must be one of \(2, 3\), got 4"),
+    # -- DETR / MaskFormer / Mask2Former heads and queries (LCD-1118) ------
+    (DETRConfig, {"d_model": 10, "n_head": 3}, rf"d_model \(10\) {_HEADS} n_head \(3\)"),
+    (DETRConfig, {"d_model": 0}, r"d_model must be positive, got 0"),
+    (DETRConfig, {"n_head": 0}, r"n_head must be positive, got 0"),
+    (MaskFormerConfig, {"d_model": 10, "n_head": 3}, rf"d_model \(10\) {_HEADS} n_head \(3\)"),
+    (MaskFormerConfig, {"n_head": -2}, r"n_head must be positive, got -2"),
+    (Mask2FormerConfig, {"d_model": 10, "n_head": 3}, rf"d_model \(10\) {_HEADS} n_head \(3\)"),
+    (Mask2FormerConfig, {"num_queries": 0}, r"num_queries must be positive, got 0"),
+    (Mask2FormerConfig, {"mask_feature_size": 0}, r"mask_feature_size must be positive, got 0"),
+    # -- R-CNN family count and RoI fields (LCD-1118) ----------------------
+    (
+        FasterRCNNConfig,
+        {"rpn_anchor_sizes": (32, 64)},
+        r"rpn_anchor_sizes holds one anchor size per FPN level",
+    ),
+    (
+        FasterRCNNConfig,
+        {"rpn_bg_iou_thresh": 0.8, "rpn_fg_iou_thresh": 0.7},
+        r"rpn_bg_iou_thresh .* must not exceed rpn_fg_iou_thresh",
+    ),
+    (FasterRCNNConfig, {"rpn_pre_nms_top_n": 0}, r"rpn_pre_nms_top_n must be positive, got 0"),
+    (FasterRCNNConfig, {"rpn_post_nms_top_n": -1}, r"rpn_post_nms_top_n must be positive, got -1"),
+    (
+        FasterRCNNConfig,
+        {"rpn_batch_size_per_image": 0},
+        r"rpn_batch_size_per_image must be positive, got 0",
+    ),
+    (FasterRCNNConfig, {"roi_size": 0}, r"roi_size must be positive, got 0"),
+    (
+        FasterRCNNConfig,
+        {"roi_representation_size": 0},
+        r"roi_representation_size must be positive, got 0",
+    ),
+    (
+        FasterRCNNConfig,
+        {"roi_batch_size_per_image": 0},
+        r"roi_batch_size_per_image must be positive, got 0",
+    ),
+    (
+        FasterRCNNConfig,
+        {"roi_sampling_ratio": -1},
+        r"roi_sampling_ratio must be non-negative, got -1",
+    ),
+    (FasterRCNNConfig, {"max_detections": 0}, r"max_detections must be positive, got 0"),
+    (MaskRCNNConfig, {"rpn_pre_nms_top_n": 0}, r"rpn_pre_nms_top_n must be positive, got 0"),
+    (MaskRCNNConfig, {"roi_det_size": 0}, r"roi_det_size must be positive, got 0"),
+    (MaskRCNNConfig, {"roi_mask_size": 0}, r"roi_mask_size must be positive, got 0"),
+    (MaskRCNNConfig, {"roi_representation": 0}, r"roi_representation must be positive, got 0"),
+    (MaskRCNNConfig, {"mask_hidden_channels": 0}, r"mask_hidden_channels must be positive, got 0"),
+    (
+        MaskRCNNConfig,
+        {"mask_predictor_hidden": 0},
+        r"mask_predictor_hidden must be positive, got 0",
+    ),
+    (MaskRCNNConfig, {"max_detections": 0}, r"max_detections must be positive, got 0"),
+    (MaskRCNNConfig, {"roi_sampling_ratio": -1}, r"roi_sampling_ratio must be non-negative"),
+    (FastRCNNConfig, {"roi_size": 0}, r"roi_size must be positive, got 0"),
+    (FastRCNNConfig, {"spatial_scale": 0.0}, r"spatial_scale must be positive, got 0.0"),
+    (FastRCNNConfig, {"max_detections": 0}, r"max_detections must be positive, got 0"),
+    (FastRCNNConfig, {"batch_size_per_image": 0}, r"batch_size_per_image must be positive, got 0"),
+    (RCNNConfig, {"max_detections": 0}, r"max_detections must be positive, got 0"),
+    (RCNNConfig, {"context_pad": -1}, r"context_pad must be non-negative, got -1"),
+    # -- multimodal & generative configs (LCD-1118) ------------------------
+    (CLIPConfig, {"vision_layers": -1}, r"vision_layers must be positive, got -1"),
+    (CLIPConfig, {"vision_layers": 0}, r"vision_layers must be positive, got 0"),
+    (CLIPConfig, {"text_layers": -1}, r"text_layers must be positive, got -1"),
+    (CLIPConfig, {"vocab_size": 0}, r"vocab_size must be positive, got 0"),
+    (CLIPConfig, {"patch_size": 0}, r"patch_size must be positive, got 0"),
+    (CLIPConfig, {"vision_width": 0}, r"vision_width must be positive, got 0"),
+    (ScoreSDEConfig, {"num_res_blocks": -1}, r"num_res_blocks must be positive, got -1"),
+    (ScoreSDEConfig, {"base_channels": 0}, r"base_channels must be positive, got 0"),
+    (ScoreSDEConfig, {"channel_mult": ()}, r"channel_mult must have at least one stage"),
+    (ScoreSDEConfig, {"channel_mult": (1, 0)}, r"channel_mult\[1\] must be positive, got 0"),
+    (ScoreSDEConfig, {"num_heads": 0}, r"num_heads must be positive, got 0"),
+    (ScoreSDEConfig, {"resnet_groups": 0}, r"resnet_groups must be positive, got 0"),
+    (ScoreSDEConfig, {"dropout": 1.0}, r"dropout must be in \[0, 1\)"),
+    (
+        ScoreSDEConfig,
+        {"base_channels": 10, "channel_mult": (1,), "resnet_groups": 4},
+        rf"stage_channels\[0\] \(10\) {_HEADS} resnet_groups \(4\)",
+    ),
+    (
+        StableDiffusionConfig,
+        {"vae_layers_per_block": -1},
+        r"vae_layers_per_block must be positive, got -1",
+    ),
+    (
+        StableDiffusionConfig,
+        {"unet_layers_per_block": -1},
+        r"unet_layers_per_block must be positive, got -1",
+    ),
+    (StableDiffusionConfig, {"latent_channels": 0}, r"latent_channels must be positive, got 0"),
+    (
+        StableDiffusionConfig,
+        {"attention_head_dim": 0},
+        r"attention_head_dim must be positive, got 0",
+    ),
+    (
+        StableDiffusionConfig,
+        {"attention_head_dim": -8},
+        r"attention_head_dim must be positive, got -8",
+    ),
+    (
+        StableDiffusionConfig,
+        {"cross_attention_dim": 0},
+        r"cross_attention_dim must be positive, got 0",
+    ),
+    (StableDiffusionConfig, {"norm_num_groups": 0}, r"norm_num_groups must be positive, got 0"),
+    (
+        StableDiffusionConfig,
+        {"vae_block_out_channels": (-32, 64, 128, 256)},
+        r"vae_block_out_channels\[0\] must be positive, got -32",
+    ),
+    (
+        StableDiffusionConfig,
+        {"unet_block_out_channels": (-32, 64, 128, 256)},
+        r"unet_block_out_channels\[0\] must be positive, got -32",
+    ),
+    (StableDiffusionConfig, {"steps_offset": -1}, r"steps_offset must be non-negative, got -1"),
+    (DIAMONDConfig, {"unet_layers": (-1, 2, 2, 2)}, r"unet_layers\[0\] must be positive, got -1"),
+    (DIAMONDConfig, {"reward_layers": (2, 0, 2, 2)}, r"reward_layers\[1\] must be positive, got 0"),
+    (DIAMONDConfig, {"actor_layers": (1, -1, 1, 1)}, r"actor_layers\[1\] must be positive, got -1"),
+    (
+        DIAMONDConfig,
+        {"attn_depths": (-1, 0, 0, 0)},
+        r"attn_depths\[0\] must be non-negative, got -1",
+    ),
+    (
+        DIAMONDConfig,
+        {"unet_channels": (0, 64, 64, 64)},
+        r"unet_channels\[0\] must be positive, got 0",
+    ),
+    (DIAMONDConfig, {"cond_dim": 0}, r"cond_dim must be positive, got 0"),
+    (DIAMONDConfig, {"attention_head_dim": 0}, r"attention_head_dim must be positive, got 0"),
+    (
+        DIAMONDConfig,
+        {"upsampler_channels": (8, 8), "upsampler_layers": (1, 0), "upsampling_factor": 2},
+        r"upsampler_layers\[1\] must be positive, got 0",
+    ),
+    (
+        DIAMONDConfig,
+        {
+            "upsampler_channels": (8, 8),
+            "upsampler_layers": (1, 1),
+            "upsampler_attn_depths": (-1, 0),
+            "upsampling_factor": 2,
+        },
+        r"upsampler_attn_depths\[0\] must be non-negative, got -1",
+    ),
+    (DiTConfig, {"num_heads": 0}, r"num_heads must be positive, got 0"),
+    (DiTConfig, {"num_heads": -2}, r"num_heads must be positive, got -2"),
+    (MeanFlowConfig, {"hidden_size": 0}, r"hidden_size must be positive, got 0"),
 ]
 
 
@@ -302,6 +462,12 @@ _STILL_ACCEPTED: list[tuple[type[ModelConfig], dict[str, Any]]] = [
     # A stage count other than four is the point of these configs.
     (ConvNeXtConfig, {"depths": (1, 1, 1), "dims": (8, 16, 32)}),
     (CoAtNetConfig, {"mixed_s3": (8, 42, 1536)}),
+    # Valid zeros in R-CNN / generative configs (tight crop, adaptive RoI, no attn, zero offset).
+    (RCNNConfig, {"context_pad": 0}),
+    (FasterRCNNConfig, {"roi_sampling_ratio": 0}),
+    (MaskRCNNConfig, {"roi_sampling_ratio": 0}),
+    (DIAMONDConfig, {"attn_depths": (0, 0, 0, 0)}),
+    (StableDiffusionConfig, {"steps_offset": 0}),
 ]
 
 
@@ -317,9 +483,22 @@ def test_a_value_the_model_handles_is_still_accepted(
 
 
 _DEPTH_FIELD = re.compile(
-    r"^(depth|depths|layers|blocks_per_stage|block_config|num_vit"
-    r"|\w+_(depth|depths|layers|blocks|repeats|convs))$"
+    r"^(depth|depths|layers|blocks_per_stage|block_config|num_vit|residual_blocks|blocks"
+    r"|\w+_(depth|depths|layers|blocks|repeats|convs|layers_per_block|res_blocks))$"
 )
+
+
+def _registered_config_classes() -> list[type[ModelConfig]]:
+    """Every concrete config class across all zoo domains (vision, text, generative, multimodal)."""
+    found: dict[str, type[ModelConfig]] = {c.__name__: c for c in _VISION_CONFIGS}
+    for entry in _REGISTRY.values():
+        if entry.model_class is not None and entry.model_class.config_class is not None:
+            cfg = entry.model_class.config_class
+            found[cfg.__name__] = cfg
+    return [found[name] for name in sorted(found)]
+
+
+_ALL_CONFIGS = _registered_config_classes()
 
 
 def _with_a_negative_entry(value: object) -> object | None:
@@ -335,9 +514,9 @@ def _with_a_negative_entry(value: object) -> object | None:
 
 
 def _depth_fields() -> list[tuple[type[ModelConfig], str, object]]:
-    """Every vision config field named like a block / layer count, with a negative value."""
+    """Every zoo config field named like a block / layer count, with a negative value."""
     rows: list[tuple[type[ModelConfig], str, object]] = []
-    for config_class in _VISION_CONFIGS:
+    for config_class in _ALL_CONFIGS:
         default = config_class()
         for field in dataclasses.fields(config_class):
             bad = _with_a_negative_entry(getattr(default, field.name))
@@ -349,10 +528,11 @@ def _depth_fields() -> list[tuple[type[ModelConfig], str, object]]:
 _DEPTH_FIELDS = _depth_fields()
 
 
-def test_the_depth_sweep_sees_the_vision_zoo() -> None:
-    """A guard on the guard: the name pattern must not quietly come up short."""
+def test_the_depth_sweep_sees_the_whole_zoo() -> None:
+    """A guard on the guard: the name pattern must see every domain without coming up short."""
     named = {(c.__name__, field) for c, field, _ in _DEPTH_FIELDS}
     assert {
+        # vision
         ("ViTConfig", "depth"),
         ("SwinConfig", "depths"),
         ("ConvNeXtConfig", "depths"),
@@ -362,8 +542,27 @@ def test_the_depth_sweep_sees_the_vision_zoo() -> None:
         ("DenseNetConfig", "block_config"),
         ("DETRConfig", "num_decoder_layers"),
         ("IJEPAConfig", "predictor_depth"),
+        # multimodal
+        ("CLIPConfig", "vision_layers"),
+        ("CLIPConfig", "text_layers"),
+        # generative
+        ("ScoreSDEConfig", "num_res_blocks"),
+        ("StableDiffusionConfig", "vae_layers_per_block"),
+        ("StableDiffusionConfig", "unet_layers_per_block"),
+        ("DIAMONDConfig", "unet_layers"),
+        ("DIAMONDConfig", "attn_depths"),
+        ("DIAMONDConfig", "reward_layers"),
+        ("DIAMONDConfig", "actor_layers"),
+        ("DiTConfig", "depth"),
+        ("GenieConfig", "dynamics_layers"),
+        ("VJEPA2ACConfig", "encoder_depth"),
+        # text
+        ("GPTConfig", "num_hidden_layers"),
+        ("BERTConfig", "num_hidden_layers"),
     } <= named
-    assert len(_DEPTH_FIELDS) >= 40
+    domains = {c.__module__.split(".")[2] for c, _, _ in _DEPTH_FIELDS}
+    assert {"vision", "text", "generative", "multimodal"} <= domains
+    assert len(_DEPTH_FIELDS) >= 85
 
 
 @pytest.mark.parametrize(
@@ -371,7 +570,7 @@ def test_the_depth_sweep_sees_the_vision_zoo() -> None:
     _DEPTH_FIELDS,
     ids=[f"{c.__name__}-{field}" for c, field, _ in _DEPTH_FIELDS],
 )
-def test_every_vision_block_count_refuses_a_negative_entry(
+def test_every_zoo_block_count_refuses_a_negative_entry(
     config_class: type[ModelConfig], field: str, bad: object
 ) -> None:
     """``range(-1)`` is empty, so a negative depth built a model with no stack and no error.
@@ -381,7 +580,7 @@ def test_every_vision_block_count_refuses_a_negative_entry(
     """
     with pytest.raises(ValueError) as refused:
         config_class(**{field: bad})
-    assert re.search(rf"\b{field}\b.*\b(positive|negative)\b", str(refused.value))
+    assert re.search(rf"\b{field}\b.*\b(positive|negative|at least)\b", str(refused.value))
 
 
 _NOT_A_NUMBER: list[tuple[type[ModelConfig], dict[str, Any]]] = [
@@ -427,6 +626,11 @@ _FACTORIES: list[tuple[str, dict[str, Any]]] = [
     ("vit_base_16_cls", {"depth": -1}),
     ("cspresnet_50", {"stem_pool": "avg"}),
     ("cspdarknet_53", {"block_type": ("dark", "dark", "dark", "dark", "darkk")}),
+    ("detr_resnet50", {"d_model": 10, "n_head": 3}),
+    ("mask2former_swin_tiny", {"num_queries": 0}),
+    ("clip_vit_base_32", {"vision_layers": -1}),
+    ("score_sde_vp", {"num_res_blocks": -1}),
+    ("stable_diffusion_v1_5", {"unet_layers_per_block": -1}),
 ]
 
 

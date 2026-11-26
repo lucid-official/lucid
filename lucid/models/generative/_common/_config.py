@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from typing import ClassVar, Literal, Protocol, get_args, override
 
 from lucid.models._base import ModelConfig
+from lucid.models._utils._common import check_positive
 
 # Activation alias accepted by every generative family.  Diffusion U-Nets
 # typically use SiLU (Swish); VAEs use either SiLU or ReLU; the world
@@ -434,8 +435,9 @@ def check_patch_grid(
         positional table) or by the heads.
     """
     side = patch_grid_side(sample_size)
-    if patch_size <= 0:
-        raise ValueError(f"patch_size must be positive, got {patch_size}")
+    check_positive(
+        "patch_grid", patch_size=patch_size, hidden_size=hidden_size, num_heads=num_heads
+    )
     if side % patch_size != 0:
         raise ValueError(
             f"sample_size {side} must be divisible by patch_size "

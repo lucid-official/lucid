@@ -5,7 +5,7 @@ from typing import ClassVar
 
 from lucid.models._base import ModelConfig
 from lucid.models._meta import model_family_meta
-from lucid.models._utils._common import check_positive
+from lucid.models._utils._common import check_non_negative, check_positive
 
 
 @model_family_meta(
@@ -135,4 +135,5 @@ class RCNNConfig(ModelConfig):
     def __post_init__(self) -> None:
         owner = type(self).__name__
         check_positive(owner, num_classes=self.num_classes, in_channels=self.in_channels)
-        check_positive(owner, roi_size=self.roi_size)
+        check_positive(owner, roi_size=self.roi_size, max_detections=self.max_detections)
+        check_non_negative(owner, context_pad=self.context_pad)

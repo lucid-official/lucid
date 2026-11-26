@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from typing import ClassVar, override
 
 from lucid.models._meta import model_family_meta
+from lucid.models._utils._common import check_divisible, check_non_negative, check_positive
 from lucid.models.generative._common._config import (
     GenerativeModelConfig,
     check_sample_space_channels,
@@ -156,17 +157,39 @@ class ScoreSDEConfig(GenerativeModelConfig):
     def __post_init__(self) -> None:
         super().__post_init__()
         check_sample_space_channels(self.in_channels, self.out_channels, "the score")
+        owner = type(self).__name__
         if self.sde_type not in ("vp", "ve", "subvp"):
             raise ValueError(f"sde_type must be 'vp', 've' or 'subvp', got {self.sde_type!r}")
         if not 0.0 < self.sigma_min < self.sigma_max:
             raise ValueError(
-                f"need 0 < sigma_min < sigma_max, got {self.sigma_min}, " f"{self.sigma_max}"
+                f"need 0 < sigma_min < sigma_max, got {self.sigma_min}, {self.sigma_max}"
             )
         if not 0.0 < self.beta_min < self.beta_max:
             raise ValueError(f"need 0 < beta_min < beta_max, got {self.beta_min}, {self.beta_max}")
-        if self.num_scales < 1:
-            raise ValueError(f"num_scales must be at least 1, got {self.num_scales}")
-        if self.snr <= 0.0:
-            raise ValueError(f"snr must be positive, got {self.snr}")
-        if self.corrector_steps < 0:
-            raise ValueError(f"corrector_steps must be non-negative, got {self.corrector_steps}")
+        check_positive(
+            owner,
+            num_scales=self.num_scales,
+            snr=self.snr,
+            base_channels=self.base_channels,
+            channel_mult=self.channel_mult,
+            num_res_blocks=self.num_res_blocks,
+            num_heads=self.num_heads,
+            resnet_groups=self.resnet_groups,
+        )
+        check_non_negative(owner, corrector_steps=self.corrector_steps)
+        if not self.channel_mult:
+            raise ValueError(f"{owner}: channel_mult must have at least one stage")
+        if not 0.0 <= self.dropout < 1.0:
+            raise ValueError(f"{owner}: dropout must be in [0, 1), got {self.dropout}")
+        h, w = self.sample_hw
+        factor = 2 ** (len(self.channel_mult) - 1)
+        check_divisible(owner, "sample_size[0]", h, "2 ** (len(channel_mult) - 1)", factor)
+        check_divisible(owner, "sample_size[1]", w, "2 ** (len(channel_mult) - 1)", factor)
+        for i, mult in enumerate(self.channel_mult):
+            check_divisible(
+                owner,
+                f"stage_channels[{i}]",
+                self.base_channels * mult,
+                "resnet_groups",
+                self.resnet_groups,
+            )

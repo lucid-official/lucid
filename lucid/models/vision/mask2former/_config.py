@@ -5,7 +5,7 @@ from typing import ClassVar
 
 from lucid.models._base import ModelConfig
 from lucid.models._meta import model_family_meta
-from lucid.models._utils._common import check_non_negative, check_positive
+from lucid.models._utils._common import check_divisible, check_non_negative, check_positive
 
 
 @model_family_meta(
@@ -183,7 +183,24 @@ class Mask2FormerConfig(ModelConfig):
         check_positive(owner, num_classes=self.num_classes, in_channels=self.in_channels)
         # The decoder keeps ``num_decoder_layers - 1`` masked layers, so zero
         # or fewer is the same empty stack as one layer.
-        check_positive(owner, num_decoder_layers=self.num_decoder_layers)
+        check_positive(
+            owner,
+            num_decoder_layers=self.num_decoder_layers,
+            num_queries=self.num_queries,
+            d_model=self.d_model,
+            mask_feature_size=self.mask_feature_size,
+            n_head=self.n_head,
+            encoder_feedforward_dim=self.encoder_feedforward_dim,
+            dim_feedforward=self.dim_feedforward,
+            swin_embed_dim=self.swin_embed_dim,
+            swin_num_heads=self.swin_num_heads,
+            swin_window_size=self.swin_window_size,
+            num_feature_levels=self.num_feature_levels,
+            train_num_points=self.train_num_points,
+            common_stride=self.common_stride,
+            feature_strides=self.feature_strides,
+        )
+        check_divisible(owner, "d_model", self.d_model, "n_head", self.n_head)
         check_non_negative(
             owner, swin_depths=self.swin_depths, num_encoder_layers=self.num_encoder_layers
         )

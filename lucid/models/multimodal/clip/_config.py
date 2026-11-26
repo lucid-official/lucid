@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import ClassVar, override
 
 from lucid.models._meta import model_family_meta
+from lucid.models._utils._common import check_positive
 from lucid.models.multimodal._common._config import MultimodalModelConfig
 
 __all__ = ["CLIPConfig"]
@@ -159,6 +160,19 @@ class CLIPConfig(MultimodalModelConfig):
     def __post_init__(self) -> None:
         """Reject configurations that cannot be built or trained."""
         super().__post_init__()
+        owner = type(self).__name__
+        check_positive(
+            owner,
+            image_size=self.image_size,
+            patch_size=self.patch_size,
+            vision_layers=self.vision_layers,
+            vision_width=self.vision_width,
+            vision_heads=self.vision_heads,
+            vocab_size=self.vocab_size,
+            text_width=self.text_width,
+            text_heads=self.text_heads,
+            text_layers=self.text_layers,
+        )
         if self.image_size % self.patch_size != 0:
             raise ValueError(
                 f"image_size must be divisible by patch_size, got "
@@ -169,8 +183,6 @@ class CLIPConfig(MultimodalModelConfig):
             ("vision", self.vision_width, self.vision_heads),
             ("text", self.text_width, self.text_heads),
         ):
-            if heads < 1:
-                raise ValueError(f"{name}_heads must be positive, got {heads}")
             if width % heads != 0:
                 raise ValueError(
                     f"{name}_width must be divisible by {name}_heads, got " f"{width} and {heads}"

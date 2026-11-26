@@ -5,10 +5,8 @@ from typing import ClassVar
 
 from lucid.models._base import ModelConfig
 from lucid.models._meta import model_family_meta
-from lucid.models._utils._common import check_non_negative, check_positive, check_residual_layers
-
-# P2-P5 from the FPN plus its max-pooled P6.
-_FPN_LEVELS = 5
+from lucid.models._utils._common import check_non_negative, check_positive
+from lucid.models.vision._common._rcnn import validate_fpn_rcnn_config
 
 
 @model_family_meta(
@@ -189,27 +187,14 @@ class MaskRCNNConfig(ModelConfig):
         object.__setattr__(self, "rpn_anchor_sizes", tuple(self.rpn_anchor_sizes))
         object.__setattr__(self, "rpn_anchor_ratios", tuple(self.rpn_anchor_ratios))
         object.__setattr__(self, "bbox_reg_weights", tuple(self.bbox_reg_weights))
-        # The anchor generator pairs these with the FPN outputs level by
-        # level; any other count fails mid-forward as a zip length error.
-        if len(self.rpn_anchor_sizes) != _FPN_LEVELS:
-            raise ValueError(
-                f"{type(self).__name__}: rpn_anchor_sizes holds one anchor size "
-                f"per FPN level and the backbone emits {_FPN_LEVELS} (P2-P6); "
-                f"got {len(self.rpn_anchor_sizes)}: {self.rpn_anchor_sizes}"
-            )
-
-        for name in ("rpn", "roi"):
-            fg = getattr(self, f"{name}_fg_iou_thresh")
-            bg = getattr(self, f"{name}_bg_iou_thresh")
-            if bg > fg:
-                raise ValueError(
-                    f"{name}_bg_iou_thresh ({bg}) must not exceed "
-                    f"{name}_fg_iou_thresh ({fg}); the band between them is "
-                    "the ignore region, and inverting them would leave no "
-                    "ambiguous zone at all."
-                )
+        validate_fpn_rcnn_config(self)
         owner = type(self).__name__
-        check_positive(owner, num_classes=self.num_classes, in_channels=self.in_channels)
-        check_positive(owner, fpn_out_channels=self.fpn_out_channels)
-        check_residual_layers(owner, backbone_layers=self.backbone_layers)
+        check_positive(
+            owner,
+            roi_det_size=self.roi_det_size,
+            roi_representation=self.roi_representation,
+            roi_mask_size=self.roi_mask_size,
+            mask_hidden_channels=self.mask_hidden_channels,
+            mask_predictor_hidden=self.mask_predictor_hidden,
+        )
         check_non_negative(owner, mask_num_convs=self.mask_num_convs)
