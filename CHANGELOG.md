@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Pop pending unwired trace nodes when an `OpScopeFull` unwinds on an exception before `on_op_io` (such as shape-mismatched `cat`, invalid `gather`, or refused `dropout_stateful`), so refused ops leave `Tracer.op_count()` unchanged and `lucid.compile` callers that catch the refusal compile without falling back to eager; forbid bare `GradMode::set_enabled(`, `set_inference_enabled(`, and `set_current_tracer(` calls outside their guard owners and bindings in `tools/check_cpp_layers.py` (LCD-1045).
 - Coerce single-element integer tensor count, bound, and dimension arguments through a single-owner `_as_int` helper across tensor and random factories (`randperm`, `randint`, `randint_like`, `eye`, `empty_strided`, `linspace`, `logspace`, `zeros`, `ones`, `empty`, `full`, `rand`, `randn`, `normal`, and `Tensor.new_*`), preventing narrow-width integer tensors (`int8`/`int16`/`int32`) from wrapping 64-bit bounds checks and refusing bool tensors with `InvalidArgument` (`RuntimeError`) and float/complex/multi-element tensors with `TypeError` (LCD-1064).
 - equalize is non-differentiable and detaches (LCD-897)
 - scale each qr column before its reflector (LCD-862)
