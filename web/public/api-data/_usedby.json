@@ -104,6 +104,10 @@
     },
     {
       "kind": "module",
+      "module": "lucid._ops.composite._lerp"
+    },
+    {
+      "kind": "module",
       "module": "lucid._ops.composite._opmath"
     },
     {
@@ -1036,6 +1040,10 @@
     },
     {
       "kind": "module",
+      "module": "lucid._ops.composite._lerp"
+    },
+    {
+      "kind": "module",
       "module": "lucid._ops.composite._pow2"
     },
     {
@@ -1123,6 +1131,10 @@
     {
       "kind": "module",
       "module": "lucid._ops.composite._inverse_hyperbolic"
+    },
+    {
+      "kind": "module",
+      "module": "lucid._ops.composite._lerp"
     },
     {
       "kind": "module",
