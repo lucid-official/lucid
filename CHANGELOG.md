@@ -486,9 +486,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Swin zero-pads the right and bottom of an image whose side is not a multiple of `patch_size`, as the reference does, instead of dropping the border: a 35x35 input now sees 9x9 patches, not the 8x8 of its 32x32 crop. Inputs that are already a multiple are bit-identical to before. The Mask2Former Swin backbone shares the same padding helper (LCD-1115).
 
-- guard empty extents and 0-d inputs in layout kernels
-
-- review fixes for expand_and_multiply and layout guard
+- Guarded empty-extent and 0-d layout kernels against division by zero, null-pointer `memset`/`memcpy`, null pointer-offset arithmetic, and 0-d underflow: `CpuBackend::pad` (and `GpuBackend::pad` for 0-d scalars), `fill_pad_buffer`, `reverse_along_axis`, `slice_axis`, `insert_axis_slice`, `concatenate`, `stack`, `repeat`, `repeat_backward`, `tile_backward`, and `CpuBackend::expand_and_multiply` (`F.dropout1d`/`2d`/`3d` and `drop_path`) now pass ASan+UBSan cleanly across empty dimensions in every axis position (LCD-1119).
 
 ### Added
 
