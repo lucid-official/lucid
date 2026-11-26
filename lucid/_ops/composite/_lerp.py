@@ -96,9 +96,7 @@ def _lerp_value(start: Tensor, end: Tensor, weight: Tensor | float | complex) ->
     """
     return _wrap(
         _value(
-            _unwrap(start),
-            _unwrap(end),
-            _unwrap(weight) if isinstance(weight, Tensor) else weight,
+            _unwrap(start), _unwrap(end), _unwrap(weight) if isinstance(weight, Tensor) else weight
         )
     )
 

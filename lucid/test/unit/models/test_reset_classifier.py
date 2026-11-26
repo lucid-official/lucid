@@ -91,11 +91,7 @@ _TINY: dict[str, Tiny] = {
         dict(depths=(1, 1, 1, 1), embed_dims=(8, 16, 32, 64), key_dim=4, num_heads=2, resolution=1),
         (2, 3, 32, 32),
     ),
-    "efficientnet": (
-        "efficientnet_b0_cls",
-        dict(width_mult=0.25, depth_mult=0.5),
-        (2, 3, 32, 32),
-    ),
+    "efficientnet": ("efficientnet_b0_cls", dict(width_mult=0.25, depth_mult=0.5), (2, 3, 32, 32)),
     "googlenet": ("googlenet_cls", {}, (2, 3, 64, 64)),
     "ijepa": (
         "ijepa_base_16_cls",

@@ -87,9 +87,7 @@ class Footprints:
         return value
 
     def settle(
-        self,
-        until: Callable[[float, float], bool] | None = None,
-        timeout_s: float = TIMEOUT_S,
+        self, until: Callable[[float, float], bool] | None = None, timeout_s: float = TIMEOUT_S
     ) -> float:
         """The footprint after ``QUIET_S`` of idle, and, with ``until``, once it holds.
 

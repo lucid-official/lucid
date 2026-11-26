@@ -58,9 +58,7 @@ def _flip0(x: np.ndarray) -> np.ndarray:
 def _lerp_two_sided(start: np.ndarray, end: np.ndarray, weight: np.ndarray) -> np.ndarray:
     """The reference's lerp: ``|weight| < 0.5`` takes the start form, the rest the end form."""
     return np.where(
-        np.abs(weight) < 0.5,
-        start + weight * (end - start),
-        end - (end - start) * (1 - weight),
+        np.abs(weight) < 0.5, start + weight * (end - start), end - (end - start) * (1 - weight)
     )
 
 
