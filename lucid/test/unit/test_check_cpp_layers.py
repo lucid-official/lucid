@@ -3,11 +3,12 @@
 Verifies that:
 1. The current ``lucid/_C/`` tree passes with 0 new violations and 0 stale
    ``_ALLOWLIST`` entries.
-2. Injecting each of the 8 violation classes (upward ``#include``, unauthorized
+2. Injecting each of the 9 violation classes (upward ``#include``, unauthorized
    ``extern ... _op(``, ``cblas_`` outside ``Blas.cpp``, LAPACK symbol outside
    ``Lapack.cpp``, ``cpu::lapack_`` in ``backend/gpu``, ``goto``, a hand-built
-   wanted-gradient mask, and an MLX ``compile`` outside ``ShapelessFused.h``) into a
-   tree causes ``check_cpp_layers`` to report the violation and return 1.
+   wanted-gradient mask, an MLX ``compile`` outside ``ShapelessFused.h``, and
+   a bare TLS setter outside its owner / ``bindings/``) into a tree causes
+   ``check_cpp_layers`` to report the violation and return 1.
 3. Canonical owner files (``autograd/GraphOps.h``, ``backend/cpu/Blas.cpp``,
    ``backend/cpu/Lapack.cpp``) and downward ``#include``s are permitted.
 4. Resolving a listed violation triggers the stale ``_ALLOWLIST`` ratchet.
@@ -145,6 +146,43 @@ def test_real_engine_tree_passes() -> None:
             "mlx-compile",
             "compile",
         ),
+        # 9. LCD-1045: bare TLS setters outside GradMode.*, Tracer.*, and bindings/
+        (
+            "core/BadGrad.cpp",
+            "void f() { GradMode::set_enabled(false); }\n",
+            "tls-setter",
+            "GradMode::set_enabled",
+        ),
+        (
+            "nn/BadInference.cpp",
+            "void f() { GradMode::set_inference_enabled(true); }\n",
+            "tls-setter",
+            "set_inference_enabled",
+        ),
+        (
+            "ops/utils/BadInferenceBare.cpp",
+            "void f() { set_inference_enabled(false); }\n",
+            "tls-setter",
+            "set_inference_enabled",
+        ),
+        (
+            "nn/BadTracer.cpp",
+            "void f() { lucid::compile::set_current_tracer(nullptr); }\n",
+            "tls-setter",
+            "set_current_tracer",
+        ),
+        (
+            "core/GradMode.cpp",
+            "void f() { set_current_tracer(nullptr); }\n",
+            "tls-setter",
+            "set_current_tracer",
+        ),
+        (
+            "compile/Tracer.cpp",
+            "void f() { GradMode::set_enabled(true); }\n",
+            "tls-setter",
+            "GradMode::set_enabled",
+        ),
     ],
 )
 def test_injected_violation_is_reported(
@@ -208,14 +246,32 @@ def test_canonical_owner_files_and_downward_includes_are_allowed(tmp_path: Path)
     )
     _write(
         engine,
+        "core/GradMode.cpp",
+        "void f() { GradMode::set_enabled(false); set_inference_enabled(true); }\n",
+    )
+    _write(
+        engine,
+        "core/OtherMode.cpp",
+        "// GradMode::set_enabled(false) set_current_tracer(nullptr) in a comment are ignored\n"
+        'const char* doc = "GradMode::set_enabled(false) set_inference_enabled(true)";\n'
+        "void f() { PhantomMode::set_enabled(false); Determinism::set_enabled(true); }\n",
+    )
+    _write(
+        engine,
         "compile/Tracer.cpp",
         "namespace lucid::compile { struct Tracer; }\n"
         "// mx::compile(f, true) in a comment is ignored\n"
         'const char* doc = "mlx::core::compile(f, true)";\n'
-        "void f(lucid::compile::Tracer& t) { t.compile(1); }\n",
+        "void f(lucid::compile::Tracer& t) { t.compile(1); set_current_tracer(&t); }\n",
     )
     _write(engine, "nn/Linear.cpp", '#include "../ops/bfunc/Add.h"\n')
-    _write(engine, "bindings/bind_ops.cpp", '#include "../nn/Linear.cpp"\n')
+    _write(
+        engine,
+        "bindings/bind_ops.cpp",
+        '#include "../nn/Linear.cpp"\n'
+        "void bind() { GradMode::set_enabled(true); set_inference_enabled(false); "
+        "set_current_tracer(nullptr); }\n",
+    )
 
     new_violations, stale, _ = check_cpp_layers.scan_engine(engine, allowlist={})
     assert new_violations == []

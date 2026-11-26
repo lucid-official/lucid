@@ -54,6 +54,15 @@ Enforces the C++ architecture invariants documented in ``obsidian/DEVELOPMENT.md
    function that is given the name (a declaration reads as a call too) goes on
    ``_ALLOWLIST`` or takes another.
 
+9. ``tls-setter``:
+   Bare thread-local state setters (``GradMode::set_enabled(``,
+   ``set_inference_enabled(``, ``set_current_tracer(``) are only permitted in
+   their guard/state owners (``core/GradMode.*``, ``compile/Tracer.*``) and
+   Python bindings (``bindings/``).  Manual save/restore pairs around a call
+   that can throw leave thread-local state corrupted on unwind (LCD-1042,
+   LCD-1045); use ``NoGradGuard``, ``GradModeGuard``, or
+   ``compile::TracerDetach`` instead.
+
 Existing legacy violations are recorded in ``_ALLOWLIST`` with a date and issue
 citation. The allow-list is a strict ratchet: any new violation OR any stale
 allow-list entry whose violation has been resolved causes the check to fail.
@@ -95,6 +104,8 @@ GRAPH_OPS_HEADER = "autograd/GraphOps.h"
 BLAS_IMPL = "backend/cpu/Blas.cpp"
 LAPACK_IMPL = "backend/cpu/Lapack.cpp"
 SHAPELESS_OWNER = "backend/gpu/ShapelessFused.h"
+GRAD_MODE_OWNERS = frozenset({"core/GradMode.h", "core/GradMode.cpp"})
+TRACER_OWNERS = frozenset({"compile/Tracer.h", "compile/Tracer.cpp"})
 
 # Dated allow-list of legacy violations:
 #   (rel_path, rule, target) -> (date_added, issue_and_reason)
@@ -261,6 +272,12 @@ _NEEDS_GRAD_LIST = re.compile(
 # (``x.compile(``, ``p->compile(``) and ``lucid::compile::`` (a namespace, followed by ``::``) are
 # not matched.
 _MLX_COMPILE = re.compile(r"\b(?:mlx(?:::core)?|mx)::compile\b|(?<![\w.>])compile(?=\s*\()")
+# Bare thread-local state setters (LCD-1042, LCD-1045): forbidden outside their
+# guard/state owner files and Python bindings so throwing paths cannot skip a
+# manual restore.
+_TLS_SETTER = re.compile(
+    r"\b(?P<sym>(?:GradMode::\s*)?set_inference_enabled|GradMode::\s*set_enabled|set_current_tracer)\s*\("
+)
 
 
 def _blank_match(m: re.Match[str]) -> str:
@@ -517,8 +534,38 @@ def _check_mlx_compile(rel_posix: str, code: str) -> list[Violation]:
     ]
 
 
+def _check_tls_setters(rel_posix: str, code: str) -> list[Violation]:
+    if rel_posix.startswith("bindings/"):
+        return []
+    out: list[Violation] = []
+    for m in _TLS_SETTER.finditer(code):
+        raw = re.sub(r"\s+", "", m.group("sym"))
+        if raw.endswith("set_inference_enabled"):
+            target, owners = "set_inference_enabled", GRAD_MODE_OWNERS
+            guard = "core/GradMode.* or bindings/"
+        elif raw == "GradMode::set_enabled":
+            target, owners = "GradMode::set_enabled", GRAD_MODE_OWNERS
+            guard = "NoGradGuard / GradModeGuard"
+        else:
+            target, owners = "set_current_tracer", TRACER_OWNERS
+            guard = "compile::TracerDetach"
+        if rel_posix in owners:
+            continue
+        out.append(
+            Violation(
+                rel_posix,
+                _line_of(code, m.start()),
+                "tls-setter",
+                target,
+                f"bare '{target}(' outside its owner / bindings/ risks skipping restore on throw "
+                f"(LCD-1042, LCD-1045); use {guard}",
+            )
+        )
+    return out
+
+
 def scan_file(path: Path, engine: Path = ENGINE) -> list[Violation]:
-    """Scan a single C++/ObjC++ file under ``engine`` for all 8 invariants."""
+    """Scan a single C++/ObjC++ file under ``engine`` for all 9 invariants."""
     rel_posix = path.resolve().relative_to(engine.resolve()).as_posix()
     raw = path.read_text(encoding="utf-8", errors="replace")
     code = _strip_code(raw)
@@ -531,6 +578,7 @@ def scan_file(path: Path, engine: Path = ENGINE) -> list[Violation]:
     violations.extend(_check_goto(rel_posix, code))
     violations.extend(_check_hand_grad_mask(rel_posix, code))
     violations.extend(_check_mlx_compile(rel_posix, code))
+    violations.extend(_check_tls_setters(rel_posix, code))
     return violations
 
 
@@ -595,7 +643,7 @@ def check(
 
     print(
         f"[check_cpp_layers] all C++ layer rules OK "
-        f"(8 invariants checked, {len(allowed_hits)} legacy site(s) on _ALLOWLIST)"
+        f"(9 invariants checked, {len(allowed_hits)} legacy site(s) on _ALLOWLIST)"
     )
     return 0
 
