@@ -40,6 +40,10 @@
     },
     {
       "kind": "module",
+      "module": "lucid._factories._overloads"
+    },
+    {
+      "kind": "module",
       "module": "lucid._factories.converters"
     },
     {

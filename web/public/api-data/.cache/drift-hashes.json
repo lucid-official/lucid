@@ -152,7 +152,7 @@
   "lucid.serialization": "49fbae63147a7156bb62f8609c2e520d6a5d281f8a66433b6c84d6f09d5fd674",
   "lucid.signal": "2d0a2f3b41606048e75b852d6548d65f8cf867d1ec238639249d0d41b71fea10",
   "lucid.special": "dc8063f72cfd93075f4bab818704f080b9859079a6f65037f7692bc83eddee73",
-  "lucid.tensor": "4cf6485b7a5530d48a84f8308e6bc029004fd57aa0af6c015654147321d36ccc",
+  "lucid.tensor": "af26add06c5435e71390d9092ee4ffceb6c31f0a55e21f49c162a66fe29f7315",
   "lucid.utils": "ac1ffd16d7acfdb9df55ded28ddb2f84936b35ed7d5aa3e7cdeb7a7f8c4e4020",
   "lucid.utils.cache": "dc94011027b921b46b8406fb0eb9fd55de90f4ac851926ac144ab9034c650bb6",
   "lucid.utils.data": "8af90348ed6dcf54021708fbaa69492ac1fdecc906ff731ea1fd633e4fb264db",
