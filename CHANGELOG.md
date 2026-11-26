@@ -477,11 +477,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `linalg.pinv(..., hermitian=True)` and `linalg.matrix_rank(..., hermitian=True)` refused an integral input with the `eigh` kernel's `NotImplementedError`; the reference's `pinv` and `matrix_rank` are a dtype guard on every route, and Lucid now raises `DtypeMismatch` for them on every route, bool included (LCD-1105).
 - `linalg.lstsq` of a bool or integer operand raised `DtypeMismatch` whatever the call; the reference raises a dtype guard for a plain call and `NotImplementedError` ("linalg_lstsq_cpu") once `rcond` is given. Lucid now does the same, judged after the shapes (LCD-1105).
 
-- non-str names are refused; ModelOutput gets .get
-
-- an empty batch stops generate at one length either way
-
-- resize takes the reference's options; Transformer fix
+- `create_model(5)` / `model_entrypoint(5)` raise `TypeError` for a name that is not a `str` (it was `AttributeError: 'int' object has no attribute 'replace'`); `is_model(5)` answers `False`; `list_models(task=5)` / `list_models(family=5)` raise `TypeError` instead of returning `[]` (LCD-1111).
+- `"keys" in out` was `True` and `out["keys"]` returned the bound method for any `ModelOutput`: `[]`, `in`, `keys()` and `get()` now share one lookup, over the dataclass fields that hold a value (LCD-1111).
+- `set_input_embeddings` left `config.vocab_size` at the old size (config 100, table and tied head 120), so a `save_pretrained` copy could not load back; the config is replaced on the model and on the trunk inside it, and a config that refuses the new size leaves the model untouched. A `TransformerModel` with separate source and target tables and no `decoder_vocab_size` keeps its target at the old size: the config pins `decoder_vocab_size` instead of letting it follow the source (LCD-1111).
+- `generate()` on an empty batch returned `(0, 6)` with an EOS id and `(0, 8)` without: the all-rows-finished early stop is true of zero rows, so it stopped after one step. An empty batch now runs to the length cap either way, for decoder-only and encoder-decoder models (LCD-1111).
+- Loading a checkpoint into the wrong class or at the wrong size raised an error that named every missing and unexpected key, hundreds of lines; it now counts each kind of mismatch, names the first few weights and the class the checkpoint was saved from (LCD-1111).
+- `AutoModelFor*.from_pretrained` loaded a directory with its own copy of `PretrainedModel.from_pretrained`'s code; both go through one loader, `lucid.models._checkpoint` (LCD-1111).
 
 ### Added
 
@@ -599,7 +600,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `GPTModel`, `GPTLMHeadModel`, `GPT2Model` and `GPT2LMHeadModel` `forward` take `position_ids` (keyword-only), as the reference's do (LCD-1110).
 - `T5ForSeq2SeqLM.generate` and `TransformerForSeq2SeqLM.generate` take `max_new_tokens`, counting the tokens after the start token. It wins over `max_length`, as in decoder-only `generate` (LCD-1110).
 
-- resize_token_embeddings; from_pretrained takes options
+- `ModelOutput.get(key, default=None)`, with `dict.get` semantics: a field that is `None` is not a key (LCD-1111).
+- `PretrainedModel.resize_token_embeddings(new_num_tokens=None, pad_to_multiple_of=None, mean_resizing=True)` for GPT, GPT-2, BERT, RoFormer, T5 and the Transformer, with the reference's signature: keeps the rows the table has, re-binds a tied head and fits its vocabulary-sized bias (new entries zero), resizes an untied head, updates `config.vocab_size`, and returns the new `nn.Embedding`. `new_num_tokens=None` keeps the size; `pad_to_multiple_of` rounds it up (a non-positive-int raises `ValueError`). With `mean_resizing=True` each new row, and each new entry of an untied head's own bias, is drawn from a normal fitted to the old ones (mean, covariance scaled by 1e-9, or just the mean where it is not positive definite; bias: mean and standard deviation); `False` uses the family's own initialiser. The draw follows `lucid.manual_seed` (LCD-1111).
+- `PretrainedModel.get_output_embeddings()`: the `Linear` that scores the vocabulary (`lm_head`, BERT's `cls.predictions.decoder`), or `None` (LCD-1111).
+- `from_pretrained(name_or_path, *, strict=True, ignore_mismatched_sizes=False, **config_overrides)` on `PretrainedModel` and every `AutoModelFor*` class: keywords change config fields (only fields: an unknown one raises `TypeError`); `ignore_mismatched_sizes=True` keeps a mismatched weight's fresh initialisation and a warning names it. A registered name given overrides builds the model at that config and takes the published weights that fit (LCD-1111).
 
 ### Performance
 
@@ -725,7 +729,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `ldexp(input, other)` refuses a bool `other` beside a real floating `input` with `NotImplementedError`, as the reference does. An integer, bool or complex `input` still answers (LCD-1075).
 - **Behaviour change:** a scale factor that is a tensor with a dimension, a tensor that requires grad, or a value that is not a number (a str, None or a list) raises `TypeError: <op>(): argument '<name>' must be Number, not <type>`, as the reference does. Before, such values were accepted or gave `expected Tensor or Number`. To migrate a learnable 0-d scale, multiply by it explicitly (`x + alpha * y`) (LCD-1088).
 - **Behaviour change:** `linalg.householder_product` (batched, fewer reflectors, or zero reflectors), `linalg.inv` (empty square integral/bool matrix), and `linalg.cross` (bool pair) now refuse bool/integral operands rather than computing a result, matching the reference; `linalg.solve`, `linalg.inv`, `linalg.pinv(..., hermitian=True)`, `linalg.matrix_rank(..., hermitian=True)`, and `linalg.lstsq(..., rcond=...)` match the reference's refusal class (`DtypeMismatch` vs `NotImplementedError`) and check order (LCD-1105).
-- is_model is asked about any object
+- **Behaviour change:** `TransformerModel.get_output_embeddings()` returns `None`, as every trunk does, instead of the target-side embedding table; the table is `tgt_tok_emb`. The method is now `PretrainedModel.get_output_embeddings`, which names the output head (LCD-1111).
+- **Behaviour change:** `lucid.peft` now sees BERT's and RoFormer's masked-LM decoder as the output head, so `target_modules="all-linear"` leaves an untied one unadapted, as it already did for `lm_head` (LCD-1111).
+- `is_model` takes `name: object` (it answers `False` for anything that is not a registered name); a `pathlib.Path` given to `from_pretrained` now reaches the directory branch (LCD-1111).
 
 ---
 
