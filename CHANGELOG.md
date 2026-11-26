@@ -484,7 +484,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Loading a checkpoint into the wrong class or at the wrong size raised an error that named every missing and unexpected key, hundreds of lines; it now counts each kind of mismatch, names the first few weights and the class the checkpoint was saved from (LCD-1111).
 - `AutoModelFor*.from_pretrained` loaded a directory with its own copy of `PretrainedModel.from_pretrained`'s code; both go through one loader, `lucid.models._checkpoint` (LCD-1111).
 
-- Swin stem pads a non-multiple border like the reference
+- Swin zero-pads the right and bottom of an image whose side is not a multiple of `patch_size`, as the reference does, instead of dropping the border: a 35x35 input now sees 9x9 patches, not the 8x8 of its 32x32 crop. Inputs that are already a multiple are bit-identical to before. The Mask2Former Swin backbone shares the same padding helper (LCD-1115).
 
 ### Added
 
@@ -734,6 +734,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Behaviour change:** `TransformerModel.get_output_embeddings()` returns `None`, as every trunk does, instead of the target-side embedding table; the table is `tgt_tok_emb`. The method is now `PretrainedModel.get_output_embeddings`, which names the output head (LCD-1111).
 - **Behaviour change:** `lucid.peft` now sees BERT's and RoFormer's masked-LM decoder as the output head, so `target_modules="all-linear"` leaves an untied one unadapted, as it already did for `lm_head` (LCD-1111).
 - `is_model` takes `name: object` (it answers `False` for anything that is not a registered name); a `pathlib.Path` given to `from_pretrained` now reaches the directory branch (LCD-1111).
+- **Behaviour change:** Swin's patch-embedding stem zero-pads right and bottom when height or width is not a multiple of `patch_size`, matching the `transformers` reference instead of silently dropping border pixels; inputs already on the patch grid are bit-identical (LCD-1115).
 
 ---
 
