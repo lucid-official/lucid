@@ -4,10 +4,9 @@ A strided patch convolution drops the border of an image whose side is not a
 multiple of ``patch_size``.  The reference (``SwinPatchEmbeddings.maybe_pad``)
 zero-pads the right and bottom first and hands the padded grid to the window
 stages, so for such an input the final hidden states, the pooled feature and
-the logits only agree if the stem pads too.  Both are compared here with the
-reference's own weights copied across, at sizes that cut the grid in every
-way the stages have to cope with (square and not, windows that need padding,
-a map smaller than one window).
+the logits only agree if the stem pads too.  Both are compared here with
+Lucid's weights copied into the reference, at on-grid and off-grid sizes
+(square and non-square) that keep every stage at least one window wide.
 """
 
 import re

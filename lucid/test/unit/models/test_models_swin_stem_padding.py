@@ -66,7 +66,13 @@ def _grid(stem: Any, image: lucid.Tensor) -> tuple[int, int]:
 class TestPadToPatchMultiple:
     @pytest.mark.parametrize(
         ("height", "width", "padded"),
-        [(35, 35, (36, 36)), (33, 37, (36, 40)), (36, 36, (36, 36)), (1, 4, (4, 4)), (5, 7, (8, 8))],
+        [
+            (35, 35, (36, 36)),
+            (33, 37, (36, 40)),
+            (36, 36, (36, 36)),
+            (1, 4, (4, 4)),
+            (5, 7, (8, 8)),
+        ],
     )
     def test_pads_up_to_the_next_multiple(
         self, height: int, width: int, padded: tuple[int, int]
